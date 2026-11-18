@@ -1,7 +1,9 @@
 package com.geno1024.ai.mapoftime.track
 
+import android.Manifest
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationListener
@@ -9,8 +11,10 @@ import android.location.LocationManager
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
+import androidx.core.content.ContextCompat
 import com.geno1024.ai.mapoftime.AppContainer
 import com.geno1024.ai.mapoftime.MapOfTimeApp
+import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.TrackPoint
@@ -63,11 +67,18 @@ class TrackService : Service(), LocationListener {
         mode = TripMode.of(modeId)
         startedAt = System.currentTimeMillis()
 
-        if (!TrackPermissions.hasLocation(this)) {
+        // Checked inline (not through a helper) so static analysis can see that
+        // the location call below is guarded: the permission may have been
+        // revoked between the UI request and this start intent.
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             Recorder.publish(
                 RecordingState(
                     phase = RecordingPhase.IDLE,
-                    error = getString(com.geno1024.ai.mapoftime.R.string.error_need_location),
+                    error = getString(R.string.error_need_location),
                 ),
             )
             stopSelf()
@@ -78,7 +89,7 @@ class TrackService : Service(), LocationListener {
                 RecordingState(
                     phase = RecordingPhase.IDLE,
                     mode = mode,
-                    error = getString(com.geno1024.ai.mapoftime.R.string.error_need_gps),
+                    error = getString(R.string.error_need_gps),
                 ),
             )
             stopSelf()
