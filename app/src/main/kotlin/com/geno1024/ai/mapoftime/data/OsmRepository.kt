@@ -16,7 +16,7 @@ import kotlin.math.floor
  */
 class OsmRepository(
     private val db: MapDb,
-    private val client: OverpassClient,
+    private val clientProvider: () -> OverpassClient,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     /** True when every tile of [bounds] is cached and younger than [maxAgeMs]. */
@@ -67,7 +67,7 @@ class OsmRepository(
     /** Returns true when the tile was actually stored. */
     private fun fetchTile(tile: String): Boolean {
         val bounds = tileBounds(tile).expanded(TILE_MARGIN_METERS)
-        val ways = client.fetchWays(bounds)
+        val ways = clientProvider().fetchWays(bounds)
         val writable = db.writableDatabase
         writable.beginTransaction()
         try {
