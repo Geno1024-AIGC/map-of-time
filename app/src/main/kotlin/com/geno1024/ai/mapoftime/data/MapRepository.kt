@@ -82,12 +82,12 @@ class MapRepository(private val helper: MapDb) {
         )
 
     fun trip(id: Long): Trip? =
-        db.rawQuery("SELECT * FROM trips WHERE id = ?", arrayOf(id.toString())).use { cursor ->
+        db.rawQuery(TRIP_SELECT + " WHERE t.id = ?", arrayOf(id.toString())).use { cursor ->
             if (cursor.moveToFirst()) cursor.toTrip() else null
         }
 
     fun trips(limit: Int = 500): List<Trip> =
-        db.rawQuery("SELECT * FROM trips ORDER BY started_at DESC LIMIT ?", arrayOf(limit.toString()))
+        db.rawQuery("$TRIP_SELECT ORDER BY t.started_at DESC LIMIT ?", arrayOf(limit.toString()))
             .use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toTrip()) } }
 
     fun deleteTrip(id: Long) {
@@ -168,6 +168,12 @@ class MapRepository(private val helper: MapDb) {
     fun legs(tripId: Long): List<Leg> =
         db.rawQuery("SELECT * FROM legs WHERE trip_id = ? ORDER BY seq", arrayOf(tripId.toString()))
             .use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toLeg()) } }
+
+    fun legsForSegment(segmentId: Long): List<Leg> =
+        db.rawQuery(
+            "SELECT * FROM legs WHERE segment_id = ? ORDER BY start_ms",
+            arrayOf(segmentId.toString()),
+        ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toLeg()) } }
 
     // ----------------------------------------------------------- segments
 
@@ -359,6 +365,7 @@ class MapRepository(private val helper: MapDb) {
         status = runCatching { TripStatus.valueOf(getString(getColumnIndexOrThrow("status"))) }
             .getOrDefault(TripStatus.FINISHED),
         note = getStringOrNull(getColumnIndexOrThrow("note")),
+        legCount = getInt(getColumnIndexOrThrow("leg_count")),
     )
 
     private fun Cursor.toLeg() = Leg(
@@ -398,6 +405,9 @@ class MapRepository(private val helper: MapDb) {
 
     companion object {
         private const val CELL_DEGREES = 0.0001
+
+        private const val TRIP_SELECT =
+            "SELECT t.*, (SELECT COUNT(*) FROM legs l WHERE l.trip_id = t.id) AS leg_count FROM trips t"
     }
 }
 

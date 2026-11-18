@@ -15,4 +15,14 @@
 
     <string name="error_need_location">记录行程需要定位权限。</string>
     <string name="error_need_gps">定位已关闭，请打开 GPS 后重试。</string>
+
+    <string name="confidence_none">样本不足</string>
+    <string name="confidence_low">参考性较低</string>
+    <string name="confidence_medium">中等可信</string>
+    <string name="confidence_high">可信</string>
+
+    <string name="nav_record">记录</string>
+    <string name="nav_trips">行程</string>
+    <string name="nav_segments">路段</string>
+    <string name="nav_settings">设置</string>
 </resources>

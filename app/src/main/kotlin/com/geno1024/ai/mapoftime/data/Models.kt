@@ -14,6 +14,7 @@ data class Trip(
     val pointCount: Int,
     val status: TripStatus,
     val note: String?,
+    val legCount: Int = 0,
 ) {
     val durationMs: Long get() = ((endedAt ?: startedAt) - startedAt).coerceAtLeast(0)
 }

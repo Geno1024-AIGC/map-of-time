@@ -15,4 +15,14 @@
 
     <string name="error_need_location">Location permission is required to record a trip.</string>
     <string name="error_need_gps">Location is turned off. Enable GPS and try again.</string>
+
+    <string name="confidence_none">Not enough samples</string>
+    <string name="confidence_low">Low confidence</string>
+    <string name="confidence_medium">Medium confidence</string>
+    <string name="confidence_high">High confidence</string>
+
+    <string name="nav_record">Record</string>
+    <string name="nav_trips">Trips</string>
+    <string name="nav_segments">Segments</string>
+    <string name="nav_settings">Settings</string>
 </resources>
