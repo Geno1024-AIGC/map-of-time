@@ -67,6 +67,8 @@ fun TrackMap(
     tileUrlTemplate: String = DEFAULT_TILE_URL,
     interactive: Boolean = true,
     emptyHint: String? = null,
+    /** Where to look when there is no track yet, e.g. the latest live fix. */
+    focus: LatLon? = null,
 ) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
@@ -75,14 +77,25 @@ fun TrackMap(
     val store = remember(tileUrlTemplate) { TileStore(context, tileUrlTemplate) }
 
     var size by remember { mutableStateOf(Size.Zero) }
-    var center by remember(bounds) { mutableStateOf(bounds?.center ?: LatLon(39.9042, 116.4074)) }
+    var center by remember(bounds) { mutableStateOf(bounds?.center ?: focus ?: LatLon(39.9042, 116.4074)) }
     var zoom by remember(bounds) { mutableStateOf(15f) }
+    var userMoved by remember { mutableStateOf(false) }
 
     LaunchedEffect(bounds, size) {
         if (bounds != null && size.width > 1f && size.height > 1f) {
             center = bounds.center
             zoom = fitZoom(bounds, size)
+            userMoved = false
         }
+    }
+
+    // Before a trip has any track, follow the live fix — but never fight a
+    // pan or pinch the user did on purpose.
+    LaunchedEffect(focus, bounds) {
+        if (bounds != null || userMoved) return@LaunchedEffect
+        val target = focus ?: return@LaunchedEffect
+        center = target
+        if (zoom < 16f) zoom = 16f
     }
 
     val z = floor(zoom).toInt().coerceIn(2, 19)
@@ -129,6 +142,7 @@ fun TrackMap(
                 if (!interactive) Modifier else Modifier
                     .pointerInput(Unit) {
                         detectTransformGestures { centroid, pan, zoomChange, _ ->
+                            userMoved = true
                             val viewportWidth = size.width.toDouble()
                             val viewportHeight = size.height.toDouble()
                             val world = TILE_PX * 2.0.pow(zoom.toDouble())

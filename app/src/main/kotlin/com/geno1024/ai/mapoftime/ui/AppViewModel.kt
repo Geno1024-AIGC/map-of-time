@@ -8,8 +8,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geno1024.ai.mapoftime.AppContainer
 import com.geno1024.ai.mapoftime.analysis.SegmentSummary
+import com.geno1024.ai.mapoftime.analysis.TripAnalyzer
 import com.geno1024.ai.mapoftime.core.DurationStats
+import com.geno1024.ai.mapoftime.core.TrackPoint
+import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.core.TripMode
+import com.geno1024.ai.mapoftime.data.Leg
+import com.geno1024.ai.mapoftime.data.Segment
 import com.geno1024.ai.mapoftime.data.Trip
 import com.geno1024.ai.mapoftime.track.Recorder
 import kotlinx.coroutines.flow.StateFlow
@@ -68,14 +73,45 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun mark(context: Context) = Recorder.mark(context)
 
-    fun reanalyze(tripId: Long) {
-        viewModelScope.launch {
-            val result = withContext(container.dbDispatcher) {
-                runCatching { container.analyzer.analyze(tripId) }.getOrNull()
-            }
-            note = result?.let { "$it" }
-            refresh()
+    // Screen-level reads. Screens call these from LaunchedEffect and keep the
+    // result in their own state, so a detail page always shows what is on disk
+    // right now instead of a stale copy from the list.
+
+    suspend fun trip(id: Long): Trip? = withContext(container.dbDispatcher) {
+        container.repository.trip(id)
+    }
+
+    suspend fun legs(tripId: Long): List<Leg> = withContext(container.dbDispatcher) {
+        container.repository.legs(tripId)
+    }
+
+    suspend fun points(tripId: Long): List<TrackPoint> = withContext(container.dbDispatcher) {
+        container.repository.points(tripId)
+    }
+
+    suspend fun segment(id: Long): Segment? = withContext(container.dbDispatcher) {
+        container.repository.segment(id)
+    }
+
+    suspend fun samples(segmentId: Long): List<TraversalSample> = withContext(container.dbDispatcher) {
+        container.repository.samples(segmentId)
+    }
+
+    suspend fun legsForSegment(segmentId: Long): List<Leg> = withContext(container.dbDispatcher) {
+        container.repository.legsForSegment(segmentId)
+    }
+
+    /**
+     * Re-runs the whole pipeline of one trip and returns the fresh result.
+     * Detail screens await this before reloading, so the map and the leg list
+     * are rebuilt in the same pass the caller sees.
+     */
+    suspend fun analyze(tripId: Long): TripAnalyzer.Result? {
+        val result = withContext(container.dbDispatcher) {
+            runCatching { container.analyzer.analyze(tripId) }.getOrNull()
         }
+        refresh()
+        return result
     }
 
     fun deleteTrip(tripId: Long) {
@@ -99,7 +135,6 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         root.put("exportedAt", System.currentTimeMillis())
 
         val segmentArray = JSONArray()
-        val summariesById = summaries.associateBy { it.segment.id }
         for (summary in summaries) {
             val segment = summary.segment
             val samples = repository.samples(segment.id)
@@ -162,7 +197,6 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             )
         }
         root.put("trips", tripArray)
-        root.put("segmentSummaries", summariesById.size)
         root.toString(2)
     }
 }
