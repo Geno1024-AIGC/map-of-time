@@ -1,6 +1,7 @@
 package com.geno1024.ai.mapoftime.data
 
 import android.content.Context
+import androidx.core.content.edit
 import com.geno1024.ai.mapoftime.osm.OverpassClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,15 +36,15 @@ class AppSettings(context: Context) {
 
     fun update(transform: (SettingsSnapshot) -> SettingsSnapshot) {
         val next = transform(_state.value)
-        prefs.edit()
-            .putBoolean(KEY_OSM_MATCHING, next.osmMatching)
-            .putBoolean(KEY_MAP_TILES, next.mapTiles)
-            .putString(KEY_OVERPASS, next.overpassEndpoint)
-            .putString(KEY_TILE_URL, next.tileUrlTemplate)
-            .putInt(KEY_CACHE_DAYS, next.osmCacheDays)
-            .putInt(KEY_SNAP, next.junctionSnapMeters)
-            .putBoolean(KEY_PARTIAL, next.includePartial)
-            .apply()
+        prefs.edit {
+            putBoolean(KEY_OSM_MATCHING, next.osmMatching)
+            putBoolean(KEY_MAP_TILES, next.mapTiles)
+            putString(KEY_OVERPASS, next.overpassEndpoint)
+            putString(KEY_TILE_URL, next.tileUrlTemplate)
+            putInt(KEY_CACHE_DAYS, next.osmCacheDays)
+            putInt(KEY_SNAP, next.junctionSnapMeters)
+            putBoolean(KEY_PARTIAL, next.includePartial)
+        }
         _state.value = next
     }
 

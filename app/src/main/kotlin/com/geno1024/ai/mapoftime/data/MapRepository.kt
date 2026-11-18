@@ -3,6 +3,7 @@ package com.geno1024.ai.mapoftime.data
 import android.content.ContentValues
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
+import androidx.core.database.sqlite.transaction
 import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.TrackPoint
@@ -138,11 +139,10 @@ class MapRepository(private val helper: MapDb) {
     // ----------------------------------------------------------- legs
 
     fun replaceLegs(tripId: Long, legs: List<PendingLeg>) {
-        db.beginTransaction()
-        try {
-            db.delete("legs", "trip_id = ?", arrayOf(tripId.toString()))
+        db.transaction {
+            delete("legs", "trip_id = ?", arrayOf(tripId.toString()))
             legs.forEachIndexed { index, leg ->
-                db.insert(
+                insert(
                     "legs",
                     null,
                     ContentValues().apply {
@@ -159,9 +159,6 @@ class MapRepository(private val helper: MapDb) {
                     },
                 )
             }
-            db.setTransactionSuccessful()
-        } finally {
-            db.endTransaction()
         }
     }
 

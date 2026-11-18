@@ -1,6 +1,7 @@
 package com.geno1024.ai.mapoftime.data
 
 import android.content.ContentValues
+import androidx.core.database.sqlite.transaction
 import com.geno1024.ai.mapoftime.core.Bounds
 import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.osm.OsmWay
@@ -69,8 +70,7 @@ class OsmRepository(
         val bounds = tileBounds(tile).expanded(TILE_MARGIN_METERS)
         val ways = clientProvider().fetchWays(bounds)
         val writable = db.writableDatabase
-        writable.beginTransaction()
-        try {
+        writable.transaction {
             for (way in ways) {
                 writable.insertWithOnConflict(
                     "osm_ways",
@@ -106,9 +106,6 @@ class OsmRepository(
                 },
                 android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE,
             )
-            writable.setTransactionSuccessful()
-        } finally {
-            writable.endTransaction()
         }
         return true
     }
