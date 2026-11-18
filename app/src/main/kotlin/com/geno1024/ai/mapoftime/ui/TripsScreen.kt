@@ -29,12 +29,13 @@ import com.geno1024.ai.mapoftime.data.TripStatus
 fun TripsScreen(
     viewModel: AppViewModel,
     onOpenTrip: (Long) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     // The list may have grown while a trip was being recorded in the
     // background, so re-read it whenever the tab is shown.
     LaunchedEffect(Unit) { viewModel.refresh() }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize()) {
         ScreenHeader(
             title = stringResource(R.string.trips_title),
             subtitle = if (viewModel.trips.isEmpty()) null else viewModel.trips.size.toString(),

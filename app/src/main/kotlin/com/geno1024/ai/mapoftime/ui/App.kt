@@ -79,18 +79,27 @@ fun App(viewModel: AppViewModel) {
                 )
 
                 else -> when (Tab.entries.firstOrNull { it.name == tab } ?: Tab.RECORD) {
-                    Tab.RECORD -> RecordScreen(viewModel)
+                    Tab.RECORD -> RecordScreen(
+                        viewModel = viewModel,
+                        modifier = Modifier.padding(padding),
+                    )
+
                     Tab.TRIPS -> TripsScreen(
                         viewModel = viewModel,
                         onOpenTrip = { id -> detail = "trip:$id" },
+                        modifier = Modifier.padding(padding),
                     )
 
                     Tab.SEGMENTS -> SegmentsScreen(
                         viewModel = viewModel,
                         onOpenSegment = { id -> detail = "segment:$id" },
+                        modifier = Modifier.padding(padding),
                     )
 
-                    Tab.SETTINGS -> SettingsScreen(viewModel)
+                    Tab.SETTINGS -> SettingsScreen(
+                        viewModel = viewModel,
+                        modifier = Modifier.padding(padding),
+                    )
                 }
             }
         }

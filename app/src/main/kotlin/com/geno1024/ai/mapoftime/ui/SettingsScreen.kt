@@ -44,7 +44,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 @Composable
-fun SettingsScreen(viewModel: AppViewModel) {
+fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
@@ -62,7 +62,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
         tileCount = viewModel.cachedTileCount()
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize()) {
         ScreenHeader(title = stringResource(R.string.settings_title))
 
         Column(

@@ -34,6 +34,7 @@ import com.geno1024.ai.mapoftime.core.TripMode
 fun SegmentsScreen(
     viewModel: AppViewModel,
     onOpenSegment: (Long) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var modeFilter by remember { mutableStateOf<TripMode?>(null) }
 
@@ -47,7 +48,7 @@ fun SegmentsScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize()) {
         ScreenHeader(
             title = stringResource(R.string.segments_title),
             subtitle = if (summaries.isEmpty()) null else summaries.size.toString(),

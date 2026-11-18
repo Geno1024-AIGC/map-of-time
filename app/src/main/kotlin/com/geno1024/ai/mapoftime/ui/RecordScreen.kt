@@ -42,7 +42,7 @@ import com.geno1024.ai.mapoftime.ui.map.TrackMap
 import kotlinx.coroutines.delay
 
 @Composable
-fun RecordScreen(viewModel: AppViewModel) {
+fun RecordScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val state by viewModel.recording.collectAsStateWithLifecycle()
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
@@ -93,7 +93,7 @@ fun RecordScreen(viewModel: AppViewModel) {
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp),
