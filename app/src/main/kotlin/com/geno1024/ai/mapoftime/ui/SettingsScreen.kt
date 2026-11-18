@@ -50,7 +50,8 @@ fun SettingsScreen(viewModel: AppViewModel) {
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
 
     var tileCount by remember { mutableStateOf<Int?>(null) }
-    var message by remember { mutableStateOf<String?>(null) }
+    var cacheMessage by remember { mutableStateOf<String?>(null) }
+    var exportMessage by remember { mutableStateOf<String?>(null) }
     // Hoisted: reading resources through LocalContext inside a click handler is
     // not configuration-aware and would survive a locale change with stale text.
     val clearedText = stringResource(R.string.settings_cleared)
@@ -168,11 +169,19 @@ fun SettingsScreen(viewModel: AppViewModel) {
                     onClick = {
                         viewModel.clearOsmCache {
                             tileCount = 0
-                            message = clearedText
+                            cacheMessage = clearedText
                         }
                     },
                 ) {
                     Text(stringResource(R.string.settings_clear_cache))
+                }
+                cacheMessage?.let { text ->
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
 
@@ -188,7 +197,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
                         scope.launch {
                             val json = runCatching { viewModel.exportJson() }.getOrNull()
                             if (json == null) {
-                                message = exportErrorText
+                                exportMessage = exportErrorText
                                 return@launch
                             }
                             val shared = runCatching {
@@ -210,7 +219,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
                                 }
                             }.getOrNull()
                             if (shared == null) {
-                                message = exportErrorText
+                                exportMessage = exportErrorText
                             } else {
                                 context.startActivity(
                                     Intent.createChooser(
@@ -225,7 +234,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
                 ) {
                     Text(stringResource(R.string.settings_export))
                 }
-                message?.let { text ->
+                exportMessage?.let { text ->
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = text,
