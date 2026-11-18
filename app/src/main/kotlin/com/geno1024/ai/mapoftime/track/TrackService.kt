@@ -37,6 +37,7 @@ class TrackService : Service(), LocationListener {
     private var markCount = 0
     private var startedAt = 0L
     private var lastPoint: TrackPoint? = null
+    private val recentFixes = ArrayDeque<LatLon>()
     private var lastNotificationAt = 0L
     private var recording = false
 
@@ -89,6 +90,7 @@ class TrackService : Service(), LocationListener {
         distance = 0.0
         markCount = 0
         lastPoint = null
+        recentFixes.clear()
         recording = true
 
         RecordingNotification.ensureChannel(this)
@@ -145,6 +147,8 @@ class TrackService : Service(), LocationListener {
             if (step in MIN_STEP_METERS..MAX_STEP_METERS) distance += step
         }
         lastPoint = point
+        recentFixes.addLast(point.at)
+        while (recentFixes.size > RECENT_FIXES_LIMIT) recentFixes.removeFirst()
         seq += 1
         val storedSeq = seq
 
@@ -161,6 +165,7 @@ class TrackService : Service(), LocationListener {
             accuracyM = point.accuracy,
             lastFixAt = point.t,
             lastFix = point.at,
+            recentFixes = recentFixes.toList(),
         )
         Recorder.publish(state)
 
@@ -230,5 +235,6 @@ class TrackService : Service(), LocationListener {
         private const val MAX_STEP_METERS = 200.0
         private const val PROGRESS_EVERY = 10
         private const val NOTIFICATION_REFRESH_MS = 5_000L
+        private const val RECENT_FIXES_LIMIT = 600
     }
 }

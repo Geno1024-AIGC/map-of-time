@@ -23,6 +23,8 @@ data class RecordingState(
     val lastFix: LatLon? = null,
     val marks: Int = 0,
     val error: String? = null,
+    /** The tail of the trace, so the record screen can draw it live. */
+    val recentFixes: List<LatLon> = emptyList(),
 ) {
     val isRecording: Boolean get() = phase == RecordingPhase.RECORDING
 }
