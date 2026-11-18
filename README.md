@@ -1,8 +1,18 @@
 # Map of Time（时间地图）
 
+[![Build](https://github.com/Geno1024-AIGC/map-of-time/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/Geno1024-AIGC/map-of-time/actions/workflows/build.yml)
+
 记录一次出行被切成的许多小段——现实中的一条路、两个交叉路口之间——并靠多次经过累积出每一段的**典型耗时**。
 
 步行、骑行、驾车三种方式分别统计：同一条路，走路、骑车和开车的时间没有可比性。
+
+## 下载
+
+每次推送到 `master`，CI 会跑测试与 lint、用组织密钥签名，并把 APK 发布成一个滚动的预发布版本：
+
+<https://github.com/Geno1024-AIGC/map-of-time/releases/tag/canary>
+
+`canary` 标签始终指向最新一次成功的构建，旧包会被同名替换；签名一致，可以直接覆盖安装。版本号、构建序号和对应 commit 都写在发布说明里，便于回溯。
 
 ## 它想回答的问题
 
@@ -111,6 +121,19 @@
 ```
 
 签名从环境变量或 `local.properties` 读取（`KEYSTORE_STORE_FILE` 等），缺失时仅产出一个不能覆盖安装的包。
+
+### CI
+
+`.github/workflows/build.yml` 分三段，只有第二、三段能拿到签名材料：
+
+| Job | 何时运行 | 做什么 |
+|---|---|---|
+| `verify` | 每次 push、PR、手动触发 | 单元测试 + `lintRelease`，上传 lint 报告 |
+| `release` | 仅 `master` 的 push / 手动触发 | 落盘 keystore、`assembleRelease -Ppack.bump=false`、用 `apksigner` 验证签名、从 APK 里读版本号 |
+| `prerelease` | 同上，且带 `contents: write` | 把 APK 发布到滚动标签 `canary`（`--prerelease`） |
+
+PR 不读任何 secret，因此 fork 的 PR 也能完整跑测试与 lint；CI 不自增 `app/count.pack`，避免产出一个仓库里不存在的 `pack`。
+
 
 ### 版本号
 
