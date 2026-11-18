@@ -9,12 +9,10 @@
     <string name="notification_channel_recording">Trip recording</string>
     <string name="notification_channel_recording_desc">Keeps sampling while a trip is being recorded.</string>
     <string name="notification_recording_title">Recording · %1$s</string>
-    <string name="notification_recording_text">%1$s · %2$d fixes</string>
     <string name="action_mark">Split here</string>
     <string name="action_stop">Stop</string>
     <string name="action_cancel">Cancel</string>
     <string name="action_back">Back</string>
-    <string name="action_share">Share</string>
     <string name="action_delete">Delete</string>
 
     <string name="error_need_location">Location permission is required to record a trip.</string>
@@ -35,7 +33,6 @@
     <string name="match_partial">Partial</string>
     <string name="match_unmatched">Unmatched</string>
 
-    <string name="samples_count">%1$d samples</string>
     <string name="samples_none">No samples yet</string>
     <string name="typical_time">Typical</string>
 
@@ -49,7 +46,6 @@
     <string name="record_accuracy">Accuracy</string>
     <string name="record_marks">Marks</string>
     <string name="record_processing">Splitting the trip into legs…</string>
-    <string name="record_waiting">Waiting for the first fix</string>
     <string name="record_live_hint">Recording continues with the screen off. Stop when you arrive.</string>
     <string name="record_permission">Allow location to start recording</string>
     <string name="record_map_empty">Your track will appear here</string>
@@ -57,12 +53,10 @@
     <string name="trips_title">Trips</string>
     <string name="trips_empty_title">No trips yet</string>
     <string name="trips_empty_body">Record a walk, a ride or a drive and it will show up here.</string>
-    <string name="trip_legs_count">%1$d legs</string>
     <string name="trip_status_recording">Recording</string>
     <string name="trip_status_finished">Finished</string>
     <string name="trip_status_interrupted">Interrupted</string>
     <string name="trip_detail_title">Trip</string>
-    <string name="trip_started">Started</string>
     <string name="trip_duration">Duration</string>
     <string name="trip_points">Fixes</string>
     <string name="trip_legs_title">Legs</string>
@@ -71,16 +65,13 @@
     <string name="trip_analyzing">Analyzing…</string>
     <string name="trip_delete">Delete trip</string>
     <string name="trip_delete_confirm">Delete this trip and all of its samples?</string>
-    <string name="trip_analysis_done">%1$d legs · %2$d from OSM junctions</string>
-    <string name="leg_direction_forward">Outbound</string>
-    <string name="leg_direction_backward">Return</string>
+    <string name="trip_analysis_done">Legs: %1$d · OSM: %2$d</string>
 
     <string name="segments_title">Segments</string>
     <string name="segments_empty_title">No segments yet</string>
     <string name="segments_empty_body">A segment is the piece of road between two crossings. It appears once a trip has been analyzed.</string>
     <string name="filter_all">All</string>
     <string name="segment_stats_title">Typical time</string>
-    <string name="segment_median">Median</string>
     <string name="segment_range">Range</string>
     <string name="segment_p25_p75">P25–P75</string>
     <string name="segment_trimmed_mean">Trimmed mean</string>
@@ -92,7 +83,6 @@
     <string name="segment_forward">Forward</string>
     <string name="segment_backward">Backward</string>
     <string name="segment_samples_title">Samples</string>
-    <string name="segment_map_title">All traversals</string>
     <string name="segment_last_seen">Last seen</string>
     <string name="segment_first_seen">First seen</string>
 
@@ -104,13 +94,11 @@
     <string name="settings_endpoint">Overpass endpoint</string>
     <string name="settings_tile_url">Tile URL template</string>
     <string name="settings_cache_days">Road data cache</string>
-    <string name="settings_cache_days_value">%1$d days</string>
     <string name="settings_snap">Junction snap radius</string>
     <string name="settings_snap_value">%1$d m</string>
     <string name="settings_partial">Include partial segments</string>
     <string name="settings_partial_desc">Count pieces whose start or end is not a real crossing.</string>
     <string name="settings_clear_cache">Clear road cache</string>
-    <string name="settings_clear_cache_value">%1$d tiles cached</string>
     <string name="settings_cleared">Cache cleared</string>
     <string name="settings_export">Export data</string>
     <string name="settings_export_desc">Share every trip and sample as one JSON document.</string>
@@ -118,4 +106,24 @@
     <string name="settings_about">About</string>
     <string name="settings_version">Version</string>
     <string name="settings_attribution">Map data © OpenStreetMap contributors</string>
+    <plurals name="samples_count">
+        <item quantity="one">%1$d sample</item>
+        <item quantity="other">%1$d samples</item>
+    </plurals>
+    <plurals name="trip_legs_count">
+        <item quantity="one">%1$d leg</item>
+        <item quantity="other">%1$d legs</item>
+    </plurals>
+    <plurals name="settings_cache_days_value">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
+    <plurals name="settings_clear_cache_value">
+        <item quantity="one">%1$d tile cached</item>
+        <item quantity="other">%1$d tiles cached</item>
+    </plurals>
+    <plurals name="notification_recording_text">
+        <item quantity="one">%1$s · %2$d fix</item>
+        <item quantity="other">%1$s · %2$d fixes</item>
+    </plurals>
 </resources>

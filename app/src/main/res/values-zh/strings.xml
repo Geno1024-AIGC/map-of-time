@@ -9,12 +9,10 @@
     <string name="notification_channel_recording">行程记录</string>
     <string name="notification_channel_recording_desc">记录行程时保持定位采样。</string>
     <string name="notification_recording_title">正在记录 · %1$s</string>
-    <string name="notification_recording_text">%1$s · %2$d 个点</string>
     <string name="action_mark">在此切段</string>
     <string name="action_stop">停止</string>
     <string name="action_cancel">取消</string>
     <string name="action_back">返回</string>
-    <string name="action_share">分享</string>
     <string name="action_delete">删除</string>
 
     <string name="error_need_location">记录行程需要定位权限。</string>
@@ -35,7 +33,6 @@
     <string name="match_partial">不完整</string>
     <string name="match_unmatched">未匹配</string>
 
-    <string name="samples_count">%1$d 次样本</string>
     <string name="samples_none">暂无样本</string>
     <string name="typical_time">典型耗时</string>
 
@@ -49,7 +46,6 @@
     <string name="record_accuracy">精度</string>
     <string name="record_marks">手动切段</string>
     <string name="record_processing">正在把行程切成小段…</string>
-    <string name="record_waiting">等待首个定位点</string>
     <string name="record_live_hint">息屏后仍会继续记录，到达后请手动停止。</string>
     <string name="record_permission">允许定位以开始记录</string>
     <string name="record_map_empty">轨迹会显示在这里</string>
@@ -57,12 +53,10 @@
     <string name="trips_title">行程</string>
     <string name="trips_empty_title">还没有行程</string>
     <string name="trips_empty_body">记录一次步行、骑行或驾车后就会出现在这里。</string>
-    <string name="trip_legs_count">%1$d 段</string>
     <string name="trip_status_recording">记录中</string>
     <string name="trip_status_finished">已完成</string>
     <string name="trip_status_interrupted">已中断</string>
     <string name="trip_detail_title">行程详情</string>
-    <string name="trip_started">开始时间</string>
     <string name="trip_duration">时长</string>
     <string name="trip_points">定位点</string>
     <string name="trip_legs_title">分段</string>
@@ -71,16 +65,13 @@
     <string name="trip_analyzing">分析中…</string>
     <string name="trip_delete">删除行程</string>
     <string name="trip_delete_confirm">删除这个行程及其所有样本？</string>
-    <string name="trip_analysis_done">%1$d 段，其中 %2$d 段基于 OSM 交叉口</string>
-    <string name="leg_direction_forward">去程</string>
-    <string name="leg_direction_backward">回程</string>
+    <string name="trip_analysis_done">分段 %1$d · OSM %2$d</string>
 
     <string name="segments_title">路段</string>
     <string name="segments_empty_title">还没有路段</string>
     <string name="segments_empty_body">路段是两次路口之间的一小段路，行程分析后就会出现。</string>
     <string name="filter_all">全部</string>
     <string name="segment_stats_title">典型耗时</string>
-    <string name="segment_median">中位数</string>
     <string name="segment_range">区间</string>
     <string name="segment_p25_p75">P25–P75</string>
     <string name="segment_trimmed_mean">截尾均值</string>
@@ -92,7 +83,6 @@
     <string name="segment_forward">正向</string>
     <string name="segment_backward">反向</string>
     <string name="segment_samples_title">样本</string>
-    <string name="segment_map_title">全部轨迹</string>
     <string name="segment_last_seen">最近经过</string>
     <string name="segment_first_seen">首次记录</string>
 
@@ -104,13 +94,11 @@
     <string name="settings_endpoint">Overpass 地址</string>
     <string name="settings_tile_url">瓦片地址模板</string>
     <string name="settings_cache_days">路网缓存</string>
-    <string name="settings_cache_days_value">%1$d 天</string>
     <string name="settings_snap">路口吸附半径</string>
     <string name="settings_snap_value">%1$d 米</string>
     <string name="settings_partial">包含不完整片段</string>
     <string name="settings_partial_desc">统计起点或终点不在真实路口的片段。</string>
     <string name="settings_clear_cache">清除路网缓存</string>
-    <string name="settings_clear_cache_value">已缓存 %1$d 个瓦片</string>
     <string name="settings_cleared">缓存已清除</string>
     <string name="settings_export">导出数据</string>
     <string name="settings_export_desc">把全部行程与样本以单个 JSON 文档分享。</string>
@@ -118,4 +106,19 @@
     <string name="settings_about">关于</string>
     <string name="settings_version">版本</string>
     <string name="settings_attribution">地图数据 © OpenStreetMap 贡献者</string>
+    <plurals name="samples_count">
+        <item quantity="other">%1$d 次样本</item>
+    </plurals>
+    <plurals name="trip_legs_count">
+        <item quantity="other">%1$d 段</item>
+    </plurals>
+    <plurals name="settings_cache_days_value">
+        <item quantity="other">%1$d 天</item>
+    </plurals>
+    <plurals name="settings_clear_cache_value">
+        <item quantity="other">已缓存 %1$d 个瓦片</item>
+    </plurals>
+    <plurals name="notification_recording_text">
+        <item quantity="other">%1$s · %2$d 个点</item>
+    </plurals>
 </resources>

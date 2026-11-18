@@ -24,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -102,7 +103,7 @@ fun SegmentDetailScreen(
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                text = stringResource(R.string.samples_count, stats.count),
+                                text = pluralStringResource(R.plurals.samples_count, stats.count, stats.count),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -212,7 +213,7 @@ private fun DirectionRow(label: String, stats: DurationStats, reference: Long) {
         Column(Modifier.weight(1f)) {
             Text(text = label, style = MaterialTheme.typography.bodyLarge)
             Text(
-                text = stringResource(R.string.samples_count, stats.count),
+                text = pluralStringResource(R.plurals.samples_count, stats.count, stats.count),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -29,7 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,6 +43,7 @@ import com.geno1024.ai.mapoftime.data.Trip
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
 import com.geno1024.ai.mapoftime.ui.map.TrackMap
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @Composable
 fun TripDetailScreen(
@@ -51,9 +52,9 @@ fun TripDetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
+    val analysisDoneFormat = stringResource(R.string.trip_analysis_done)
 
     var trip by remember(tripId) { mutableStateOf<Trip?>(null) }
     var legs by remember(tripId) { mutableStateOf<List<Leg>>(emptyList()) }
@@ -169,7 +170,7 @@ fun TripDetailScreen(
                                 )
                             }
                             Pill(
-                                text = stringResource(R.string.trip_legs_count, value.legCount),
+                                text = pluralStringResource(R.plurals.trip_legs_count, value.legCount, value.legCount),
                                 color = MaterialTheme.colorScheme.primary,
                             )
                         }
@@ -193,8 +194,9 @@ fun TripDetailScreen(
                                 val result = viewModel.analyze(tripId)
                                 analyzing = false
                                 message = result?.let {
-                                    context.getString(
-                                        R.string.trip_analysis_done,
+                                    String.format(
+                                        Locale.getDefault(),
+                                        analysisDoneFormat,
                                         it.legCount,
                                         it.osmLegs,
                                     )

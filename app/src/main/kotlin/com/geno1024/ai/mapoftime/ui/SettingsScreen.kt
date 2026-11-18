@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -50,6 +51,11 @@ fun SettingsScreen(viewModel: AppViewModel) {
 
     var tileCount by remember { mutableStateOf<Int?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    // Hoisted: reading resources through LocalContext inside a click handler is
+    // not configuration-aware and would survive a locale change with stale text.
+    val clearedText = stringResource(R.string.settings_cleared)
+    val exportErrorText = stringResource(R.string.settings_export_error)
+    val exportTitle = stringResource(R.string.settings_export)
 
     LaunchedEffect(Unit) {
         tileCount = viewModel.cachedTileCount()
@@ -90,7 +96,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
                     value = days,
                     range = 0f..365f,
                     format = { picked ->
-                        stringResource(R.string.settings_cache_days_value, picked.toInt())
+                        pluralStringResource(R.plurals.settings_cache_days_value, picked.toInt(), picked.toInt())
                     },
                     onCommit = { picked ->
                         viewModel.settings.update { it.copy(osmCacheDays = picked.toInt()) }
@@ -149,8 +155,9 @@ fun SettingsScreen(viewModel: AppViewModel) {
 
             SectionCard {
                 Text(
-                    text = stringResource(
-                        R.string.settings_clear_cache_value,
+                    text = pluralStringResource(
+                        R.plurals.settings_clear_cache_value,
+                        tileCount ?: 0,
                         tileCount ?: 0,
                     ),
                     style = MaterialTheme.typography.bodyMedium,
@@ -161,7 +168,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
                     onClick = {
                         viewModel.clearOsmCache {
                             tileCount = 0
-                            message = context.getString(R.string.settings_cleared)
+                            message = clearedText
                         }
                     },
                 ) {
@@ -181,7 +188,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
                         scope.launch {
                             val json = runCatching { viewModel.exportJson() }.getOrNull()
                             if (json == null) {
-                                message = context.getString(R.string.settings_export_error)
+                                message = exportErrorText
                                 return@launch
                             }
                             val shared = runCatching {
@@ -203,12 +210,12 @@ fun SettingsScreen(viewModel: AppViewModel) {
                                 }
                             }.getOrNull()
                             if (shared == null) {
-                                message = context.getString(R.string.settings_export_error)
+                                message = exportErrorText
                             } else {
                                 context.startActivity(
                                     Intent.createChooser(
                                         shared,
-                                        context.getString(R.string.settings_export),
+                                        exportTitle,
                                     ),
                                 )
                             }

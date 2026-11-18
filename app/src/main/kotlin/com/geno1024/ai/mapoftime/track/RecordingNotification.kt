@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import com.geno1024.ai.mapoftime.MainActivity
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.ui.label
+import java.util.Locale
 
 object RecordingNotification {
     private const val CHANNEL_ID = "recording"
@@ -49,8 +50,9 @@ object RecordingNotification {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-        val text = context.getString(
-            R.string.notification_recording_text,
+        val text = context.resources.getQuantityString(
+            R.plurals.notification_recording_text,
+            state.pointCount,
             formatDistance(state.distanceM),
             state.pointCount,
         )
@@ -71,5 +73,5 @@ object RecordingNotification {
     fun id(): Int = NOTIFICATION_ID
 
     private fun formatDistance(meters: Double): String =
-        if (meters < 1000) "${meters.toInt()} m" else String.format("%.2f km", meters / 1000)
+        if (meters < 1000) "${meters.toInt()} m" else String.format(Locale.ROOT, "%.2f km", meters / 1000)
 }

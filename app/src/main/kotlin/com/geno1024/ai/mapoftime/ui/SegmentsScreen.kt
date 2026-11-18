@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -91,7 +92,7 @@ private fun SegmentCard(summary: SegmentSummary, onClick: () -> Unit) {
                 )
                 Text(
                     text = modeLabel(segment.mode) + " · " +
-                        stringResource(R.string.samples_count, summary.sampleCount) + " · " +
+                        pluralStringResource(R.plurals.samples_count, summary.sampleCount, summary.sampleCount) + " · " +
                         formatDistance(segment.lengthM),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
