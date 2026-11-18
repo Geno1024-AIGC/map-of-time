@@ -13,6 +13,13 @@ object SegmentKeys {
 
     fun geo(a: Long, b: Long): String = "geo:${minOf(a, b)}-${maxOf(a, b)}"
 
+    /**
+     * One end is an OSM junction, the other a locally clustered corner. The
+     * separate prefix keeps a junction id from ever colliding with a geo node
+     * id, so a partial piece can never masquerade as a complete one.
+     */
+    fun mixed(a: Long, b: Long): String = "mix:${minOf(a, b)}-${maxOf(a, b)}"
+
     /** `+1` when travelling from the lower id to the higher one. */
     fun direction(from: Long, to: Long): Int = if (from <= to) 1 else -1
 }

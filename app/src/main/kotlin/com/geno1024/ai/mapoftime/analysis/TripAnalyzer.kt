@@ -138,7 +138,7 @@ class TripAnalyzer(
             graph != null -> {
                 val from = startJunction ?: clusterId(piece.start.at, now)
                 val to = endJunction ?: clusterId(piece.end.at, now)
-                Triple(SegmentKeys.geo(from, to), MatchKind.PARTIAL, true)
+                Triple(SegmentKeys.mixed(from, to), MatchKind.PARTIAL, true)
             }
             else -> {
                 val from = clusterId(piece.start.at, now)
