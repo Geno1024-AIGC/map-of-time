@@ -48,18 +48,24 @@ fun RecordScreen(viewModel: AppViewModel) {
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
     var selectedMode by remember { mutableStateOf(TripMode.WALK) }
     var pendingMode by remember { mutableStateOf<TripMode?>(null) }
+    var permissionDenied by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
         val mode = pendingMode
         pendingMode = null
-        if (mode != null && TrackPermissions.hasLocation(context)) {
-            viewModel.start(context, mode)
+        if (mode != null) {
+            if (TrackPermissions.hasLocation(context)) {
+                viewModel.start(context, mode)
+            } else {
+                permissionDenied = true
+            }
         }
     }
 
     fun requestStart(mode: TripMode) {
+        permissionDenied = false
         val missing = TrackPermissions.missing(context)
         if (missing.isEmpty()) {
             viewModel.start(context, mode)
@@ -70,13 +76,21 @@ fun RecordScreen(viewModel: AppViewModel) {
     }
 
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    var lastElapsed by remember { mutableStateOf(0L) }
     LaunchedEffect(state.isRecording) {
         while (state.isRecording) {
             now = System.currentTimeMillis()
+            lastElapsed = (now - state.startedAt).coerceAtLeast(0)
             delay(1_000)
         }
     }
-    val elapsed = if (state.isRecording) (now - state.startedAt).coerceAtLeast(0) else 0L
+    // Keep showing the length of the trip while it is being analyzed instead of
+    // snapping back to zero the moment recording stops.
+    val elapsed = when (state.phase) {
+        RecordingPhase.IDLE -> 0L
+        RecordingPhase.RECORDING -> (now - state.startedAt).coerceAtLeast(0)
+        RecordingPhase.PROCESSING -> lastElapsed
+    }
 
     Column(
         modifier = Modifier
@@ -170,6 +184,15 @@ fun RecordScreen(viewModel: AppViewModel) {
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = error,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
+                if (permissionDenied) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.error_need_location),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
