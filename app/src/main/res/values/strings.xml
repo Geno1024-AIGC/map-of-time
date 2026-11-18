@@ -48,6 +48,7 @@
     <string name="record_processing">Splitting the trip into legs…</string>
     <string name="record_live_hint">Recording continues with the screen off. Stop when you arrive.</string>
     <string name="record_permission">Allow location to start recording</string>
+    <string name="record_idle_hint">The track stays on this device. Nothing is uploaded.</string>
     <string name="record_map_empty">Your track will appear here</string>
 
     <string name="trips_title">Trips</string>

@@ -200,10 +200,10 @@ fun RecordScreen(viewModel: AppViewModel) {
 
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = if (state.isRecording) {
-                        stringResource(R.string.record_live_hint)
-                    } else {
-                        stringResource(R.string.record_permission)
+                    text = when {
+                        state.isRecording -> stringResource(R.string.record_live_hint)
+                        permissionDenied -> stringResource(R.string.record_permission)
+                        else -> stringResource(R.string.record_idle_hint)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

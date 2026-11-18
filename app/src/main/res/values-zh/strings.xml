@@ -48,6 +48,7 @@
     <string name="record_processing">正在把行程切成小段…</string>
     <string name="record_live_hint">息屏后仍会继续记录，到达后请手动停止。</string>
     <string name="record_permission">允许定位以开始记录</string>
+    <string name="record_idle_hint">轨迹只保存在本机，不会上传。</string>
     <string name="record_map_empty">轨迹会显示在这里</string>
 
     <string name="trips_title">行程</string>
