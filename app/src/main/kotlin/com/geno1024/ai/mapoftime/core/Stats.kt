@@ -84,7 +84,7 @@ data class DurationStats(
                 maxMs = durations.last(),
                 medianAbsoluteDeviationMs = percentile(deviations, 50.0),
                 outlierCount = outliers,
-                medianDistanceM = percentile(distances, 50.0).toDouble(),
+                medianDistanceM = percentile(distances, 50.0),
                 confidence = confidenceOf(durations.size, median, iqr),
             )
         }
