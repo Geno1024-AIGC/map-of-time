@@ -14,6 +14,7 @@ import com.geno1024.ai.mapoftime.core.TrackPoint
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.Leg
+import com.geno1024.ai.mapoftime.data.MatchKind
 import com.geno1024.ai.mapoftime.data.Segment
 import com.geno1024.ai.mapoftime.data.Trip
 import com.geno1024.ai.mapoftime.track.Recorder
@@ -49,7 +50,10 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             val loaded = withContext(container.dbDispatcher) {
                 val trips = container.repository.trips()
                 val segments = container.repository.segments()
-                val byMode = TripMode.entries.associateWith { container.repository.samplesByMode(it) }
+                val includePartial = settings.state.value.includePartial
+                val byMode = TripMode.entries.associateWith {
+                    container.repository.samplesByMode(it, includePartial)
+                }
                 val summaries = segments.map { segment ->
                     val samples = byMode[segment.mode]?.get(segment.id).orEmpty()
                     SegmentSummary(
@@ -94,11 +98,15 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     suspend fun samples(segmentId: Long): List<TraversalSample> = withContext(container.dbDispatcher) {
-        container.repository.samples(segmentId)
+        container.repository.samples(segmentId, settings.state.value.includePartial)
     }
 
     suspend fun legsForSegment(segmentId: Long): List<Leg> = withContext(container.dbDispatcher) {
         container.repository.legsForSegment(segmentId)
+    }
+
+    suspend fun identities(ids: List<Long>): Map<Long, MatchKind> = withContext(container.dbDispatcher) {
+        container.repository.segmentIdentities(ids)
     }
 
     /**
@@ -126,6 +134,10 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             withContext(container.dbDispatcher) { container.osm.clear() }
             onDone()
         }
+    }
+
+    suspend fun cachedTileCount(): Int = withContext(container.dbDispatcher) {
+        container.osm.cachedTileCount()
     }
 
     /** Everything the user owns, in one portable JSON document. */

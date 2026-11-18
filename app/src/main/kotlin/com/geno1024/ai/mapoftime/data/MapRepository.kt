@@ -175,6 +175,22 @@ class MapRepository(private val helper: MapDb) {
             arrayOf(segmentId.toString()),
         ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toLeg()) } }
 
+    /** Identity of many segments at once, for badging a trip's leg list. */
+    fun segmentIdentities(ids: List<Long>): Map<Long, MatchKind> {
+        if (ids.isEmpty()) return emptyMap()
+        val placeholders = ids.joinToString(",") { "?" }
+        return db.rawQuery(
+            "SELECT id, identity FROM segments WHERE id IN ($placeholders)",
+            ids.map { it.toString() }.toTypedArray(),
+        ).use { cursor ->
+            buildMap {
+                while (cursor.moveToNext()) {
+                    put(cursor.getLong(0), MatchKind.of(cursor.getString(1)))
+                }
+            }
+        }
+    }
+
     // ----------------------------------------------------------- segments
 
     fun segment(id: Long): Segment? =
@@ -233,9 +249,11 @@ class MapRepository(private val helper: MapDb) {
             .use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toSegment()) } }
     }
 
-    fun samples(segmentId: Long): List<TraversalSample> =
+    fun samples(segmentId: Long, includePartial: Boolean = false): List<TraversalSample> =
         db.rawQuery(
-            "SELECT end_ms, start_ms, distance_m, direction FROM legs WHERE segment_id = ? ORDER BY start_ms",
+            "SELECT end_ms, start_ms, distance_m, direction FROM legs " +
+                "WHERE segment_id = ?" + if (includePartial) "" else " AND partial = 0" +
+                " ORDER BY start_ms",
             arrayOf(segmentId.toString()),
         ).use { cursor ->
             buildList {
@@ -248,13 +266,13 @@ class MapRepository(private val helper: MapDb) {
         }
 
     /** Samples of every segment of one mode, one query for the whole list screen. */
-    fun samplesByMode(mode: TripMode): Map<Long, List<TraversalSample>> {
+    fun samplesByMode(mode: TripMode, includePartial: Boolean = false): Map<Long, List<TraversalSample>> {
         val out = HashMap<Long, MutableList<TraversalSample>>()
         db.rawQuery(
             """
             SELECT l.segment_id, l.end_ms, l.start_ms, l.distance_m, l.direction
             FROM legs l JOIN segments s ON s.id = l.segment_id
-            WHERE s.mode = ? AND l.partial = 0
+            WHERE s.mode = ?${if (includePartial) "" else " AND l.partial = 0"}
             """.trimIndent(),
             arrayOf(mode.id),
         ).use { cursor ->
