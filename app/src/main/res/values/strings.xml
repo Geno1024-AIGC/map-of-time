@@ -1,4 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Map of Time</string>
+
+    <string name="mode_walk">Walk</string>
+    <string name="mode_bike">Bike</string>
+    <string name="mode_drive">Drive</string>
+
+    <string name="notification_channel_recording">Trip recording</string>
+    <string name="notification_channel_recording_desc">Keeps sampling while a trip is being recorded.</string>
+    <string name="notification_recording_title">Recording · %1$s</string>
+    <string name="notification_recording_text">%1$s · %2$d fixes</string>
+    <string name="action_mark">Split here</string>
+    <string name="action_stop">Stop</string>
+
+    <string name="error_need_location">Location permission is required to record a trip.</string>
+    <string name="error_need_gps">Location is turned off. Enable GPS and try again.</string>
 </resources>
