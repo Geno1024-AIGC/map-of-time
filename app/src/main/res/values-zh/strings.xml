@@ -79,6 +79,12 @@
     <string name="segment_mad">MAD</string>
     <string name="segment_outliers">异常值</string>
     <string name="segment_pace">配速</string>
+    <string name="segment_moving_time">行进</string>
+    <string name="segment_waiting_time">等待</string>
+    <string name="segment_waited_in">遇到等待</string>
+    <string name="segment_waited_in_value">%2$d 个样本中 %1$d 个</string>
+    <string name="segment_wait_when_stopped">等待时</string>
+    <string name="sample_waiting">等待 %1$s</string>
     <string name="segment_distance">长度</string>
     <string name="segment_directions">按方向</string>
     <string name="segment_forward">正向</string>

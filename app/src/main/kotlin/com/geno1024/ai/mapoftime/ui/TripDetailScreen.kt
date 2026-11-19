@@ -295,7 +295,15 @@ private fun LegRow(index: Int, leg: Leg, identity: MatchKind) {
                     maxLines = 1,
                 )
                 Text(
-                    text = formatDistance(leg.distanceM) + " · " + formatDuration(leg.durationMs),
+                    text = buildString {
+                        append(formatDistance(leg.distanceM))
+                        append(" · ")
+                        append(formatDuration(leg.durationMs))
+                        if (leg.stoppedMs > 0) {
+                            append(" · ")
+                            append(stringResource(R.string.sample_waiting, formatSeconds(leg.stoppedMs)))
+                        }
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

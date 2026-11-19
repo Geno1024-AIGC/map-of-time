@@ -79,6 +79,12 @@
     <string name="segment_mad">MAD</string>
     <string name="segment_outliers">Outliers</string>
     <string name="segment_pace">Pace</string>
+    <string name="segment_moving_time">Moving</string>
+    <string name="segment_waiting_time">Waiting</string>
+    <string name="segment_waited_in">Waited in</string>
+    <string name="segment_waited_in_value">%1$d / %2$d samples</string>
+    <string name="segment_wait_when_stopped">When waiting</string>
+    <string name="sample_waiting">%1$s waiting</string>
     <string name="segment_distance">Length</string>
     <string name="segment_directions">By direction</string>
     <string name="segment_forward">Forward</string>

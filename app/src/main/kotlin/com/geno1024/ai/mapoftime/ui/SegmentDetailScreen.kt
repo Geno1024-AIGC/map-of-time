@@ -112,6 +112,31 @@ fun SegmentDetailScreen(
                     }
 
                     Spacer(Modifier.height(12.dp))
+                    if (stats.count > 0) {
+                        KeyValueRow(
+                            stringResource(R.string.segment_moving_time),
+                            formatSeconds(stats.medianMovingMs),
+                        )
+                        KeyValueRow(
+                            stringResource(R.string.segment_waiting_time),
+                            formatSeconds(stats.medianStoppedMs),
+                        )
+                        if (stats.waitedSamples > 0) {
+                            KeyValueRow(
+                                stringResource(R.string.segment_waited_in),
+                                stringResource(
+                                    R.string.segment_waited_in_value,
+                                    stats.waitedSamples,
+                                    stats.count,
+                                ),
+                            )
+                            KeyValueRow(
+                                stringResource(R.string.segment_wait_when_stopped),
+                                formatSeconds(stats.medianWaitedMs),
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
                     KeyValueRow(
                         stringResource(R.string.segment_p25_p75),
                         if (stats.count == 0) "—" else
@@ -285,7 +310,15 @@ private fun SampleRow(sample: TraversalSample, stats: DurationStats) {
                     style = MaterialTheme.typography.bodyLarge,
                 )
                 Text(
-                    text = formatDistance(sample.distanceM) + " · " + sample.directionLabel(),
+                    text = buildString {
+                        append(formatDistance(sample.distanceM))
+                        append(" · ")
+                        append(sample.directionLabel())
+                        if (sample.stoppedMs > 0) {
+                            append(" · ")
+                            append(stringResource(R.string.sample_waiting, formatSeconds(sample.stoppedMs)))
+                        }
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
