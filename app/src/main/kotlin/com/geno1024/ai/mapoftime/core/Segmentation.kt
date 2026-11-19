@@ -58,7 +58,7 @@ object Segmenter {
             return SegmentationResult(points, emptyList(), emptyList(), cleaned.droppedPoints)
         }
 
-        val speeds = smoothedSpeeds(points)
+        val speeds = speedsOf(points)
         val pauses = findPauses(points, speeds, profile)
 
         val cuts = sortedSetOf(0)
@@ -163,7 +163,14 @@ object Segmenter {
     private fun maxAccuracy(profile: ModeProfile): Double =
         if (profile.minLegMeters < 25.0) 40.0 else 60.0
 
-    private fun smoothedSpeeds(points: List<TrackPoint>): DoubleArray {
+    /**
+     * Median of the previous, current and next sample speed. One pair of fixes
+     * is far too noisy to call a standstill on; the median rejects the single
+     * bad spike on either side. Exposed because the wait-time counter must use
+     * exactly the speeds the segmenter used.
+     */
+    fun speedsOf(points: List<TrackPoint>): DoubleArray {
+        if (points.isEmpty()) return DoubleArray(0)
         val instant = DoubleArray(points.size)
         for (i in 1 until points.size) {
             val dt = (points[i].t - points[i - 1].t) / 1000.0
