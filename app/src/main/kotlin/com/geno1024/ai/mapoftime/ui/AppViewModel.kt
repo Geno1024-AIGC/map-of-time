@@ -316,6 +316,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         put("movingMs", sample.movingMs)
                         put("stoppedMs", sample.stoppedMs)
                         put("stopCount", sample.stopCount)
+                        put("signalWaitMs", sample.signalWaitMs)
+                        put("signalStopCount", sample.signalStopCount)
                         put("distanceM", sample.distanceM)
                         put("direction", sample.direction)
                     },
@@ -356,6 +358,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         put("stoppedMs", leg.stoppedMs)
                         put("stopCount", leg.stopCount)
                         put("longestStopMs", leg.longestStopMs)
+                        put("signalWaitMs", leg.signalWaitMs)
+                        put("signalStopCount", leg.signalStopCount)
                         put("polyline", leg.polyline)
                     },
                 )

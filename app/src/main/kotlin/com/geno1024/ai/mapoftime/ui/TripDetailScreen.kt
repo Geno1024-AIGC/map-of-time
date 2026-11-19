@@ -367,6 +367,10 @@ private fun LegRow(index: Int, leg: Leg, identity: MatchKind) {
                             append(" · ")
                             append(stringResource(R.string.sample_waiting, formatSeconds(leg.stoppedMs)))
                         }
+                        if (leg.signalWaitMs > 0) {
+                            append(" · ")
+                            append(stringResource(R.string.sample_signal_wait, formatSeconds(leg.signalWaitMs)))
+                        }
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

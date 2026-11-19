@@ -142,6 +142,24 @@ fun SegmentDetailScreen(
                                 formatSeconds(stats.medianWaitedMs),
                             )
                         }
+                        if (stats.signalWaitedSamples > 0) {
+                            KeyValueRow(
+                                stringResource(R.string.segment_signal_wait),
+                                formatSeconds(stats.medianSignalWaitMs),
+                            )
+                            KeyValueRow(
+                                stringResource(R.string.segment_signal_waited_in),
+                                stringResource(
+                                    R.string.segment_waited_in_value,
+                                    stats.signalWaitedSamples,
+                                    stats.count,
+                                ),
+                            )
+                            KeyValueRow(
+                                stringResource(R.string.segment_signal_when_stopped),
+                                formatSeconds(stats.medianSignalWaitedMs),
+                            )
+                        }
                         Spacer(Modifier.height(8.dp))
                     }
                     KeyValueRow(
@@ -345,6 +363,10 @@ private fun SampleRow(sample: TraversalSample, stats: DurationStats) {
                         if (sample.stoppedMs > 0) {
                             append(" · ")
                             append(stringResource(R.string.sample_waiting, formatSeconds(sample.stoppedMs)))
+                        }
+                        if (sample.signalWaitMs > 0) {
+                            append(" · ")
+                            append(stringResource(R.string.sample_signal_wait, formatSeconds(sample.signalWaitMs)))
                         }
                     },
                     style = MaterialTheme.typography.bodySmall,

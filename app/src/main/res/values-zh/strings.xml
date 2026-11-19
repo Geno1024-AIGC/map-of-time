@@ -99,6 +99,10 @@
     <string name="segment_waited_in_value">%2$d 次中 %1$d 次</string>
     <string name="segment_wait_when_stopped">等待时</string>
     <string name="sample_waiting">等待 %1$s</string>
+    <string name="sample_signal_wait">红灯 %1$s</string>
+    <string name="segment_signal_wait">等红灯</string>
+    <string name="segment_signal_waited_in">遇到红灯</string>
+    <string name="segment_signal_when_stopped">等红灯时</string>
     <string name="segment_distance">长度</string>
     <string name="segment_directions">按方向</string>
     <string name="segment_by_time">按时段</string>

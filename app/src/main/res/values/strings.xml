@@ -99,6 +99,10 @@
     <string name="segment_waited_in_value">%1$d of %2$d</string>
     <string name="segment_wait_when_stopped">When waiting</string>
     <string name="sample_waiting">%1$s waiting</string>
+    <string name="sample_signal_wait">%1$s at a light</string>
+    <string name="segment_signal_wait">Waiting at a light</string>
+    <string name="segment_signal_waited_in">Stopped at a light</string>
+    <string name="segment_signal_when_stopped">When at a light</string>
     <string name="segment_distance">Length</string>
     <string name="segment_directions">By direction</string>
     <string name="segment_by_time">By time of day</string>
