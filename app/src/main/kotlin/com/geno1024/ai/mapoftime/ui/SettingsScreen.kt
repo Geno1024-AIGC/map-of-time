@@ -121,15 +121,6 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            UpdateCard(
-                viewModel = viewModel,
-                currentVersion = rememberVersionName(),
-                mirrorPrefix = settings.updateMirrorPrefix,
-                onSelectMirror = { prefix ->
-                    viewModel.settings.update { it.copy(updateMirrorPrefix = prefix) }
-                },
-            )
-
             SectionCard(title = stringResource(R.string.settings_matching)) {
                 SwitchRow(
                     title = stringResource(R.string.settings_matching),
@@ -353,6 +344,17 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                     )
                 }
             }
+
+            // Last on purpose: updating is the rarest thing done here, and it
+            // is the only card with a network call of its own.
+            UpdateCard(
+                viewModel = viewModel,
+                currentVersion = rememberVersionName(),
+                mirrorPrefix = settings.updateMirrorPrefix,
+                onSelectMirror = { prefix ->
+                    viewModel.settings.update { it.copy(updateMirrorPrefix = prefix) }
+                },
+            )
         }
     }
 }
