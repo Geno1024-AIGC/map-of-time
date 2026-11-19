@@ -76,6 +76,7 @@
     <string name="trip_delete">Delete trip</string>
     <string name="trip_delete_confirm">Delete this trip and all of its samples?</string>
     <string name="trip_analysis_done">Legs: %1$d · OSM: %2$d · %3$s</string>
+    <string name="trip_no_points">This trip has no raw fixes left, so it cannot be re-analysed. Imported trips keep their legs as they are.</string>
     <string name="trips_select">Select</string>
     <string name="trips_select_all">Select all</string>
     <string name="trips_select_none">Clear</string>

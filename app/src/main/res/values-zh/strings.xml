@@ -76,6 +76,7 @@
     <string name="trip_delete">删除行程</string>
     <string name="trip_delete_confirm">删除这个行程及其所有样本？</string>
     <string name="trip_analysis_done">分段 %1$d · OSM %2$d · %3$s</string>
+    <string name="trip_no_points">这个行程没有原始定位点，无法重新分析；导入的行程会保持原有分段。</string>
     <string name="trips_select">选择</string>
     <string name="trips_select_all">全选</string>
     <string name="trips_select_none">取消全选</string>

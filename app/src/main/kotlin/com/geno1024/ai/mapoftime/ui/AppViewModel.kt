@@ -194,6 +194,13 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     /** Changes the mode and re-runs the analysis with that mode's thresholds. */
     suspend fun setTripMode(tripId: Long, mode: TripMode): TripAnalyzer.Result? {
+        // Changing the mode without re-cutting would leave legs pointing at
+        // segments of the old mode. Imported trips have no raw fixes, so they
+        // cannot be re-cut at all.
+        val canAnalyze = withContext(container.dbDispatcher) {
+            container.repository.points(tripId).size >= 2
+        }
+        if (!canAnalyze) return null
         withContext(container.dbDispatcher) { container.repository.setTripMode(tripId, mode) }
         return analyze(tripId)
     }

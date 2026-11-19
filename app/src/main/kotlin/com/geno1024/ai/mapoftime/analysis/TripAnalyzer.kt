@@ -71,6 +71,10 @@ class TripAnalyzer(
     fun analyze(tripId: Long): Result? {
         val trip = repository.trip(tripId) ?: return null
         val raw = repository.points(tripId)
+        // A trip restored from an export has legs but no raw fixes. Running the
+        // segmenter over nothing would replace those legs with an empty list
+        // and quietly delete the samples the user just imported.
+        if (raw.size < 2) return null
         val marks = repository.marks(tripId)
         val segmentation = Segmenter.segment(raw, trip.mode.profile, marks)
         // The same smoothed speeds the segmenter used, so a stop can never be

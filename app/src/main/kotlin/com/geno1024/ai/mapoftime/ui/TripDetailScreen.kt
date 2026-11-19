@@ -56,6 +56,7 @@ fun TripDetailScreen(
     val scope = rememberCoroutineScope()
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
     val analysisDoneFormat = stringResource(R.string.trip_analysis_done)
+    val noPointsText = stringResource(R.string.trip_no_points)
     val osmStatus = mapOf(
         OsmOutcome.MATCHED to stringResource(R.string.osm_matched),
         OsmOutcome.DISABLED to stringResource(R.string.osm_disabled),
@@ -292,7 +293,7 @@ fun TripDetailScreen(
                                             it.osmLegs,
                                             osmStatus.getValue(it.osmOutcome),
                                         )
-                                    }
+                                    } ?: noPointsText
                                     reload += 1
                                 }
                             },
@@ -326,7 +327,7 @@ fun TripDetailScreen(
                                         it.osmLegs,
                                         osmStatus.getValue(it.osmOutcome),
                                     )
-                                }
+                                } ?: noPointsText
                                 reload += 1
                             }
                         },
