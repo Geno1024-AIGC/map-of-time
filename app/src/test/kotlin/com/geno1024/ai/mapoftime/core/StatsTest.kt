@@ -77,6 +77,31 @@ class StatsTest {
     }
 
     @Test
+    fun movingAndWaitingSplitAtTheMedian() {
+        val stats = DurationStats.of(
+            listOf(
+                TraversalSample(100_000, 100.0, 1, 0, movingMs = 100_000),
+                TraversalSample(110_000, 100.0, 1, 1, movingMs = 100_000, stoppedMs = 10_000),
+                TraversalSample(120_000, 100.0, 1, 2, movingMs = 90_000, stoppedMs = 30_000),
+            ),
+        )
+        assertEquals(100_000L, stats.medianMovingMs)
+        assertEquals(10_000L, stats.medianStoppedMs)
+        assertEquals(2, stats.waitedSamples)
+        // When those two runs did stop, the middle wait was 20 s.
+        assertEquals(20_000L, stats.medianWaitedMs)
+    }
+
+    @Test
+    fun aRunWithoutStopsReportsNoWait() {
+        val stats = DurationStats.of(samples(100, 102, 98))
+        assertEquals(0L, stats.medianStoppedMs)
+        assertEquals(0, stats.waitedSamples)
+        assertEquals(0L, stats.medianWaitedMs)
+        assertEquals(100_000L, stats.medianMovingMs)
+    }
+
+    @Test
     fun percentileInterpolates() {
         assertEquals(15L, DurationStats.percentile(listOf(10L, 20L), 50.0))
         assertEquals(10L, DurationStats.percentile(listOf(10L, 20L), 0.0))
