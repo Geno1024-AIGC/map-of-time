@@ -114,7 +114,7 @@
 
 只有三处联网，且都可关闭或替换：
 
-1. **OSM 栅格瓦片**（默认 `https://tile.openstreetmap.org/{z}/{x}/{y}.png`），只用于地图底图；瓦片写入磁盘缓存，离线时轨迹照常绘制。
+1. **栅格底图**（默认 OpenStreetMap，可切换为高德或自定义，见上节「底图来源」），只用于地图显示；瓦片写入磁盘缓存，离线时轨迹照常绘制。
 2. **Overpass API**（默认 `https://overpass-api.de/api/interpreter`），按约 0.02°（≈2 km）瓦片拉取 `highway` 路网，存进同一个数据库。
 3. **GitHub Releases API**，只为应用内更新读取 `canary` 发布，不发送任何设备信息。
 
@@ -122,7 +122,23 @@
 
 请遵守 [OSM 瓦片使用政策](https://operations.osmfoundation.org/policies/tiles/) 与 [Overpass 使用条款](https://wiki.openstreetmap.org/wiki/Overpass_API)。若要大量使用，请自建瓦片服务或 Overpass 实例，并在设置页填入自己的地址。
 
-地图数据 © OpenStreetMap contributors，以 ODbL 授权。
+### 底图来源
+
+设置页可以在三种底图之间切换。切换只影响显示，不改动任何已存储的坐标：
+
+| 来源 | 瓦片 | 坐标 |
+|---|---|---|
+| OpenStreetMap | `tile.openstreetmap.org` | WGS-84 |
+| 高德 | `webrd0{1-4}.is.autonavi.com` | GCJ-02 |
+| 自定义 | 用户填入的模板，支持 `{z}` `{x}` `{y}` `{s}` | 可选 GCJ-02 |
+
+- OSM 在国内时常不可达，高德是可用的替代。
+- 高德瓦片按 GCJ-02 绘制，直接画原始 GPS 会偏几百米。因此绘制前会把轨迹、标记与视野中心一起做 WGS-84 → GCJ-02 偏移（`core/Gcj.kt`）；数据库里始终保存原始 WGS-84，切回 OSM 不会有累积误差。
+- 高德瓦片最深只到 z=18，z=19 返回的是 179 字节的空白占位图，所以选中它时最大缩放限制为 18，避免把白图缓存下来。
+- 瓦片缓存按来源分目录（`tiles-osm`、`tiles-amap`、`tiles-custom-<hash>`），换源不会串图；自定义模板改了 URL 也会换目录。
+- 自定义底图默认填 OSM 模板。换成腾讯、天地图等国内服务时，记得打开「瓦片使用 GCJ-02」。
+
+地图数据 © OpenStreetMap contributors，以 ODbL 授权；高德底图 © 高德。
 
 ## 录制
 
