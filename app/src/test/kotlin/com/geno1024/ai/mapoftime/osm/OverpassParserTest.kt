@@ -99,5 +99,23 @@ class OverpassParserTest {
     @Test
     fun emptyAnswerIsEmptyNotAnError() {
         assertTrue(OverpassParser.parse("""{"elements":[]}""").isEmpty())
+        assertTrue(OverpassParser.parseAnswer("""{"elements":[]}""") is OverpassAnswer.Ways)
+    }
+
+    @Test
+    fun aRemarkIsAFailureNotAnEmptyArea() {
+        // Overpass reports a timed-out or out-of-memory query as HTTP 200 with
+        // a remark and no elements. Caching that as "no roads here" would hide
+        // the area for the whole cache lifetime.
+        val body = """
+            {
+              "version": 0.6,
+              "generator": "Overpass API",
+              "remark": "runtime error: Query timed out in \"query\" at line 1 after 30 seconds."
+            }
+        """.trimIndent()
+        val answer = OverpassParser.parseAnswer(body)
+        assertTrue(answer is OverpassAnswer.Failed)
+        assertTrue((answer as OverpassAnswer.Failed).reason.contains("timed out"))
     }
 }

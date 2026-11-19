@@ -9,6 +9,20 @@ import java.net.URL
 import java.util.zip.GZIPInputStream
 
 /**
+ * What an Overpass body actually says.
+ *
+ * Overpass reports a query that timed out or ran out of memory as **HTTP 200
+ * with a `remark` and no elements**. Treating that as "this area has no roads"
+ * would cache the failure and hide street data for months, so the two cases
+ * are kept apart.
+ */
+sealed interface OverpassAnswer {
+    data class Ways(val ways: List<OsmWay>) : OverpassAnswer
+
+    data class Failed(val reason: String) : OverpassAnswer
+}
+
+/**
  * Turns an Overpass `out tags geom` answer into ways.
  *
  * Kept separate from the network call so it can be tested against a recorded
@@ -25,8 +39,21 @@ object OverpassParser {
         "raceway",
     )
 
-    fun parse(json: String): List<OsmWay> {
-        val root = runCatching { JSONObject(json) }.getOrNull() ?: return emptyList()
+    /** Convenience for callers that only care about the elements. */
+    fun parse(json: String): List<OsmWay> = when (val answer = parseAnswer(json)) {
+        is OverpassAnswer.Ways -> answer.ways
+        is OverpassAnswer.Failed -> emptyList()
+    }
+
+    fun parseAnswer(json: String): OverpassAnswer {
+        val root = runCatching { JSONObject(json) }.getOrNull()
+            ?: return OverpassAnswer.Failed("unreadable JSON")
+        val remark = root.optString("remark")
+        if (remark.isNotBlank()) return OverpassAnswer.Failed(remark)
+        return OverpassAnswer.Ways(ways(root))
+    }
+
+    private fun ways(root: JSONObject): List<OsmWay> {
         val elements = root.optJSONArray("elements") ?: return emptyList()
         val ways = ArrayList<OsmWay>(elements.length())
         for (i in 0 until elements.length()) {
@@ -80,7 +107,7 @@ class OverpassClient(
     private val endpoint: String = DEFAULT_ENDPOINT,
     private val userAgent: String = USER_AGENT,
 ) {
-    fun fetchWays(bounds: Bounds, timeoutSeconds: Int = 120): List<OsmWay> {
+    fun fetchWays(bounds: Bounds, timeoutSeconds: Int = 30): List<OsmWay> {
         val query = buildString {
             append("[out:json][timeout:").append(timeoutSeconds).append("];")
             append("way[\"highway\"](")
@@ -93,7 +120,9 @@ class OverpassClient(
 
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
-            connectTimeout = 20_000
+            // The public instance is routinely busy for half a minute before it
+            // even starts computing; hanging on for 150 s helps nobody.
+            connectTimeout = 10_000
             readTimeout = (timeoutSeconds + 30) * 1_000
             doOutput = true
             setRequestProperty("User-Agent", userAgent)
@@ -114,7 +143,11 @@ class OverpassClient(
                 connection.inputStream
             }
             val body = stream.bufferedReader().use { it.readText() }
-            return OverpassParser.parse(body)
+            return when (val answer = OverpassParser.parseAnswer(body)) {
+                is OverpassAnswer.Ways -> answer.ways
+                is OverpassAnswer.Failed ->
+                    throw IOException("Overpass: ${answer.reason}")
+            }
         } finally {
             connection.disconnect()
         }
