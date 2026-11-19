@@ -69,6 +69,12 @@
     <string name="trip_delete">Delete trip</string>
     <string name="trip_delete_confirm">Delete this trip and all of its samples?</string>
     <string name="trip_analysis_done">Legs: %1$d · OSM: %2$d · %3$s</string>
+    <string name="trips_select">Select</string>
+    <string name="trips_select_all">Select all</string>
+    <string name="trips_select_none">Clear</string>
+    <string name="trips_reanalyze_all">Re-analyse all</string>
+    <string name="trips_reanalyze_selected">Re-analyse %1$d</string>
+    <string name="trips_reanalyzing">Analysing %1$d / %2$d…</string>
     <string name="osm_matched">matched</string>
     <string name="osm_disabled">matching off</string>
     <string name="osm_too_large">area too large</string>

@@ -166,6 +166,41 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         return result
     }
 
+    /**
+     * Re-analyses many trips back to back. Sequential on purpose: the analyzer
+     * may download OSM tiles, and two overlapping analyses would both fetch the
+     * same tile and race on the cache. Progress is reported on the caller's
+     * dispatcher so a list can show "12 / 30" while it works.
+     */
+    suspend fun analyzeAll(
+        tripIds: List<Long>,
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> },
+    ): Int {
+        var done = 0
+        for (id in tripIds) {
+            withContext(container.dbDispatcher) {
+                runCatching { container.analyzer.analyze(id) }
+            }
+            done++
+            onProgress(done, tripIds.size)
+        }
+        refresh()
+        return done
+    }
+
+    /** Changes the mode and re-runs the analysis with that mode's thresholds. */
+    suspend fun setTripMode(tripId: Long, mode: TripMode): TripAnalyzer.Result? {
+        withContext(container.dbDispatcher) { container.repository.setTripMode(tripId, mode) }
+        return analyze(tripId)
+    }
+
+    suspend fun setTripNote(tripId: Long, note: String?) {
+        withContext(container.dbDispatcher) {
+            container.repository.setTripNote(tripId, note?.trim()?.takeIf { it.isNotEmpty() })
+        }
+        refresh()
+    }
+
     fun deleteTrip(tripId: Long) {
         viewModelScope.launch {
             withContext(container.dbDispatcher) { container.repository.deleteTrip(tripId) }

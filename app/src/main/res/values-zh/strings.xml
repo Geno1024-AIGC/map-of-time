@@ -69,6 +69,12 @@
     <string name="trip_delete">删除行程</string>
     <string name="trip_delete_confirm">删除这个行程及其所有样本？</string>
     <string name="trip_analysis_done">分段 %1$d · OSM %2$d · %3$s</string>
+    <string name="trips_select">选择</string>
+    <string name="trips_select_all">全选</string>
+    <string name="trips_select_none">取消全选</string>
+    <string name="trips_reanalyze_all">全部重算</string>
+    <string name="trips_reanalyze_selected">重算 %1$d 个</string>
+    <string name="trips_reanalyzing">正在分析 %1$d / %2$d…</string>
     <string name="osm_matched">已匹配</string>
     <string name="osm_disabled">未开启匹配</string>
     <string name="osm_too_large">范围过大</string>

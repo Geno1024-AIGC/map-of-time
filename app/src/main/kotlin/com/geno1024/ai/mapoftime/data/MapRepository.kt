@@ -82,6 +82,29 @@ class MapRepository(private val helper: MapDb) {
             arrayOf(TripStatus.RECORDING.name),
         )
 
+    /**
+     * Re-label an existing trip. The caller must re-analyse it afterwards: the
+     * mode is also part of every segment key, so the old legs belong to the old
+     * mode and would otherwise keep feeding the wrong statistics.
+     */
+    fun setTripMode(id: Long, mode: TripMode) {
+        db.update(
+            "trips",
+            ContentValues().apply { put("mode", mode.id) },
+            "id = ?",
+            arrayOf(id.toString()),
+        )
+    }
+
+    fun setTripNote(id: Long, note: String?) {
+        db.update(
+            "trips",
+            ContentValues().apply { put("note", note) },
+            "id = ?",
+            arrayOf(id.toString()),
+        )
+    }
+
     fun trip(id: Long): Trip? =
         db.rawQuery(TRIP_SELECT + " WHERE t.id = ?", arrayOf(id.toString())).use { cursor ->
             if (cursor.moveToFirst()) cursor.toTrip() else null
