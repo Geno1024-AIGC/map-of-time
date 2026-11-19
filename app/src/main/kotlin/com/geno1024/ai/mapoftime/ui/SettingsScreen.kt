@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
+import com.geno1024.ai.mapoftime.core.Basemap
 import com.geno1024.ai.mapoftime.update.Mirrors
 import com.geno1024.ai.mapoftime.update.UpdateError
 import com.geno1024.ai.mapoftime.update.UpdateState
@@ -157,19 +158,53 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                     },
                 )
                 Spacer(Modifier.height(8.dp))
-                SettingField(
-                    label = stringResource(R.string.settings_tile_url),
-                    value = settings.tileUrlTemplate,
-                    onCommit = { text ->
-                        viewModel.settings.update { it.copy(tileUrlTemplate = text) }
-                    },
-                )
-                Spacer(Modifier.height(8.dp))
                 Text(
-                    text = stringResource(R.string.settings_attribution),
-                    style = MaterialTheme.typography.labelSmall,
+                    text = stringResource(R.string.settings_basemap),
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Basemap.entries.forEach { source ->
+                        FilterChip(
+                            selected = settings.basemap == source,
+                            onClick = {
+                                viewModel.settings.update { it.copy(basemap = source) }
+                            },
+                            label = { Text(stringResource(source.labelRes())) },
+                        )
+                    }
+                }
+                if (settings.basemap == Basemap.CUSTOM) {
+                    Spacer(Modifier.height(8.dp))
+                    SettingField(
+                        label = stringResource(R.string.settings_tile_url),
+                        value = settings.customTileUrl,
+                        onCommit = { text ->
+                            viewModel.settings.update { it.copy(customTileUrl = text) }
+                        },
+                    )
+                    SwitchRow(
+                        title = stringResource(R.string.settings_custom_gcj02),
+                        description = stringResource(R.string.settings_custom_gcj02_desc),
+                        checked = settings.customTilesGcj02,
+                        onCheckedChange = { gcj ->
+                            viewModel.settings.update { it.copy(customTilesGcj02 = gcj) }
+                        },
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                val attribution = when (settings.basemap) {
+                    Basemap.OSM -> stringResource(R.string.settings_attribution)
+                    Basemap.AMAP -> stringResource(R.string.settings_attribution_amap)
+                    Basemap.CUSTOM -> null
+                }
+                if (attribution != null) {
+                    Text(
+                        text = attribution,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             SectionCard {
@@ -539,4 +574,10 @@ private fun rememberVersionName(): String {
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         }.getOrNull() ?: "?"
     }
+}
+
+private fun Basemap.labelRes(): Int = when (this) {
+    Basemap.OSM -> R.string.basemap_osm
+    Basemap.AMAP -> R.string.basemap_amap
+    Basemap.CUSTOM -> R.string.basemap_custom
 }

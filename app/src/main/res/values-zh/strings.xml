@@ -101,8 +101,15 @@
     <string name="settings_title">设置</string>
     <string name="settings_matching">路网匹配</string>
     <string name="settings_matching_desc">有路网数据时，在 OpenStreetMap 的交叉口处切段。</string>
+    <string name="settings_basemap">底图来源</string>
+    <string name="basemap_osm">OpenStreetMap</string>
+    <string name="basemap_amap">高德</string>
+    <string name="basemap_custom">自定义</string>
+    <string name="settings_custom_gcj02">瓦片使用 GCJ-02</string>
+    <string name="settings_custom_gcj02_desc">国内地图服务会偏移坐标，使用它们时请打开。</string>
+    <string name="settings_attribution_amap">地图数据 © 高德</string>
     <string name="settings_tiles">地图瓦片</string>
-    <string name="settings_tiles_desc">在轨迹下方显示 OpenStreetMap 底图。</string>
+    <string name="settings_tiles_desc">在轨迹下方显示地图底图。</string>
     <string name="settings_endpoint">Overpass 地址</string>
     <string name="settings_tile_url">瓦片地址模板</string>
     <string name="settings_cache_days">路网缓存</string>

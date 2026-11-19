@@ -44,6 +44,14 @@ class BasemapTest {
     }
 
     @Test
+    fun autonaviStopsOneZoomShallower() {
+        // z=19 on AutoNavi is a blank placeholder, so the picker must not go
+        // there and cache a white square as if it were the map.
+        assertEquals(19, Basemap.OSM.maxZoom)
+        assertEquals(18, Basemap.AMAP.maxZoom)
+    }
+
+    @Test
     fun onlyAutonaviNeedsTheDatumShift() {
         assertTrue(Basemap.AMAP.gcj02)
         assertFalse(Basemap.OSM.gcj02)

@@ -85,7 +85,9 @@ fun SegmentDetailScreen(
                     modifier = Modifier.fillMaxWidth().height(240.dp),
                     markers = markers,
                     tilesEnabled = settings.mapTiles,
-                    tileUrlTemplate = settings.tileUrlTemplate,
+                    basemap = settings.basemap,
+                    customTileUrl = settings.customTileUrl,
+                    customTilesGcj02 = settings.customTilesGcj02,
                 )
             }
 

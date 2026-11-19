@@ -2,6 +2,7 @@ package com.geno1024.ai.mapoftime.data
 
 import android.content.Context
 import androidx.core.content.edit
+import com.geno1024.ai.mapoftime.core.Basemap
 import com.geno1024.ai.mapoftime.osm.OverpassClient
 import com.geno1024.ai.mapoftime.update.Mirrors
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,10 +12,15 @@ import kotlinx.coroutines.flow.asStateFlow
 data class SettingsSnapshot(
     /** Cut legs at OSM intersections when road data is available. */
     val osmMatching: Boolean = true,
-    /** Draw OpenStreetMap raster tiles behind the track. */
+    /** Draw raster tiles behind the track. */
     val mapTiles: Boolean = true,
+    /** OSM, AutoNavi, or whatever template the user typed in. */
+    val basemap: Basemap = Basemap.OSM,
     val overpassEndpoint: String = OverpassClient.DEFAULT_ENDPOINT,
-    val tileUrlTemplate: String = DEFAULT_TILE_URL,
+    /** Only used when [basemap] is [Basemap.CUSTOM]. */
+    val customTileUrl: String = Basemap.OSM.tileTemplate.orEmpty(),
+    /** Whether those custom tiles are laid out in GCJ-02. */
+    val customTilesGcj02: Boolean = false,
     /** Road data older than this is refreshed in the background. */
     val osmCacheDays: Int = 120,
     val junctionSnapMeters: Int = 30,
@@ -24,11 +30,7 @@ data class SettingsSnapshot(
     val lastUpdateCheckAt: Long = 0L,
     /** Preferred APK download proxy; empty means direct GitHub. */
     val updateMirrorPrefix: String = "",
-) {
-    companion object {
-        const val DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-    }
-}
+)
 
 /**
  * Small preference store with an observable snapshot. The UI reads it through
@@ -44,8 +46,10 @@ class AppSettings(context: Context) {
         prefs.edit {
             putBoolean(KEY_OSM_MATCHING, next.osmMatching)
             putBoolean(KEY_MAP_TILES, next.mapTiles)
+            putString(KEY_BASEMAP, next.basemap.id)
             putString(KEY_OVERPASS, next.overpassEndpoint)
-            putString(KEY_TILE_URL, next.tileUrlTemplate)
+            putString(KEY_TILE_URL, next.customTileUrl)
+            putBoolean(KEY_TILE_GCJ, next.customTilesGcj02)
             putInt(KEY_CACHE_DAYS, next.osmCacheDays)
             putInt(KEY_SNAP, next.junctionSnapMeters)
             putBoolean(KEY_PARTIAL, next.includePartial)
@@ -55,27 +59,37 @@ class AppSettings(context: Context) {
         _state.value = next
     }
 
-    private fun read() = SettingsSnapshot(
-        osmMatching = prefs.getBoolean(KEY_OSM_MATCHING, true),
-        mapTiles = prefs.getBoolean(KEY_MAP_TILES, true),
-        overpassEndpoint = prefs.getString(KEY_OVERPASS, OverpassClient.DEFAULT_ENDPOINT)
-            ?.takeIf { it.isNotBlank() } ?: OverpassClient.DEFAULT_ENDPOINT,
-        tileUrlTemplate = prefs.getString(KEY_TILE_URL, SettingsSnapshot.DEFAULT_TILE_URL)
-            ?.takeIf { it.isNotBlank() } ?: SettingsSnapshot.DEFAULT_TILE_URL,
-        osmCacheDays = prefs.getInt(KEY_CACHE_DAYS, 120).coerceIn(0, 3650),
-        junctionSnapMeters = prefs.getInt(KEY_SNAP, 30).coerceIn(10, 60),
-        includePartial = prefs.getBoolean(KEY_PARTIAL, false),
-        lastUpdateCheckAt = prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L),
-        updateMirrorPrefix = Mirrors.resolve(
-            prefs.getString(KEY_UPDATE_MIRROR, "").orEmpty(),
-        ).prefix,
-    )
+    private fun read(): SettingsSnapshot {
+        val customUrl = prefs.getString(KEY_TILE_URL, null)?.takeIf { it.isNotBlank() }
+        // Before the basemap picker existed the only choice was a URL, so an
+        // edited URL means the user was running a custom source.
+        val basemap = prefs.getString(KEY_BASEMAP, null)?.let { Basemap.of(it) }
+            ?: if (customUrl != null && customUrl != Basemap.OSM.tileTemplate) Basemap.CUSTOM else Basemap.OSM
+        return SettingsSnapshot(
+            osmMatching = prefs.getBoolean(KEY_OSM_MATCHING, true),
+            mapTiles = prefs.getBoolean(KEY_MAP_TILES, true),
+            basemap = basemap,
+            overpassEndpoint = prefs.getString(KEY_OVERPASS, OverpassClient.DEFAULT_ENDPOINT)
+                ?.takeIf { it.isNotBlank() } ?: OverpassClient.DEFAULT_ENDPOINT,
+            customTileUrl = customUrl ?: Basemap.OSM.tileTemplate.orEmpty(),
+            customTilesGcj02 = prefs.getBoolean(KEY_TILE_GCJ, false),
+            osmCacheDays = prefs.getInt(KEY_CACHE_DAYS, 120).coerceIn(0, 3650),
+            junctionSnapMeters = prefs.getInt(KEY_SNAP, 30).coerceIn(10, 60),
+            includePartial = prefs.getBoolean(KEY_PARTIAL, false),
+            lastUpdateCheckAt = prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L),
+            updateMirrorPrefix = Mirrors.resolve(
+                prefs.getString(KEY_UPDATE_MIRROR, "").orEmpty(),
+            ).prefix,
+        )
+    }
 
     private companion object {
         const val KEY_OSM_MATCHING = "osm_matching"
         const val KEY_MAP_TILES = "map_tiles"
+        const val KEY_BASEMAP = "basemap"
         const val KEY_OVERPASS = "overpass_endpoint"
         const val KEY_TILE_URL = "tile_url"
+        const val KEY_TILE_GCJ = "tile_gcj02"
         const val KEY_CACHE_DAYS = "osm_cache_days"
         const val KEY_SNAP = "junction_snap_meters"
         const val KEY_PARTIAL = "include_partial"

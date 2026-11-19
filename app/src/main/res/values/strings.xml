@@ -101,8 +101,15 @@
     <string name="settings_title">Settings</string>
     <string name="settings_matching">Road matching</string>
     <string name="settings_matching_desc">Cut legs at OpenStreetMap intersections when road data is available.</string>
+    <string name="settings_basemap">Basemap</string>
+    <string name="basemap_osm">OpenStreetMap</string>
+    <string name="basemap_amap">AutoNavi</string>
+    <string name="basemap_custom">Custom</string>
+    <string name="settings_custom_gcj02">Tiles use GCJ-02</string>
+    <string name="settings_custom_gcj02_desc">Turn on for sources that shift their coordinates, such as Chinese providers.</string>
+    <string name="settings_attribution_amap">Map data © AutoNavi</string>
     <string name="settings_tiles">Map tiles</string>
-    <string name="settings_tiles_desc">Show an OpenStreetMap basemap behind the track.</string>
+    <string name="settings_tiles_desc">Show a basemap behind the track.</string>
     <string name="settings_endpoint">Overpass endpoint</string>
     <string name="settings_tile_url">Tile URL template</string>
     <string name="settings_cache_days">Road data cache</string>

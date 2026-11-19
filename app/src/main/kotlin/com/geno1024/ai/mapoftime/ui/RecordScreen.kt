@@ -215,7 +215,9 @@ fun RecordScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth().height(300.dp),
                 markers = state.lastFix?.let { listOf(MapMarker(it, emphasized = true)) }.orEmpty(),
                 tilesEnabled = settings.mapTiles,
-                tileUrlTemplate = settings.tileUrlTemplate,
+                basemap = settings.basemap,
+                customTileUrl = settings.customTileUrl,
+                customTilesGcj02 = settings.customTilesGcj02,
                 focus = state.lastFix,
                 emptyHint = stringResource(R.string.record_map_empty),
             )

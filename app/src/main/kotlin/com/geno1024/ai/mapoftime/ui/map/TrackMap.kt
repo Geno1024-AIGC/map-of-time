@@ -34,7 +34,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.geno1024.ai.mapoftime.core.Basemap
 import com.geno1024.ai.mapoftime.core.Bounds
+import com.geno1024.ai.mapoftime.core.Gcj
 import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.LatLon
 import kotlinx.coroutines.Dispatchers
@@ -64,7 +66,11 @@ fun TrackMap(
     modifier: Modifier = Modifier,
     markers: List<MapMarker> = emptyList(),
     tilesEnabled: Boolean = true,
-    tileUrlTemplate: String = DEFAULT_TILE_URL,
+    basemap: Basemap = Basemap.OSM,
+    /** Only read when [basemap] is [Basemap.CUSTOM]. */
+    customTileUrl: String = "",
+    /** Only read when [basemap] is [Basemap.CUSTOM]. */
+    customTilesGcj02: Boolean = false,
     interactive: Boolean = true,
     emptyHint: String? = null,
     /** Where to look when there is no track yet, e.g. the latest live fix. */
@@ -72,12 +78,38 @@ fun TrackMap(
 ) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
-    val allPoints = remember(tracks) { tracks.flatten() }
-    val bounds = remember(tracks) { Geo.bounds(allPoints) }
-    val store = remember(tileUrlTemplate) { TileStore(context, tileUrlTemplate) }
+
+    // AutoNavi publishes GCJ-02 tiles, so the overlay must be shifted into the
+    // same datum. Converting the centre and the bounds too keeps panning,
+    // fitting and drawing consistent instead of only moving the polyline.
+    val usesGcj = if (basemap == Basemap.CUSTOM) customTilesGcj02 else basemap.gcj02
+    val displayTracks = remember(tracks, usesGcj) {
+        if (!usesGcj) tracks else tracks.map { track -> track.map(Gcj::toGcj02) }
+    }
+    val displayMarkers = remember(markers, usesGcj) {
+        if (!usesGcj) markers else markers.map { it.copy(at = Gcj.toGcj02(it.at)) }
+    }
+    val displayFocus = remember(focus, usesGcj) {
+        if (!usesGcj) focus else focus?.let(Gcj::toGcj02)
+    }
+
+    val allPoints = remember(displayTracks) { displayTracks.flatten() }
+    val bounds = remember(displayTracks) { Geo.bounds(allPoints) }
+    val tileTemplate = basemap.tileTemplate ?: customTileUrl
+    val storeKey = basemap.id + "|" + tileTemplate
+    val store = remember(storeKey) {
+        val folder = if (basemap == Basemap.CUSTOM) {
+            "tiles-custom-" + Integer.toHexString(tileTemplate.hashCode())
+        } else {
+            "tiles-" + basemap.id
+        }
+        TileStore(context, basemap, customTileUrl, folder)
+    }
 
     var size by remember { mutableStateOf(Size.Zero) }
-    var center by remember(bounds) { mutableStateOf(bounds?.center ?: focus ?: LatLon(39.9042, 116.4074)) }
+    var center by remember(bounds) {
+        mutableStateOf(bounds?.center ?: displayFocus ?: LatLon(39.9042, 116.4074))
+    }
     var zoom by remember(bounds) { mutableStateOf(15f) }
     var userMoved by remember { mutableStateOf(false) }
 
@@ -91,14 +123,15 @@ fun TrackMap(
 
     // Before a trip has any track, follow the live fix — but never fight a
     // pan or pinch the user did on purpose.
-    LaunchedEffect(focus, bounds) {
+    LaunchedEffect(displayFocus, bounds) {
         if (bounds != null || userMoved) return@LaunchedEffect
-        val target = focus ?: return@LaunchedEffect
+        val target = displayFocus ?: return@LaunchedEffect
         center = target
         if (zoom < 16f) zoom = 16f
     }
 
-    val z = floor(zoom).toInt().coerceIn(2, 19)
+    val maxZoom = basemap.maxZoom
+    val z = floor(zoom).toInt().coerceIn(2, maxZoom)
     val scale = 2.0.pow((zoom - z).toDouble())
     val worldTiles = 1 shl z
     val worldPx = TILE_PX * worldTiles
@@ -124,8 +157,8 @@ fun TrackMap(
         }
     }
 
-    val bitmaps = remember { mutableStateMapOf<TileKey, ImageBitmap>() }
-    LaunchedEffect(visibleKeys, tileUrlTemplate, tilesEnabled) {
+    val bitmaps = remember(storeKey) { mutableStateMapOf<TileKey, ImageBitmap>() }
+    LaunchedEffect(visibleKeys, storeKey, tilesEnabled) {
         if (!tilesEnabled) return@LaunchedEffect
         for (key in visibleKeys) {
             if (bitmaps.containsKey(key)) continue
@@ -148,7 +181,8 @@ fun TrackMap(
                             val world = TILE_PX * 2.0.pow(zoom.toDouble())
                             val pannedLon = xToLon(lonToX(center.lon, world) - pan.x, world)
                             val pannedLat = yToLat(latToY(center.lat, world) - pan.y, world)
-                            val newZoom = (zoom + ln(zoomChange.toDouble()) / LN_2).coerceIn(3.0, 19.0)
+                            val newZoom = (zoom + ln(zoomChange.toDouble()) / LN_2)
+                                .coerceIn(3.0, maxZoom.toDouble())
                             val newWorld = TILE_PX * 2.0.pow(newZoom)
                             val nx = lonToX(pannedLon, world) / world
                             val ny = latToY(pannedLat, world) / world
@@ -164,7 +198,7 @@ fun TrackMap(
                     .pointerInput(Unit) {
                         detectTapGestures(
                             onDoubleTap = { tap ->
-                                val newZoom = (zoom + 1f).coerceAtMost(19f)
+                                val newZoom = (zoom + 1f).coerceAtMost(maxZoom.toFloat())
                                 val world = TILE_PX * 2.0.pow(zoom.toDouble())
                                 val newWorld = TILE_PX * 2.0.pow(newZoom.toDouble())
                                 val nx = lonToX(center.lon, world) / world
@@ -206,7 +240,7 @@ fun TrackMap(
                 ((latToY(point.lat, worldPx) - centerWorldY) * scale + size.height / 2.0).toFloat(),
             )
 
-            for (track in tracks) {
+            for (track in displayTracks) {
                 if (track.size < 2) continue
                 val path = Path()
                 val first = project(track.first())
@@ -219,7 +253,7 @@ fun TrackMap(
                 drawPath(path, color = colors.primary, style = Stroke(width = 4.5.dp.toPx()))
             }
 
-            for (marker in markers) {
+            for (marker in displayMarkers) {
                 val p = project(marker.at)
                 val radius = if (marker.emphasized) 6.dp.toPx() else 4.dp.toPx()
                 drawCircle(color = Color.Black.copy(alpha = 0.5f), radius = radius + 2.dp.toPx(), center = p)
@@ -230,7 +264,7 @@ fun TrackMap(
                 )
             }
 
-            if (tracks.all { it.isEmpty() } && emptyHint != null) {
+            if (displayTracks.all { it.isEmpty() } && emptyHint != null) {
                 drawContext.canvas.nativeCanvas.drawText(
                     emptyHint,
                     size.width / 2f,
@@ -243,9 +277,9 @@ fun TrackMap(
                 )
             }
 
-            if (tilesEnabled) {
+            if (tilesEnabled && basemap.attribution.isNotEmpty()) {
                 drawContext.canvas.nativeCanvas.drawText(
-                    "© OpenStreetMap contributors",
+                    basemap.attribution,
                     size.width - 8.dp.toPx(),
                     size.height - 8.dp.toPx(),
                     android.graphics.Paint().apply {
@@ -279,8 +313,6 @@ private data class TileKey(val z: Int, val x: Int, val y: Int, val drawX: Int)
 
 private const val TILE_PX = 256.0
 private const val LN_2 = 0.6931471805599453
-const val DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-
 private fun lonToTile(lon: Double, worldTiles: Int): Double = (lon + 180.0) / 360.0 * worldTiles
 
 private fun latToTile(lat: Double, worldTiles: Int): Double = Geo.mercatorY(lat) * worldTiles
@@ -305,14 +337,17 @@ private fun fitZoom(bounds: Bounds, size: Size): Float {
 }
 
 /**
- * Downloads OSM raster tiles into a small disk cache. Memory is an LRU so
- * panning never decodes the same PNG twice.
+ * Downloads raster tiles into a small disk cache. Memory is an LRU so panning
+ * never decodes the same PNG twice, and the directory is per source so
+ * switching basemaps cannot serve one provider's tile under another's name.
  */
 private class TileStore(
     context: Context,
-    private val template: String,
+    private val basemap: Basemap,
+    private val customTemplate: String,
+    folder: String,
 ) {
-    private val cacheDir = File(context.cacheDir, "osm-tiles")
+    private val cacheDir = File(context.cacheDir, folder)
     private val memory = object : LruCache<String, ImageBitmap>(64) {
         override fun sizeOf(key: String, value: ImageBitmap): Int = 1
     }
@@ -333,10 +368,8 @@ private class TileStore(
     }
 
     private fun download(z: Int, x: Int, y: Int, target: File): ByteArray? {
-        val url = template
-            .replace("{z}", z.toString())
-            .replace("{x}", x.toString())
-            .replace("{y}", y.toString())
+        val url = basemap.tileUrl(customTemplate, z, x, y)
+        if (url.isEmpty()) return null
         return runCatching {
             val connection = (URL(url).openConnection() as HttpURLConnection).apply {
                 connectTimeout = 10_000
