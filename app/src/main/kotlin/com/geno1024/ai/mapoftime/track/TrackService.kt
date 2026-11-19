@@ -15,7 +15,6 @@ import androidx.core.content.ContextCompat
 import com.geno1024.ai.mapoftime.AppContainer
 import com.geno1024.ai.mapoftime.MapOfTimeApp
 import com.geno1024.ai.mapoftime.R
-import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.TrackPoint
 import com.geno1024.ai.mapoftime.core.TripMode
@@ -37,10 +36,9 @@ class TrackService : Service(), LocationListener {
     private var tripId = 0L
     private var mode = TripMode.WALK
     private var seq = 0
-    private var distance = 0.0
+    private val liveDistance = DistanceAccumulator()
     private var markCount = 0
     private var startedAt = 0L
-    private var lastPoint: TrackPoint? = null
     private val recentFixes = ArrayDeque<LatLon>()
     private var lastNotificationAt = 0L
     private var recording = false
@@ -98,9 +96,8 @@ class TrackService : Service(), LocationListener {
 
         tripId = container.repository.createTrip(mode, startedAt)
         seq = 0
-        distance = 0.0
+        liveDistance.reset()
         markCount = 0
-        lastPoint = null
         recentFixes.clear()
         recording = true
 
@@ -152,12 +149,7 @@ class TrackService : Service(), LocationListener {
             bearing = if (location.hasBearing()) location.bearing.toDouble() else null,
         )
 
-        val previous = lastPoint
-        if (previous != null && point.accuracy <= LIVE_ACCURACY_METERS) {
-            val step = Geo.distanceMeters(previous.at, point.at)
-            if (step in MIN_STEP_METERS..MAX_STEP_METERS) distance += step
-        }
-        lastPoint = point
+        liveDistance.add(point.at, trustworthy = point.accuracy <= LIVE_ACCURACY_METERS)
         recentFixes.addLast(point.at)
         while (recentFixes.size > RECENT_FIXES_LIMIT) recentFixes.removeFirst()
         seq += 1
@@ -166,13 +158,13 @@ class TrackService : Service(), LocationListener {
         container.scope.launch(container.dbDispatcher) {
             container.repository.appendPoint(tripId, storedSeq, point)
             if (storedSeq % PROGRESS_EVERY == 0) {
-                container.repository.updateProgress(tripId, distance, storedSeq)
+                container.repository.updateProgress(tripId, liveDistance.meters, storedSeq)
             }
         }
 
         val state = Recorder.state.value.copy(
             pointCount = storedSeq,
-            distanceM = distance,
+            distanceM = liveDistance.meters,
             accuracyM = point.accuracy,
             lastFixAt = point.t,
             lastFix = point.at,
@@ -217,7 +209,7 @@ class TrackService : Service(), LocationListener {
 
         container.scope.launch {
             withContext(container.dbDispatcher) {
-                container.repository.updateProgress(curvedTrip, distance, fixes)
+                container.repository.updateProgress(curvedTrip, liveDistance.meters, fixes)
                 if (fixes >= 2) {
                     runCatching { container.analyzer.analyze(curvedTrip) }
                 } else {
@@ -242,8 +234,6 @@ class TrackService : Service(), LocationListener {
         private const val MIN_TIME_MS = 1_000L
         private const val MAX_ACCURACY_METERS = 120f
         private const val LIVE_ACCURACY_METERS = 50.0
-        private const val MIN_STEP_METERS = 1.5
-        private const val MAX_STEP_METERS = 200.0
         private const val PROGRESS_EVERY = 10
         private const val NOTIFICATION_REFRESH_MS = 5_000L
         private const val RECENT_FIXES_LIMIT = 600
