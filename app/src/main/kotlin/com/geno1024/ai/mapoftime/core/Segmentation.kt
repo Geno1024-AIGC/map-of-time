@@ -47,6 +47,9 @@ object Segmenter {
     /** A jump bigger than this is not travel, it is a bad fix. */
     private const val MAX_GAP_MS = 90_000L
 
+    /** How far a reference heading may carry before it is re-anchored. */
+    private const val MAX_REFERENCE_METERS = 120.0
+
     fun segment(
         raw: List<TrackPoint>,
         profile: ModeProfile,
@@ -222,6 +225,20 @@ object Segmenter {
     private fun gapCuts(points: List<TrackPoint>): List<Int> =
         (1 until points.size).filter { points[it].t - points[it - 1].t > MAX_GAP_MS }
 
+    /**
+     * Cuts where the direction of travel has changed by [ModeProfile.turnDegrees]
+     * **from the direction the current piece started in**.
+     *
+     * Comparing "8 m before" with "8 m after" at every point looks tempting,
+     * but real corners are rounded and diagonal crossings change heading in
+     * steps: no single point ever sees the whole 65°. Measuring against the
+     * piece's own reference heading sees the same 65° however it is spread out,
+     * and it also survives a stop at the corner, when the approach and the
+     * departure are separated by a standstill.
+     *
+     * The reference is re-anchored every [MAX_REFERENCE_METERS] so a long
+     * sweeping curve is still one road rather than a cut every few metres.
+     */
     private fun turnCuts(
         points: List<TrackPoint>,
         speeds: DoubleArray,
@@ -230,9 +247,23 @@ object Segmenter {
     ): List<Int> {
         val cuts = mutableListOf<Int>()
         var lastCut = 0
-        var i = 0
+        var anchor = 0
+        var reference = headingAt(points, anchor, +1)
+        var i = 1
         while (i < points.size) {
             if (isInside(passages, i)) {
+                // The pause is already a boundary; measuring a turn across it
+                // would invent a corner that is really two different walks.
+                lastCut = i
+                anchor = i
+                reference = null
+                i++
+                continue
+            }
+            if (reference == null) {
+                anchor = i
+                lastCut = i
+                reference = headingAt(points, i, +1)
                 i++
                 continue
             }
@@ -240,19 +271,54 @@ object Segmenter {
                 i++
                 continue
             }
-            val before = headingAt(points, i, -1)
-            val after = headingAt(points, i, +1)
-            if (before != null && after != null) {
-                val turn = Geo.angleDifference(before, after)
-                val farEnough = Geo.distanceMeters(points[lastCut].at, points[i].at) >= profile.minLegForSplitMeters
-                if (turn >= profile.turnDegrees && farEnough) {
-                    cuts += i
-                    lastCut = i
-                }
+            val heading = headingAt(points, i, -1)
+            val turned = heading != null &&
+                Geo.angleDifference(reference, heading) >= profile.turnDegrees
+            if (turned &&
+                Geo.distanceMeters(points[lastCut].at, points[i].at) >= profile.minLegForSplitMeters
+            ) {
+                val at = apexBetween(points, passages, anchor, i, profile)
+                cuts += at
+                lastCut = at
+                anchor = at
+                reference = headingAt(points, at, +1)
+            } else if (Geo.distanceMeters(points[anchor].at, points[i].at) >= MAX_REFERENCE_METERS) {
+                // A road that bends slowly is still one road. Start measuring
+                // the next turn from here instead of from the far past.
+                anchor = i
+                reference = headingAt(points, i, +1)
             }
             i++
         }
         return cuts
+    }
+
+    /**
+     * The point the trace bends around most between [from] and [to], so the cut
+     * lands on the corner instead of 8 m past it. Falls back to [to] when the
+     * bend is too spread out to single one point out.
+     */
+    private fun apexBetween(
+        points: List<TrackPoint>,
+        passages: List<TrackSlice>,
+        from: Int,
+        to: Int,
+        profile: ModeProfile,
+    ): Int {
+        var best = to
+        var bestTurn = 0.0
+        for (j in (from + 1) until to) {
+            if (isInside(passages, j)) continue
+            if (Geo.distanceMeters(points[from].at, points[j].at) < profile.minLegForSplitMeters) continue
+            val before = headingAt(points, j, -1) ?: continue
+            val after = headingAt(points, j, +1) ?: continue
+            val turn = Geo.angleDifference(before, after)
+            if (turn > bestTurn) {
+                bestTurn = turn
+                best = j
+            }
+        }
+        return best
     }
 
     /**

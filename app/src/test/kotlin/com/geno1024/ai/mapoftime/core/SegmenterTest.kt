@@ -53,6 +53,60 @@ class SegmenterTest {
     }
 
     @Test
+    fun aRoundedCornerSplitsEvenThoughNoSinglePointTurnsSixtyFiveDegrees() {
+        // A 90 degree corner with a 10 m radius: the heading changes ~5.6 deg
+        // per metre, so "8 m before vs 8 m after" never reaches 65 degrees.
+        val builder = TrackBuilder().straight(100.0)
+        for (i in 1..16) builder.straight(1.0, bearingDegrees = i * 90.0 / 16.0)
+        val track = builder.straight(100.0, bearingDegrees = 90.0).build()
+
+        val result = Segmenter.segment(track, walk)
+
+        assertEquals(2, result.legs.size)
+        assertTrue(TrackMath.meters(result.points, result.legs[0]) in 90.0..130.0)
+        assertTrue(TrackMath.meters(result.points, result.legs[1]) in 90.0..130.0)
+    }
+
+    @Test
+    fun aDiagonalCrossingStillSplits() {
+        // Crossing a road at 45 degrees changes heading in two 45 degree
+        // steps; each step alone is below the walking threshold.
+        val builder = TrackBuilder().straight(100.0)
+        builder.straight(15.0, bearingDegrees = 45.0)
+        val track = builder.straight(100.0, bearingDegrees = 90.0).build()
+
+        val result = Segmenter.segment(track, walk)
+
+        assertEquals(2, result.legs.size)
+    }
+
+    @Test
+    fun stoppingAtTheCornerDoesNotHideTheTurn() {
+        // Standing at the light puts the approach and the departure either
+        // side of a standstill; the turn is still the same road change.
+        val track = TrackBuilder()
+            .straight(100.0)
+            .standStill(30)
+            .straight(100.0, bearingDegrees = 90.0)
+            .build()
+
+        val result = Segmenter.segment(track, walk)
+
+        assertEquals(2, result.legs.size)
+    }
+
+    @Test
+    fun aLongSweepingCurveIsStillOneRoad() {
+        // 90 degrees spread over 300 m is a boulevard bend, not a junction.
+        val builder = TrackBuilder()
+        for (i in 1..300) builder.straight(1.0, bearingDegrees = i * 90.0 / 300.0)
+
+        val result = Segmenter.segment(builder.build(), walk)
+
+        assertEquals(1, result.legs.size)
+    }
+
+    @Test
     fun manualMarkSplitsEvenOnAStraightRoad() {
         val builder = TrackBuilder().straight(100.0)
         val mark = builder.lastTime()
