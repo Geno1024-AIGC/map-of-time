@@ -124,6 +124,12 @@
     <string name="segment_signal_waited_in">遇到红灯</string>
     <string name="segment_signal_when_stopped">等红灯时</string>
     <string name="segment_distance">长度</string>
+    <string name="segment_name">名称</string>
+    <string name="segment_name_add">命名</string>
+    <string name="segment_name_hint">例如：小区北门 → 地铁站</string>
+    <string name="segment_name_use">使用「%1$s」</string>
+    <string name="segment_name_clear_hint">留空保存即恢复 OSM 名称。</string>
+    <string name="segment_osm_name">OSM：%1$s</string>
     <string name="segment_directions">按方向</string>
     <string name="segment_by_time">按时段</string>
     <string name="bucket_morning">早上 · 6–10</string>

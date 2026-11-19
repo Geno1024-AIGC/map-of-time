@@ -124,6 +124,12 @@
     <string name="segment_signal_waited_in">Stopped at a light</string>
     <string name="segment_signal_when_stopped">When at a light</string>
     <string name="segment_distance">Length</string>
+    <string name="segment_name">Name</string>
+    <string name="segment_name_add">Name it</string>
+    <string name="segment_name_hint">e.g. north gate → metro</string>
+    <string name="segment_name_use">Use “%1$s”</string>
+    <string name="segment_name_clear_hint">Save it empty to fall back to the OSM name.</string>
+    <string name="segment_osm_name">OSM: %1$s</string>
     <string name="segment_directions">By direction</string>
     <string name="segment_by_time">By time of day</string>
     <string name="bucket_morning">Morning · 06–10</string>

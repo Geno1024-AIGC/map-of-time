@@ -14,13 +14,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -288,5 +294,59 @@ fun ThinDivider(modifier: Modifier = Modifier) {
     HorizontalDivider(
         modifier = modifier.padding(vertical = 8.dp),
         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+    )
+}
+
+/**
+ * Asks for a name for one segment. Shared by the segment screen and the trip's
+ * leg overlay, which both offer the same action.
+ *
+ * Saving an empty field is a deliberate way back to the OSM name, so the dialog
+ * says so instead of disabling the button.
+ */
+@Composable
+fun SegmentNameDialog(
+    initial: String,
+    osmName: String?,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    var text by remember(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.segment_name)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.segment_name_hint)) },
+                )
+                val suggestion = osmName?.takeIf { it.isNotBlank() && it != text }
+                if (suggestion != null) {
+                    TextButton(onClick = { text = suggestion }) {
+                        Text(stringResource(R.string.segment_name_use, suggestion))
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.segment_name_clear_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text) }) {
+                Text(stringResource(R.string.action_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
     )
 }

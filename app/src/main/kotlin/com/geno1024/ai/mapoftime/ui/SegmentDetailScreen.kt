@@ -14,11 +14,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +41,7 @@ import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.Segment
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
 import com.geno1024.ai.mapoftime.ui.map.TrackMap
+import kotlinx.coroutines.launch
 
 @Composable
 fun SegmentDetailScreen(
@@ -48,9 +51,11 @@ fun SegmentDetailScreen(
     modifier: Modifier = Modifier,
 ) {
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     var segment by remember(segmentId) { mutableStateOf<Segment?>(null) }
     var samples by remember(segmentId) { mutableStateOf<List<TraversalSample>>(emptyList()) }
     var legs by remember(segmentId) { mutableStateOf<List<Leg>>(emptyList()) }
+    var renaming by remember { mutableStateOf(false) }
 
     LaunchedEffect(segmentId) {
         segment = viewModel.segment(segmentId)
@@ -72,9 +77,25 @@ fun SegmentDetailScreen(
         segment?.let { listOf(MapMarker(it.from), MapMarker(it.to, emphasized = true)) }.orEmpty()
     }
 
+    if (renaming) {
+        SegmentNameDialog(
+            initial = segment?.userName.orEmpty(),
+            osmName = segment?.name,
+            onDismiss = { renaming = false },
+            onSave = { name ->
+                renaming = false
+                scope.launch {
+                    viewModel.renameSegment(segmentId, name)
+                    segment = viewModel.segment(segmentId)
+                    legs = viewModel.legsForSegment(segmentId)
+                }
+            },
+        )
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         ScreenHeader(
-            title = segment?.name ?: segment?.key ?: stringResource(R.string.segments_title),
+            title = segment?.displayName ?: segment?.key ?: stringResource(R.string.segments_title),
             subtitle = segment?.let { modeLabel(it.mode) + " · " + formatDistance(it.lengthM) },
             onBack = onBack,
         )
@@ -94,6 +115,44 @@ fun SegmentDetailScreen(
                     customTileUrl = settings.customTileUrl,
                     customTilesGcj02 = settings.customTilesGcj02,
                 )
+            }
+
+            item {
+                SectionCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.segment_name),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = segment?.displayName ?: "—",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            val osmName = segment?.name
+                            if (segment?.userName != null && osmName != null) {
+                                Text(
+                                    text = stringResource(R.string.segment_osm_name, osmName),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        TextButton(onClick = { renaming = true }) {
+                            Text(
+                                stringResource(
+                                    if (segment?.userName == null) {
+                                        R.string.segment_name_add
+                                    } else {
+                                        R.string.action_edit
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                }
             }
 
             item {
