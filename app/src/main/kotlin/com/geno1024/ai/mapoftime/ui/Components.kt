@@ -3,6 +3,7 @@ package com.geno1024.ai.mapoftime.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -180,7 +181,10 @@ fun Pill(text: String, color: Color, modifier: Modifier = Modifier) {
     }
 }
 
-/** Walk/bike/drive selector; `null` means "everything". */
+/**
+ * Mode selector; `null` means "everything". Wraps because four modes plus
+ * "all" do not fit on one line of a phone.
+ */
 @Composable
 fun ModeFilter(
     selected: TripMode?,
@@ -188,9 +192,10 @@ fun ModeFilter(
     modifier: Modifier = Modifier,
     includeAll: Boolean = true,
 ) {
-    Row(
+    FlowRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (includeAll) {
             FilterChip(
