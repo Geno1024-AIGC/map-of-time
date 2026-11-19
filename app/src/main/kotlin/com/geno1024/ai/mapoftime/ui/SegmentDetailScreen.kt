@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
@@ -78,6 +79,8 @@ fun SegmentDetailScreen(
     }
     val fromLabel = stringResource(R.string.segment_from)
     val toLabel = stringResource(R.string.segment_to)
+    val forwardLabel = segment?.forwardName ?: "$fromLabel → $toLabel"
+    val backwardLabel = segment?.backwardName ?: "$toLabel → $fromLabel"
     val markers = remember(segment, fromLabel, toLabel) {
         segment?.let {
             listOf(
@@ -125,7 +128,10 @@ fun SegmentDetailScreen(
     Column(modifier = modifier.fillMaxSize()) {
         ScreenHeader(
             title = segment?.displayName ?: segment?.key ?: stringResource(R.string.segments_title),
-            subtitle = segment?.let { modeLabel(it.mode) + " · " + formatDistance(it.lengthM) },
+            subtitle = segment?.let {
+                val distance = stats.medianDistanceM.takeIf { d -> d > 0 } ?: it.lengthM
+                modeLabel(it.mode) + " · " + formatDistance(distance)
+            },
             onBack = onBack,
         )
 
@@ -220,20 +226,28 @@ fun SegmentDetailScreen(
                         MatchBadge(segment!!.identity)
                         Spacer(Modifier.height(10.dp))
                     }
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = if (stats.count == 0) "—" else formatSeconds(stats.typicalMs),
-                                style = MaterialTheme.typography.displaySmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                text = pluralStringResource(R.plurals.samples_count, stats.count, stats.count),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                    // A divided road has two carriageways between the same
+                    // crossings: one number would describe neither of them.
+                    if (forward.count > 0 && backward.count > 0) {
+                        DirectionHeadline(forwardLabel, forward)
+                        Spacer(Modifier.height(10.dp))
+                        DirectionHeadline(backwardLabel, backward)
+                    } else {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = if (stats.count == 0) "—" else formatSeconds(stats.typicalMs),
+                                    style = MaterialTheme.typography.displaySmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = pluralStringResource(R.plurals.samples_count, stats.count, stats.count),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            ConfidenceBadge(stats.confidence)
                         }
-                        ConfidenceBadge(stats.confidence)
                     }
 
                     Spacer(Modifier.height(12.dp))
@@ -327,13 +341,13 @@ fun SegmentDetailScreen(
                 item {
                     SectionCard(title = stringResource(R.string.segment_directions)) {
                         DirectionRow(
-                            label = stringResource(R.string.segment_forward),
+                            label = forwardLabel,
                             stats = forward,
                             reference = stats.medianMs,
                         )
                         Spacer(Modifier.height(8.dp))
                         DirectionRow(
-                            label = stringResource(R.string.segment_backward),
+                            label = backwardLabel,
                             stats = backward,
                             reference = stats.medianMs,
                         )
@@ -402,7 +416,7 @@ private fun DirectionRow(label: String, stats: DurationStats, reference: Long) {
         Column(Modifier.weight(1f)) {
             Text(text = label, style = MaterialTheme.typography.bodyLarge)
             Text(
-                text = pluralStringResource(R.plurals.samples_count, stats.count, stats.count),
+                text = sampleLine(stats),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -534,5 +548,34 @@ private fun EndpointRow(label: String, name: String?, onName: () -> Unit) {
                 ),
             )
         }
+    }
+}
+
+/** The sample count, plus how long the traversals were when we know it. */
+@Composable
+private fun sampleLine(stats: DurationStats): String {
+    val count = pluralStringResource(R.plurals.samples_count, stats.count, stats.count)
+    return if (stats.medianDistanceM > 0) count + " · " + formatDistance(stats.medianDistanceM) else count
+}
+
+/** One direction on its own: a divided road has two of these between the same crossings. */
+@Composable
+private fun DirectionHeadline(label: String, stats: DurationStats) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(text = label, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = sampleLine(stats),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = if (stats.count == 0) "—" else formatSeconds(stats.typicalMs),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Spacer(Modifier.width(8.dp))
+        ConfidenceBadge(stats.confidence)
     }
 }
