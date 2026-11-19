@@ -101,6 +101,11 @@
     <string name="sample_waiting">%1$s waiting</string>
     <string name="segment_distance">Length</string>
     <string name="segment_directions">By direction</string>
+    <string name="segment_by_time">By time of day</string>
+    <string name="bucket_morning">Morning · 06–10</string>
+    <string name="bucket_day">Day · 10–16</string>
+    <string name="bucket_evening">Evening · 16–20</string>
+    <string name="bucket_night">Night · 20–06</string>
     <string name="segment_forward">Forward</string>
     <string name="segment_backward">Backward</string>
     <string name="segment_samples_title">Samples</string>

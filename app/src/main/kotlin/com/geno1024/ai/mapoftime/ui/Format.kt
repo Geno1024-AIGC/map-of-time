@@ -6,6 +6,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.core.Confidence
+import com.geno1024.ai.mapoftime.core.TimeBucket
 import com.geno1024.ai.mapoftime.core.TripMode
 import java.time.Instant
 import java.time.ZoneId
@@ -81,6 +82,16 @@ fun modeLabel(mode: TripMode): String = stringResource(
         TripMode.BIKE -> R.string.mode_bike
         TripMode.EBIKE -> R.string.mode_ebike
         TripMode.DRIVE -> R.string.mode_drive
+    },
+)
+
+@Composable
+fun timeBucketLabel(bucket: TimeBucket): String = stringResource(
+    when (bucket) {
+        TimeBucket.MORNING -> R.string.bucket_morning
+        TimeBucket.DAY -> R.string.bucket_day
+        TimeBucket.EVENING -> R.string.bucket_evening
+        TimeBucket.NIGHT -> R.string.bucket_night
     },
 )
 

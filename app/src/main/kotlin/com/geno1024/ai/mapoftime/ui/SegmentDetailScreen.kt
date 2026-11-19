@@ -32,6 +32,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.core.DurationStats
 import com.geno1024.ai.mapoftime.core.Polyline
+import com.geno1024.ai.mapoftime.core.TimeBucket
+import com.geno1024.ai.mapoftime.core.samples
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.Segment
@@ -59,6 +61,9 @@ fun SegmentDetailScreen(
     val stats = remember(samples) { DurationStats.of(samples) }
     val forward = remember(samples) { DurationStats.of(samples.filter { it.direction > 0 }) }
     val backward = remember(samples) { DurationStats.of(samples.filter { it.direction < 0 }) }
+    val byBucket = remember(samples) {
+        TimeBucket.ordered.associateWith { DurationStats.of(it.samples(samples)) }
+    }
 
     val tracks = remember(legs) {
         legs.map { Polyline.decode(it.polyline) }.filter { it.size >= 2 }
@@ -196,6 +201,27 @@ fun SegmentDetailScreen(
                             stats = backward,
                             reference = stats.medianMs,
                         )
+                    }
+                }
+
+                item {
+                    SectionCard(title = stringResource(R.string.segment_by_time)) {
+                        TimeBucket.ordered.forEach { bucket ->
+                            val bucketStats = byBucket.getValue(bucket)
+                            KeyValueRow(
+                                label = timeBucketLabel(bucket),
+                                value = if (bucketStats.count == 0) {
+                                    "—"
+                                } else {
+                                    formatSeconds(bucketStats.medianMs) + " · " +
+                                        pluralStringResource(
+                                            R.plurals.samples_count,
+                                            bucketStats.count,
+                                            bucketStats.count,
+                                        )
+                                },
+                            )
+                        }
                     }
                 }
 
