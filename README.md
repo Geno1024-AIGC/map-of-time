@@ -19,8 +19,8 @@
 ## 应用内更新
 
 - 只读 `https://api.github.com/repos/Geno1024-AIGC/map-of-time/releases/tags/canary` 一个接口，无需令牌。应用启动时静默检查一次，6 小时内不重复；设置页可以手动重查。
-- 版本比较只用 `env`（commit 数），它同时就是 `versionCode`，所以「有没有新版本」与 Android 安装时的判定永远一致；同一个 commit 的 `pack` 变大不算更新。
-- APK 下载到 `cacheDir/updates/`，校验总长度与 ZIP 头（`PK`）后才交给系统安装器。Android 自己会拒绝任何不是同一个签名密钥的包。
+- 版本比较只用 `env`（commit 数），它同时就是 `versionCode`，所以「有没有新版本」与 Android 安装时的判定永远一致；同一个 commit 的 `pack` 变大不算更新。已安装版本从 `PackageManager` 读取；若版本戳无法解析，明确报「无法读取已安装版本」，不会退化成「已是最新」。
+- APK 下载到 `cacheDir/updates/`：先写 `.part`，总长度与 ZIP 头（`PK`）都通过后才原子改名为成品，中断的下载永远不会被当成可安装的包。安装走 FileProvider 的 `ACTION_VIEW`，OEM 上回退 `ACTION_INSTALL_PACKAGE`。Android 自己会拒绝任何不是同一个签名密钥的包。
 - 首次安装需要授予「安装未知应用」权限：应用会跳到本应用的授权页，回来后再次点「安装」即可。
 - 发现更新时，底部「设置」标签上会出现一个小圆点，下拉到设置页即可看到版本说明。
 

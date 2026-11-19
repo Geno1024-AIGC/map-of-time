@@ -121,6 +121,7 @@
     <string name="update_failed_network">Could not reach GitHub.</string>
     <string name="update_failed_rate_limit">GitHub is limiting update checks. Try again later.</string>
     <string name="update_failed_unreadable">The release lists no usable APK.</string>
+    <string name="update_failed_version">The installed version could not be read.</string>
     <string name="update_failed_download">The update could not be downloaded.</string>
     <string name="update_failed_install">The installer could not be opened.</string>
     <string name="update_badge">Update available</string>

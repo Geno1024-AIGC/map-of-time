@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -12,8 +13,9 @@ import java.net.URL
  *
  * The cache is the right home for an installer payload: the system may reclaim
  * it at any time, and losing a download is harmless because the next attempt
- * starts over. The size and the ZIP magic are checked so a captive-portal HTML
- * page never reaches the package installer.
+ * starts over. Bytes land in `<name>.part` first and are renamed into place only
+ * after the size and the ZIP magic pass, so an interrupted download can never be
+ * mistaken for a finished APK.
  */
 class UpdateDownloader(
     private val userAgent: String = UpdateChecker.USER_AGENT,
@@ -40,46 +42,72 @@ class UpdateDownloader(
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
                 throw UpdateException(UpdateError.DOWNLOAD)
             }
-            val total = connection.contentLengthLong.takeIf { it > 0 } ?: asset.sizeBytes
-            var copied = 0L
-            var reported = -1
-
+            val expected = connection.contentLengthLong.takeIf { it > 0 } ?: asset.sizeBytes
             connection.inputStream.use { input ->
-                target.outputStream().buffered().use { output ->
-                    val buffer = ByteArray(64 * 1024)
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        output.write(buffer, 0, read)
-                        copied += read
-                        if (total > 0) {
-                            val percent = (copied * 100 / total).toInt().coerceIn(0, 100)
-                            if (percent != reported) {
-                                reported = percent
-                                onProgress(percent)
-                            }
-                        }
-                    }
-                }
+                writeAtomically(input, target, expected, onProgress)
             }
-
-            if (total > 0 && copied != total) {
-                throw UpdateException(UpdateError.DOWNLOAD)
-            }
-            if (!isZip(target)) {
-                throw UpdateException(UpdateError.DOWNLOAD)
-            }
-            onProgress(100)
-            target
         } catch (e: UpdateException) {
-            target.delete()
             throw e
         } catch (e: IOException) {
-            target.delete()
             throw UpdateException(UpdateError.DOWNLOAD, e)
         } finally {
             connection.disconnect()
         }
+    }
+
+    /**
+     * Writes through a sibling `.part` and promotes it only once it is valid.
+     * Kept separate from the HTTP call so the on-disk contract can be tested
+     * against a plain stream.
+     */
+    internal fun writeAtomically(
+        input: InputStream,
+        target: File,
+        expectedBytes: Long,
+        onProgress: (percent: Int) -> Unit,
+    ): File {
+        target.parentFile?.mkdirs()
+        val partial = File(target.parentFile, target.name + ".part")
+        try {
+            var copied = 0L
+            var reported = -1
+            partial.outputStream().buffered().use { output ->
+                val buffer = ByteArray(64 * 1024)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    output.write(buffer, 0, read)
+                    copied += read
+                    if (expectedBytes > 0) {
+                        val percent = (copied * 100 / expectedBytes).toInt().coerceIn(0, 100)
+                        if (percent != reported) {
+                            reported = percent
+                            onProgress(percent)
+                        }
+                    }
+                }
+            }
+            if (expectedBytes > 0 && copied != expectedBytes) {
+                throw UpdateException(UpdateError.DOWNLOAD)
+            }
+            if (!isZip(partial)) {
+                throw UpdateException(UpdateError.DOWNLOAD)
+            }
+            if (target.exists() && !target.delete()) {
+                throw UpdateException(UpdateError.DOWNLOAD)
+            }
+            if (!partial.renameTo(target)) {
+                throw UpdateException(UpdateError.DOWNLOAD)
+            }
+        } catch (e: UpdateException) {
+            partial.delete()
+            throw e
+        } catch (e: IOException) {
+            partial.delete()
+            throw UpdateException(UpdateError.DOWNLOAD, e)
+        }
+        onProgress(100)
+        return target
     }
 
     /** An APK is a ZIP: it must start with `PK`. */

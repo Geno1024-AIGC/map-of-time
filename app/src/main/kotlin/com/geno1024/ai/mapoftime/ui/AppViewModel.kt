@@ -188,8 +188,13 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 settings.update { it.copy(lastUpdateCheckAt = System.currentTimeMillis()) }
                 when {
                     release == null -> UpdateState.NoRelease
-                    isNewerThanInstalled(release) -> UpdateState.Available(release)
-                    else -> UpdateState.UpToDate(release)
+                    else -> when (val newer = isNewerThanInstalled(release)) {
+                        // A stamp we cannot read is an error, never "up to date":
+                        // silently treating it as old would hide every release.
+                        null -> UpdateState.Failed(UpdateError.VERSION)
+                        true -> UpdateState.Available(release)
+                        false -> UpdateState.UpToDate(release)
+                    }
                 }
             } catch (e: UpdateException) {
                 UpdateState.Failed(e.error)
@@ -221,9 +226,13 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    /** `env` is the commit count and the versionCode, so it alone decides. */
-    private fun isNewerThanInstalled(release: ReleaseInfo): Boolean {
-        val installed = installedVersion() ?: return false
+    /**
+     * `env` is the commit count and the versionCode, so it alone decides.
+     * Returns null when the installed stamp cannot be read — the caller must
+     * report that instead of quietly claiming the device is up to date.
+     */
+    private fun isNewerThanInstalled(release: ReleaseInfo): Boolean? {
+        val installed = installedVersion() ?: return null
         return release.version > installed
     }
 

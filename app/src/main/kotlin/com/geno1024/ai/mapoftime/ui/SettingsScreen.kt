@@ -377,6 +377,7 @@ private fun UpdateCard(viewModel: AppViewModel, currentVersion: String) {
                             UpdateError.NETWORK -> R.string.update_failed_network
                             UpdateError.RATE_LIMIT -> R.string.update_failed_rate_limit
                             UpdateError.UNREADABLE -> R.string.update_failed_unreadable
+                            UpdateError.VERSION -> R.string.update_failed_version
                             UpdateError.DOWNLOAD -> R.string.update_failed_download
                             UpdateError.INSTALL -> R.string.update_failed_install
                         },

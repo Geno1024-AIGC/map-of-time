@@ -28,8 +28,10 @@ enum class InstallOutcome {
  * with somebody else's build.
  */
 object UpdateInstaller {
+    private const val APK_TYPE = "application/vnd.android.package-archive"
+
     fun install(context: Context, apk: File): InstallOutcome {
-        if (!apk.exists() || apk.length() == 0L) return InstallOutcome.UNAVAILABLE
+        if (!apk.isFile || apk.length() == 0L) return InstallOutcome.UNAVAILABLE
 
         if (!context.packageManager.canRequestPackageInstalls()) {
             val perApp = Intent(
@@ -46,14 +48,26 @@ object UpdateInstaller {
             return if (opened) InstallOutcome.NEEDS_PERMISSION else InstallOutcome.UNAVAILABLE
         }
 
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", apk)
-        val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, "application/vnd.android.package-archive")
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        return if (runCatching { context.startActivity(intent) }.isSuccess) {
-            InstallOutcome.LAUNCHED
-        } else {
-            InstallOutcome.UNAVAILABLE
+        val uri = try {
+            FileProvider.getUriForFile(context, "${context.packageName}.files", apk)
+        } catch (e: IllegalArgumentException) {
+            // The APK is outside the declared cache/updates/ root.
+            return InstallOutcome.UNAVAILABLE
         }
+        val candidates = listOf(
+            Intent(Intent.ACTION_VIEW).setDataAndType(uri, APK_TYPE),
+            // Some OEMs only advertise the legacy action for APKs.
+            @Suppress("DEPRECATION")
+            Intent(Intent.ACTION_INSTALL_PACKAGE).setDataAndType(uri, APK_TYPE),
+        )
+        for (candidate in candidates) {
+            val intent = candidate.addFlags(
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK,
+            )
+            if (runCatching { context.startActivity(intent) }.isSuccess) {
+                return InstallOutcome.LAUNCHED
+            }
+        }
+        return InstallOutcome.UNAVAILABLE
     }
 }

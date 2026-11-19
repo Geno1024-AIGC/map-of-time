@@ -11,6 +11,8 @@ enum class UpdateError {
     NETWORK,
     RATE_LIMIT,
     UNREADABLE,
+    /** The installed version name could not be parsed, so nothing can be compared. */
+    VERSION,
     DOWNLOAD,
     INSTALL,
 }
