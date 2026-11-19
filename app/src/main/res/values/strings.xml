@@ -4,6 +4,7 @@
 
     <string name="mode_walk">Walk</string>
     <string name="mode_bike">Bike</string>
+    <string name="mode_ebike">E-bike</string>
     <string name="mode_drive">Drive</string>
 
     <string name="notification_channel_recording">Trip recording</string>

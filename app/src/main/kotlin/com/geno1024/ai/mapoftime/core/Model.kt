@@ -7,12 +7,13 @@ package com.geno1024.ai.mapoftime.core
 enum class TripMode(val id: String) {
     WALK("walk"),
     BIKE("bike"),
+    EBIKE("ebike"),
     DRIVE("drive"),
     ;
 
     /**
      * Parameters that turn a noisy track into legs. They differ by an order of
-     * magnitude in speed, so one set cannot serve all three.
+     * magnitude in speed, so one set cannot serve all four.
      */
     val profile: ModeProfile get() = when (this) {
         WALK -> ModeProfile(
@@ -27,6 +28,18 @@ enum class TripMode(val id: String) {
         BIKE -> ModeProfile(
             maxSpeedMps = 16.0,
             stopSpeedMps = 0.9,
+            stopAsPartOfLegMs = 120_000,
+            turnDegrees = 55.0,
+            minLegMeters = 35.0,
+            minLegMs = 12_000,
+            minLegForSplitMeters = 12.0,
+        )
+        // Legal e-bikes stop at 25 km/h, but a derestricted one easily reaches
+        // 35 km/h. The jump filter has to sit above that, or honest fixes get
+        // thrown away as teleports.
+        EBIKE -> ModeProfile(
+            maxSpeedMps = 12.0,
+            stopSpeedMps = 1.0,
             stopAsPartOfLegMs = 120_000,
             turnDegrees = 55.0,
             minLegMeters = 35.0,

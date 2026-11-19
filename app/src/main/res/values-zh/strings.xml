@@ -4,6 +4,7 @@
 
     <string name="mode_walk">步行</string>
     <string name="mode_bike">骑行</string>
+    <string name="mode_ebike">电驴</string>
     <string name="mode_drive">驾车</string>
 
     <string name="notification_channel_recording">行程记录</string>
