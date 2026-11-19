@@ -372,6 +372,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     put("endedAt", trip.endedAt)
                     put("distanceM", trip.distanceM)
                     put("status", trip.status.name)
+                    put("note", trip.note)
                     put("legs", legArray)
                 },
             )

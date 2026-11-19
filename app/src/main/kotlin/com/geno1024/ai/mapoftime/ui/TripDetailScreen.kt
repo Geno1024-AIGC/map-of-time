@@ -72,6 +72,8 @@ fun TripDetailScreen(
     var analyzing by remember { mutableStateOf(false) }
     var changingMode by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var editingNote by remember { mutableStateOf(false) }
+    var noteDraft by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableStateOf(0) }
 
@@ -127,6 +129,41 @@ fun TripDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { confirmDelete = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
+
+    if (editingNote) {
+        AlertDialog(
+            onDismissRequest = { editingNote = false },
+            title = { Text(stringResource(R.string.trip_note)) },
+            text = {
+                androidx.compose.material3.OutlinedTextField(
+                    value = noteDraft,
+                    onValueChange = { noteDraft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.trip_note_hint)) },
+                    minLines = 3,
+                    maxLines = 6,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        editingNote = false
+                        scope.launch {
+                            viewModel.setTripNote(tripId, noteDraft)
+                            reload += 1
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.action_save))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingNote = false }) {
                     Text(stringResource(R.string.action_cancel))
                 }
             },
@@ -203,7 +240,32 @@ fun TripDetailScreen(
                                 markPositions.size.toString(),
                             )
                         }
- 
+
+                        Spacer(Modifier.height(10.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = value.note ?: stringResource(R.string.trip_note_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (value.note == null) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                                modifier = Modifier.weight(1f),
+                            )
+                            TextButton(
+                                onClick = {
+                                    noteDraft = value.note.orEmpty()
+                                    editingNote = true
+                                },
+                            ) {
+                                Text(
+                                    stringResource(
+                                        if (value.note == null) R.string.trip_note_add else R.string.action_edit,
+                                    ),
+                                )
+                            }
+                        } 
                         Spacer(Modifier.height(12.dp))
                         Text(
                             text = stringResource(R.string.trip_mode),

@@ -210,6 +210,15 @@ private fun TripCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                trip.note?.let { note ->
+                    Text(
+                        text = note,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
             }
             if (trip.status != TripStatus.FINISHED) {
                 Pill(
