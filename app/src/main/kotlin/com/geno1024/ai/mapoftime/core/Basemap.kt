@@ -16,12 +16,15 @@ enum class Basemap(
     val tileTemplate: String?,
     /** True when the tiles are in GCJ-02 rather than WGS-84. */
     val gcj02: Boolean,
+    /** Deepest zoom the source actually has tiles for. */
+    val maxZoom: Int,
 ) {
     OSM(
         id = "osm",
         attribution = "© OpenStreetMap contributors",
         tileTemplate = "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
         gcj02 = false,
+        maxZoom = 19,
     ),
     AMAP(
         id = "amap",
@@ -29,12 +32,15 @@ enum class Basemap(
         tileTemplate = "https://webrd0{s}.is.autonavi.com/appmaptile" +
             "?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}",
         gcj02 = true,
+        // z=19 answers with a blank placeholder tile.
+        maxZoom = 18,
     ),
     CUSTOM(
         id = "custom",
         attribution = "",
         tileTemplate = null,
         gcj02 = false,
+        maxZoom = 19,
     ),
     ;
 
