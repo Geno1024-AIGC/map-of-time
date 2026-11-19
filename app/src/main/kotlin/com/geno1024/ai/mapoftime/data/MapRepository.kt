@@ -163,6 +163,10 @@ class MapRepository(private val helper: MapDb) {
                     },
                 )
             }
+            // Re-analysing cuts the same trip differently, so any segment that
+            // only the old cut used is now referenced by nothing. Left behind,
+            // it would sit in the segment list with zero samples.
+            deleteOrphanSegments()
         }
     }
 
