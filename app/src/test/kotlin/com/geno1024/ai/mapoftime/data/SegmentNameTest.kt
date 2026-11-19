@@ -72,6 +72,14 @@ class SegmentNameTest {
     }
 
     @Test
+    fun directionsReadInTheOrderTheyAreTravelled() {
+        val named = segment(null, fromName = "north gate", toName = "metro")
+        assertEquals("north gate → metro", named.forwardName)
+        assertEquals("metro → north gate", named.backwardName)
+        assertNull(segment(name = null).forwardName)
+    }
+
+    @Test
     fun pointKeysParseOnlyTheKindsWeCanName() {
         assertEquals(PointRef("osm", 123), PointRef.parse("osm:123"))
         assertEquals(PointRef("geo", 7), PointRef.parse("geo:7"))

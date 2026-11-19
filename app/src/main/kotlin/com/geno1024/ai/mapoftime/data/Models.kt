@@ -92,11 +92,15 @@ data class PointRef(val kind: String, val nodeId: Long) {
 data class NamedPoint(val ref: PointRef, val name: String)
 
 /**
- * "A – B" when both ends are named. One name alone says nothing useful about
+ * "A → B" when both ends are named. One name alone says nothing useful about
  * the piece between the ends, so it stays null and the next fallback wins.
  */
 fun pointPairName(from: String?, to: String?): String? =
     if (from != null && to != null) "$from – $to" else null
+
+/** The same pair as a direction: "A → B". */
+fun directionalName(from: String?, to: String?): String? =
+    if (from != null && to != null) "$from → $to" else null
 
 /** A repeatable piece of road, keyed by its two endpoints. */
 data class Segment(
@@ -138,6 +142,12 @@ data class Segment(
 
     /** The best name this segment has, or null when nothing is named at all. */
     val preferredLabel: String? get() = userName ?: pointName ?: name
+
+    /** "A → B" for the forward direction (+1), when both ends are named. */
+    val forwardName: String? get() = directionalName(fromName, toName)
+
+    /** "B → A" for the backward direction (−1), when both ends are named. */
+    val backwardName: String? get() = directionalName(toName, fromName)
 
     /** What every screen shows: the user's name, the point pair, OSM's, then the key. */
     val displayName: String get() = preferredLabel ?: key
