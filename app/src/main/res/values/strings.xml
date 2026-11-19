@@ -70,6 +70,11 @@
     <string name="trip_note_empty">No note for this trip</string>
     <string name="trip_note_hint">Weather, load, why the trip was unusual…</string>
     <string name="trip_legs_title">Legs</string>
+    <string name="trip_legs_hint">Tap a leg to see it on the map</string>
+    <string name="leg_selected">Selected leg</string>
+    <string name="leg_unnamed">Unnamed piece of road</string>
+    <string name="leg_window">%1$s – %2$s</string>
+    <string name="leg_show_all">Show the whole trip</string>
     <string name="trip_no_legs">This trip has no legs yet. Run the analysis to split it.</string>
     <string name="trip_reanalyze">Analyze again</string>
     <string name="trip_analyzing">Analyzing…</string>

@@ -1,5 +1,7 @@
 package com.geno1024.ai.mapoftime.ui
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -77,6 +80,7 @@ fun TripDetailScreen(
     var noteDraft by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableStateOf(0) }
+    var selectedLegId by remember(tripId) { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(tripId, reload) {
         val tripValue = viewModel.trip(tripId)
@@ -86,6 +90,9 @@ fun TripDetailScreen(
         points = viewModel.points(tripId)
         markPositions = viewModel.markPositions(tripId)
         identities = viewModel.identities(legsValue.mapNotNull { it.segmentId })
+        // Re-analysis replaces every leg, so an old selection would point at
+        // an id that no longer exists.
+        if (legsValue.none { it.id == selectedLegId }) selectedLegId = null
     }
 
     val tracks = remember(points, legs) {
@@ -95,7 +102,20 @@ fun TripDetailScreen(
             legs.map { Polyline.decode(it.polyline) }.filter { it.size >= 2 }
         }
     }
-    val markers = remember(tracks, markPositions) {
+    val selectedLeg = remember(legs, selectedLegId) { legs.firstOrNull { it.id == selectedLegId } }
+    val selectedTrack = remember(selectedLeg) {
+        selectedLeg?.let { Polyline.decode(it.polyline) }?.takeIf { it.size >= 2 }
+    }
+    val selectedIdentity = remember(selectedLeg, identities) {
+        selectedLeg?.let { leg ->
+            when {
+                leg.partial -> MatchKind.PARTIAL
+                leg.segmentId == null -> MatchKind.UNMATCHED
+                else -> identities[leg.segmentId] ?: MatchKind.UNMATCHED
+            }
+        }
+    }
+    val markers = remember(tracks, markPositions, selectedTrack) {
         val endpoints = tracks.flatMap { track ->
             listOf(
                 MapMarker(track.first(), emphasized = false),
@@ -104,7 +124,18 @@ fun TripDetailScreen(
         }
         // Manually split points are worth seeing after the fact: they are the
         // only boundaries that do not come from the algorithm.
-        endpoints + markPositions.map { MapMarker(it, emphasized = false) }
+        endpoints +
+            markPositions.map { MapMarker(it, emphasized = false) } +
+            selectedTrack.orEmpty().let { track ->
+                if (track.isEmpty()) {
+                    emptyList()
+                } else {
+                    listOf(
+                        MapMarker(track.first(), emphasized = false),
+                        MapMarker(track.last(), emphasized = true),
+                    )
+                }
+            }
     }
 
     if (confirmDelete) {
@@ -192,7 +223,69 @@ fun TripDetailScreen(
                     basemap = settings.basemap,
                     customTileUrl = settings.customTileUrl,
                     customTilesGcj02 = settings.customTilesGcj02,
+                    highlight = selectedTrack,
                 )
+            }
+
+            selectedLeg?.let { leg ->
+                item {
+                    SectionCard(title = stringResource(R.string.leg_selected)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = leg.label ?: stringResource(R.string.leg_unnamed),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                )
+                                Text(
+                                    text = stringResource(
+                                        R.string.leg_window,
+                                        formatClock(leg.startMs),
+                                        formatClock(leg.endMs),
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            selectedIdentity?.let { MatchBadge(it) }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        KeyValueRow(
+                            stringResource(R.string.trip_duration),
+                            formatDuration(leg.durationMs),
+                        )
+                        KeyValueRow(
+                            stringResource(R.string.record_distance),
+                            formatDistance(leg.distanceM),
+                        )
+                        KeyValueRow(
+                            stringResource(R.string.segment_moving_time),
+                            formatDuration(leg.movingMs),
+                        )
+                        if (leg.stoppedMs > 0) {
+                            KeyValueRow(
+                                stringResource(R.string.segment_waiting_time),
+                                formatDuration(leg.stoppedMs),
+                            )
+                        }
+                        if (leg.signalWaitMs > 0) {
+                            KeyValueRow(
+                                stringResource(R.string.segment_signal_wait),
+                                formatDuration(leg.signalWaitMs),
+                            )
+                        }
+                        KeyValueRow(
+                            stringResource(R.string.segment_directions),
+                            stringResource(
+                                if (leg.direction > 0) R.string.segment_forward else R.string.segment_backward,
+                            ),
+                        )
+                        TextButton(onClick = { selectedLegId = null }) {
+                            Text(stringResource(R.string.leg_show_all))
+                        }
+                    }
+                }
             }
 
             item {
@@ -376,6 +469,14 @@ fun TripDetailScreen(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 4.dp, top = 4.dp),
                 )
+                if (legs.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.trip_legs_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
             }
 
             if (legs.isEmpty()) {
@@ -398,6 +499,10 @@ fun TripDetailScreen(
                             leg.segmentId == null -> MatchKind.UNMATCHED
                             else -> identities[leg.segmentId] ?: MatchKind.UNMATCHED
                         },
+                        selected = leg.id == selectedLegId,
+                        onClick = {
+                            selectedLegId = if (selectedLegId == leg.id) null else leg.id
+                        },
                     )
                 }
             }
@@ -406,8 +511,20 @@ fun TripDetailScreen(
 }
 
 @Composable
-private fun LegRow(index: Int, leg: Leg, identity: MatchKind) {
-    SectionCard {
+private fun LegRow(
+    index: Int,
+    leg: Leg,
+    identity: MatchKind,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(20.dp)
+    val decoration = if (selected) {
+        Modifier.border(2.dp, MaterialTheme.colorScheme.secondary, shape)
+    } else {
+        Modifier
+    }
+    SectionCard(modifier = decoration.clickable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = "%02d".format(index + 1),

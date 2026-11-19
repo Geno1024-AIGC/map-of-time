@@ -70,6 +70,11 @@
     <string name="trip_note_empty">这个行程还没有备注</string>
     <string name="trip_note_hint">天气、载重、为什么这次特别慢…</string>
     <string name="trip_legs_title">分段</string>
+    <string name="trip_legs_hint">点一段，在地图上查看这一段</string>
+    <string name="leg_selected">选中的分段</string>
+    <string name="leg_unnamed">未命名路段</string>
+    <string name="leg_window">%1$s – %2$s</string>
+    <string name="leg_show_all">显示整条行程</string>
     <string name="trip_no_legs">这个行程还没有分段，运行分析即可切分。</string>
     <string name="trip_reanalyze">重新分析</string>
     <string name="trip_analyzing">分析中…</string>

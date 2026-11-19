@@ -77,6 +77,11 @@ fun TrackMap(
     emptyHint: String? = null,
     /** Where to look when there is no track yet, e.g. the latest live fix. */
     focus: LatLon? = null,
+    /**
+     * One leg the user picked in the list. Drawn on top of the whole track and
+     * used as the camera bounds, so tapping a leg zooms the map to it.
+     */
+    highlight: List<LatLon>? = null,
 ) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
@@ -94,9 +99,15 @@ fun TrackMap(
     val displayFocus = remember(focus, usesGcj) {
         if (!usesGcj) focus else focus?.let(Gcj::toGcj02)
     }
+    val displayHighlight = remember(highlight, usesGcj) {
+        if (!usesGcj) highlight else highlight?.map(Gcj::toGcj02)
+    }
 
-    val allPoints = remember(displayTracks) { displayTracks.flatten() }
-    val bounds = remember(displayTracks) { Geo.bounds(allPoints) }
+    // The camera follows the selected leg; the rest of the trip stays visible.
+    val cameraPoints = remember(displayTracks, displayHighlight) {
+        displayHighlight?.takeIf { it.size >= 2 } ?: displayTracks.flatten()
+    }
+    val bounds = remember(cameraPoints) { Geo.bounds(cameraPoints) }
     val tileTemplate = basemap.tileTemplate ?: customTileUrl
     val storeKey = basemap.id + "|" + tileTemplate
     val store = remember(storeKey) {
@@ -267,8 +278,41 @@ fun TrackMap(
                     val p = project(track[i])
                     path.lineTo(p.x, p.y)
                 }
-                drawPath(path, color = Color.Black.copy(alpha = 0.45f), style = Stroke(width = 9.dp.toPx()))
-                drawPath(path, color = colors.primary, style = Stroke(width = 4.5.dp.toPx()))
+                // A selected leg must stand out without hiding the rest of the
+                // trip: dim everything else instead of removing it.
+                val dimmed = displayHighlight != null
+                drawPath(
+                    path,
+                    color = Color.Black.copy(alpha = if (dimmed) 0.2f else 0.45f),
+                    style = Stroke(width = 9.dp.toPx()),
+                )
+                drawPath(
+                    path,
+                    color = colors.primary.copy(alpha = if (dimmed) 0.35f else 1f),
+                    style = Stroke(width = 4.5.dp.toPx()),
+                )
+            }
+
+            displayHighlight?.let { track ->
+                if (track.size >= 2) {
+                    val path = Path()
+                    val first = project(track.first())
+                    path.moveTo(first.x, first.y)
+                    for (i in 1 until track.size) {
+                        val p = project(track[i])
+                        path.lineTo(p.x, p.y)
+                    }
+                    drawPath(
+                        path,
+                        color = Color.Black.copy(alpha = 0.55f),
+                        style = Stroke(width = 12.dp.toPx()),
+                    )
+                    drawPath(
+                        path,
+                        color = colors.secondary,
+                        style = Stroke(width = 7.dp.toPx()),
+                    )
+                }
             }
 
             for (marker in displayMarkers) {
