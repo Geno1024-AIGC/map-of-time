@@ -6,6 +6,10 @@ data class TraversalSample(
     val distanceM: Double,
     val direction: Int,
     val startedAt: Long,
+    /** Legs recorded before the split existed count all of it as movement. */
+    val movingMs: Long = durationMs,
+    val stoppedMs: Long = 0,
+    val stopCount: Int = 0,
 )
 
 /** How much the samples agree; the whole point of collecting several. */

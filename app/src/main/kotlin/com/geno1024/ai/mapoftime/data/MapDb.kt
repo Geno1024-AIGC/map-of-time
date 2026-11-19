@@ -86,7 +86,11 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
                 direction INTEGER NOT NULL DEFAULT 0,
                 label TEXT,
                 partial INTEGER NOT NULL DEFAULT 0,
-                polyline TEXT NOT NULL
+                polyline TEXT NOT NULL,
+                moving_ms INTEGER NOT NULL DEFAULT 0,
+                stopped_ms INTEGER NOT NULL DEFAULT 0,
+                stop_count INTEGER NOT NULL DEFAULT 0,
+                longest_stop_ms INTEGER NOT NULL DEFAULT 0
             )
             """.trimIndent(),
         )
@@ -143,22 +147,21 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Draft-stage app: rebuilding the derived data is always possible by
-        // re-importing, and no released version has shipped a different schema.
-        db.execSQL("DROP TABLE IF EXISTS osm_way_tiles")
-        db.execSQL("DROP TABLE IF EXISTS osm_ways")
-        db.execSQL("DROP TABLE IF EXISTS osm_tiles")
-        db.execSQL("DROP TABLE IF EXISTS geo_nodes")
-        db.execSQL("DROP TABLE IF EXISTS legs")
-        db.execSQL("DROP TABLE IF EXISTS segments")
-        db.execSQL("DROP TABLE IF EXISTS marks")
-        db.execSQL("DROP TABLE IF EXISTS points")
-        db.execSQL("DROP TABLE IF EXISTS trips")
-        onCreate(db)
+        // New leg columns only: the trip recordings are the user's data and the
+        // legs are derived, so there is nothing here worth dropping.
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE legs ADD COLUMN moving_ms INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE legs ADD COLUMN stopped_ms INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE legs ADD COLUMN stop_count INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE legs ADD COLUMN longest_stop_ms INTEGER NOT NULL DEFAULT 0")
+            // Older legs never measured the split, so their whole duration is
+            // travel. That keeps totals right and claims no wait we never saw.
+            db.execSQL("UPDATE legs SET moving_ms = end_ms - start_ms")
+        }
     }
 
     companion object {
         const val NAME = "map-of-time.db"
-        const val VERSION = 1
+        const val VERSION = 2
     }
 }

@@ -5,6 +5,7 @@ import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.Polyline
 import com.geno1024.ai.mapoftime.core.SegmentKeys
 import com.geno1024.ai.mapoftime.core.Segmenter
+import com.geno1024.ai.mapoftime.core.StopCounter
 import com.geno1024.ai.mapoftime.core.TrackPoint
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.MatchKind
@@ -51,6 +52,9 @@ class TripAnalyzer(
         val raw = repository.points(tripId)
         val marks = repository.marks(tripId)
         val segmentation = Segmenter.segment(raw, trip.mode.profile, marks)
+        // The same smoothed speeds the segmenter used, so a stop can never be
+        // a pause to one stage and waiting time to the other.
+        val speeds = Segmenter.speedsOf(segmentation.points)
         val now = clock()
         val config = settings()
 
@@ -79,7 +83,7 @@ class TripAnalyzer(
                 minPieceMeters = trip.mode.profile.minLegForSplitMeters,
             )
             for (piece in pieces) {
-                val analyzed = toLeg(piece, segmentation.points, trip.mode.id, graph, now) ?: continue
+                val analyzed = toLeg(piece, segmentation.points, speeds, trip.mode.id, graph, now) ?: continue
                 legs += analyzed.leg
                 distance += analyzed.leg.distanceM
                 when (analyzed.identity) {
@@ -113,6 +117,7 @@ class TripAnalyzer(
     private fun toLeg(
         piece: MatchedPiece,
         points: List<TrackPoint>,
+        speeds: DoubleArray,
         modeId: String,
         graph: RoadGraph?,
         now: Long,
@@ -129,6 +134,14 @@ class TripAnalyzer(
         if (meters < MIN_PIECE_METERS) return null
 
         val mode = TripMode.of(modeId)
+        val timing = StopCounter.of(
+            points = points,
+            speeds = speeds,
+            slice = piece.slice,
+            profile = mode.profile,
+            startMs = startMs,
+            endMs = endMs,
+        )
         val startJunction = piece.start.junctionId
         val endJunction = piece.end.junctionId
         val fullyBounded = startJunction != null && endJunction != null
@@ -175,6 +188,10 @@ class TripAnalyzer(
                 label = piece.label,
                 partial = partial,
                 polyline = Polyline.encode(geometry),
+                movingMs = timing.movingMs,
+                stoppedMs = timing.stoppedMs,
+                stopCount = timing.stopCount,
+                longestStopMs = timing.longestStopMs,
             ),
             identity = identity,
         )

@@ -156,6 +156,10 @@ class MapRepository(private val helper: MapDb) {
                         leg.label?.let { put("label", it) }
                         put("partial", if (leg.partial) 1 else 0)
                         put("polyline", leg.polyline)
+                        put("moving_ms", leg.movingMs)
+                        put("stopped_ms", leg.stoppedMs)
+                        put("stop_count", leg.stopCount)
+                        put("longest_stop_ms", leg.longestStopMs)
                     },
                 )
             }
@@ -248,7 +252,7 @@ class MapRepository(private val helper: MapDb) {
 
     fun samples(segmentId: Long, includePartial: Boolean = false): List<TraversalSample> =
         db.rawQuery(
-            "SELECT end_ms, start_ms, distance_m, direction FROM legs " +
+            "SELECT end_ms, start_ms, distance_m, direction, moving_ms, stopped_ms, stop_count FROM legs " +
                 "WHERE segment_id = ?" + if (includePartial) "" else " AND partial = 0" +
                 " ORDER BY start_ms",
             arrayOf(segmentId.toString()),
@@ -257,7 +261,17 @@ class MapRepository(private val helper: MapDb) {
                 while (cursor.moveToNext()) {
                     val end = cursor.getLong(0)
                     val start = cursor.getLong(1)
-                    add(TraversalSample(end - start, cursor.getDouble(2), cursor.getInt(3), start))
+                    add(
+                        TraversalSample(
+                            durationMs = end - start,
+                            distanceM = cursor.getDouble(2),
+                            direction = cursor.getInt(3),
+                            startedAt = start,
+                            movingMs = cursor.getLong(4),
+                            stoppedMs = cursor.getLong(5),
+                            stopCount = cursor.getInt(6),
+                        ),
+                    )
                 }
             }
         }
@@ -267,7 +281,8 @@ class MapRepository(private val helper: MapDb) {
         val out = HashMap<Long, MutableList<TraversalSample>>()
         db.rawQuery(
             """
-            SELECT l.segment_id, l.end_ms, l.start_ms, l.distance_m, l.direction
+            SELECT l.segment_id, l.end_ms, l.start_ms, l.distance_m, l.direction,
+                   l.moving_ms, l.stopped_ms, l.stop_count
             FROM legs l JOIN segments s ON s.id = l.segment_id
             WHERE s.mode = ?${if (includePartial) "" else " AND l.partial = 0"}
             """.trimIndent(),
@@ -278,7 +293,17 @@ class MapRepository(private val helper: MapDb) {
                 val end = cursor.getLong(1)
                 val start = cursor.getLong(2)
                 out.getOrPut(id) { ArrayList() }
-                    .add(TraversalSample(end - start, cursor.getDouble(3), cursor.getInt(4), start))
+                    .add(
+                        TraversalSample(
+                            durationMs = end - start,
+                            distanceM = cursor.getDouble(3),
+                            direction = cursor.getInt(4),
+                            startedAt = start,
+                            movingMs = cursor.getLong(5),
+                            stoppedMs = cursor.getLong(6),
+                            stopCount = cursor.getInt(7),
+                        ),
+                    )
             }
         }
         return out
@@ -344,7 +369,8 @@ class MapRepository(private val helper: MapDb) {
     fun allSampleRows(): List<ExportSample> =
         db.rawQuery(
             """
-            SELECT s.mode, s.key, s.name, l.start_ms, l.end_ms, l.distance_m, l.direction, l.partial
+            SELECT s.mode, s.key, s.name, l.start_ms, l.end_ms, l.distance_m, l.direction,
+                   l.partial, l.moving_ms, l.stopped_ms, l.stop_count
             FROM legs l JOIN segments s ON s.id = l.segment_id
             ORDER BY l.start_ms
             """.trimIndent(),
@@ -362,6 +388,9 @@ class MapRepository(private val helper: MapDb) {
                             distanceM = cursor.getDouble(5),
                             direction = cursor.getInt(6),
                             partial = cursor.getInt(7) != 0,
+                            movingMs = cursor.getLong(8),
+                            stoppedMs = cursor.getLong(9),
+                            stopCount = cursor.getInt(10),
                         ),
                     )
                 }
@@ -395,6 +424,10 @@ class MapRepository(private val helper: MapDb) {
         label = getStringOrNull(getColumnIndexOrThrow("label")),
         partial = getInt(getColumnIndexOrThrow("partial")) != 0,
         polyline = getString(getColumnIndexOrThrow("polyline")),
+        movingMs = getLong(getColumnIndexOrThrow("moving_ms")),
+        stoppedMs = getLong(getColumnIndexOrThrow("stopped_ms")),
+        stopCount = getInt(getColumnIndexOrThrow("stop_count")),
+        longestStopMs = getLong(getColumnIndexOrThrow("longest_stop_ms")),
     )
 
     private fun Cursor.toSegment() = Segment(
@@ -435,4 +468,7 @@ data class ExportSample(
     val distanceM: Double,
     val direction: Int,
     val partial: Boolean,
+    val movingMs: Long,
+    val stoppedMs: Long,
+    val stopCount: Int,
 )

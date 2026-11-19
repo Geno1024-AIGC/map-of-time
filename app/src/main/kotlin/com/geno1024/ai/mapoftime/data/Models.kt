@@ -51,8 +51,14 @@ data class Leg(
     val label: String?,
     val partial: Boolean,
     val polyline: String,
+    val movingMs: Long,
+    val stoppedMs: Long,
+    val stopCount: Int,
+    val longestStopMs: Long,
 ) {
     val durationMs: Long get() = (endMs - startMs).coerceAtLeast(0)
+
+    val hasWait: Boolean get() = stoppedMs > 0
 }
 
 /** A repeatable piece of road, keyed by its two endpoints. */
@@ -87,4 +93,8 @@ data class PendingLeg(
     val label: String?,
     val partial: Boolean,
     val polyline: String,
+    val movingMs: Long,
+    val stoppedMs: Long,
+    val stopCount: Int,
+    val longestStopMs: Long,
 )
