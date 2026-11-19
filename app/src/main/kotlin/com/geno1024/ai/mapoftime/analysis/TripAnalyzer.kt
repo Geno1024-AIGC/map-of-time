@@ -13,8 +13,10 @@ import com.geno1024.ai.mapoftime.data.MatchKind
 import com.geno1024.ai.mapoftime.data.MapRepository
 import com.geno1024.ai.mapoftime.data.OsmRepository
 import com.geno1024.ai.mapoftime.data.PendingLeg
+import com.geno1024.ai.mapoftime.data.PointRef
 import com.geno1024.ai.mapoftime.data.SettingsSnapshot
 import com.geno1024.ai.mapoftime.data.TripStatus
+import com.geno1024.ai.mapoftime.data.pointPairName
 import com.geno1024.ai.mapoftime.osm.JunctionSplitter
 import com.geno1024.ai.mapoftime.osm.MatchedPiece
 import com.geno1024.ai.mapoftime.osm.OsmSignal
@@ -115,6 +117,9 @@ class TripAnalyzer(
         var partialLegs = 0
         var geometricLegs = 0
         var distance = 0.0
+        // Read once: naming a point is rare, and a per-leg query would repeat
+        // the same few rows for every piece of every trip.
+        val pointNames = repository.pointNames()
 
         for (leg in segmentation.legs) {
             val pieces = JunctionSplitter.split(
@@ -125,7 +130,7 @@ class TripAnalyzer(
                 minPieceMeters = trip.mode.profile.minLegForSplitMeters,
             )
             for (piece in pieces) {
-                val analyzed = toLeg(piece, segmentation.points, speeds, trip.mode.id, graph, signals, now) ?: continue
+                val analyzed = toLeg(piece, segmentation.points, speeds, trip.mode.id, graph, signals, pointNames, now) ?: continue
                 legs += analyzed.leg
                 distance += analyzed.leg.distanceM
                 when (analyzed.identity) {
@@ -164,6 +169,7 @@ class TripAnalyzer(
         modeId: String,
         graph: RoadGraph?,
         signals: List<OsmSignal>,
+        pointNames: Map<String, String>,
         now: Long,
     ): LegResult? {
         val fromIndex = piece.slice.from
@@ -199,19 +205,44 @@ class TripAnalyzer(
         val endJunction = piece.end.junctionId
         val fullyBounded = startJunction != null && endJunction != null
 
-        val (key, identity, partial) = when {
-            fullyBounded -> Triple(SegmentKeys.osm(startJunction, endJunction), MatchKind.OSM, false)
+        val fromKind: String
+        val fromNode: Long
+        val toKind: String
+        val toNode: Long
+        val key: String
+        val identity: MatchKind
+        val partial: Boolean
+        when {
+            fullyBounded -> {
+                fromKind = PointRef.OSM
+                fromNode = startJunction
+                toKind = PointRef.OSM
+                toNode = endJunction
+                key = SegmentKeys.osm(startJunction, endJunction)
+                identity = MatchKind.OSM
+                partial = false
+            }
             graph != null -> {
-                val from = startJunction ?: clusterId(piece.start.at, now)
-                val to = endJunction ?: clusterId(piece.end.at, now)
-                Triple(SegmentKeys.mixed(from, to), MatchKind.PARTIAL, true)
+                fromKind = if (startJunction != null) PointRef.OSM else PointRef.GEO
+                fromNode = startJunction ?: clusterId(piece.start.at, now)
+                toKind = if (endJunction != null) PointRef.OSM else PointRef.GEO
+                toNode = endJunction ?: clusterId(piece.end.at, now)
+                key = SegmentKeys.mixed(fromNode, toNode)
+                identity = MatchKind.PARTIAL
+                partial = true
             }
             else -> {
-                val from = clusterId(piece.start.at, now)
-                val to = clusterId(piece.end.at, now)
-                Triple(SegmentKeys.geo(from, to), MatchKind.GEOMETRIC, false)
+                fromKind = PointRef.GEO
+                fromNode = clusterId(piece.start.at, now)
+                toKind = PointRef.GEO
+                toNode = clusterId(piece.end.at, now)
+                key = SegmentKeys.geo(fromNode, toNode)
+                identity = MatchKind.GEOMETRIC
+                partial = false
             }
         }
+        val fromKey = PointRef(fromKind, fromNode).key
+        val toKey = PointRef(toKind, toNode).key
 
         val existing = repository.segmentByKey(key, mode)
         val direction = when {
@@ -229,6 +260,8 @@ class TripAnalyzer(
             to = geometry.last(),
             lengthM = meters,
             seenAt = now,
+            fromKey = fromKey,
+            toKey = toKey,
         )
 
         return LegResult(
@@ -238,9 +271,11 @@ class TripAnalyzer(
                 distanceM = meters,
                 segmentId = segmentId,
                 direction = direction,
-                // A name the user gave the segment outranks whatever OSM calls
-                // the way; otherwise every re-analysis would undo the rename.
-                label = existing?.userName ?: piece.label,
+                // A name the user gave outranks everything; then the names of
+                // the two ends, then whatever OSM calls the way.
+                label = existing?.preferredLabel
+                    ?: pointPairName(pointNames[fromKey], pointNames[toKey])
+                    ?: piece.label,
                 partial = partial,
                 polyline = Polyline.encode(geometry),
                 movingMs = timing.movingMs,
