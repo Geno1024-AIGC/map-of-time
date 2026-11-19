@@ -9,6 +9,13 @@ import java.net.URL
 import java.util.zip.GZIPInputStream
 
 /**
+ * A traffic light, as OSM stores it: a node tagged `highway=traffic_signals`.
+ * It is the only evidence available for telling a red light apart from any
+ * other reason to stand still.
+ */
+data class OsmSignal(val id: Long, val at: LatLon)
+
+/**
  * What an Overpass body actually says.
  *
  * Overpass reports a query that timed out or ran out of memory as **HTTP 200
@@ -17,7 +24,7 @@ import java.util.zip.GZIPInputStream
  * are kept apart.
  */
 sealed interface OverpassAnswer {
-    data class Ways(val ways: List<OsmWay>) : OverpassAnswer
+    data class Tile(val ways: List<OsmWay>, val signals: List<OsmSignal>) : OverpassAnswer
 
     data class Failed(val reason: String) : OverpassAnswer
 }
@@ -41,7 +48,7 @@ object OverpassParser {
 
     /** Convenience for callers that only care about the elements. */
     fun parse(json: String): List<OsmWay> = when (val answer = parseAnswer(json)) {
-        is OverpassAnswer.Ways -> answer.ways
+        is OverpassAnswer.Tile -> answer.ways
         is OverpassAnswer.Failed -> emptyList()
     }
 
@@ -50,11 +57,11 @@ object OverpassParser {
             ?: return OverpassAnswer.Failed("unreadable JSON")
         val remark = root.optString("remark")
         if (remark.isNotBlank()) return OverpassAnswer.Failed(remark)
-        return OverpassAnswer.Ways(ways(root))
+        val elements = root.optJSONArray("elements") ?: return OverpassAnswer.Tile(emptyList(), emptyList())
+        return OverpassAnswer.Tile(ways(elements), signals(elements))
     }
 
-    private fun ways(root: JSONObject): List<OsmWay> {
-        val elements = root.optJSONArray("elements") ?: return emptyList()
+    private fun ways(elements: org.json.JSONArray): List<OsmWay> {
         val ways = ArrayList<OsmWay>(elements.length())
         for (i in 0 until elements.length()) {
             val element = elements.optJSONObject(i) ?: continue
@@ -76,6 +83,34 @@ object OverpassParser {
             )
         }
         return ways
+    }
+
+    /**
+     * Keeps only real traffic lights. `highway=crossing` is a zebra, not a
+     * signal, and must not be counted as one.
+     */
+    private fun signals(elements: org.json.JSONArray): List<OsmSignal> {
+        val signals = ArrayList<OsmSignal>()
+        for (i in 0 until elements.length()) {
+            val element = elements.optJSONObject(i) ?: continue
+            if (element.optString("type") != "node") continue
+            val tags = element.optJSONObject("tags") ?: continue
+            if (tags.optString("highway") != "traffic_signals") continue
+            val at = nodePosition(element) ?: continue
+            signals += OsmSignal(element.optLong("id"), at)
+        }
+        return signals
+    }
+
+    /** `out geom` puts a node's position at the top level; tolerate the array form too. */
+    private fun nodePosition(element: JSONObject): LatLon? {
+        if (element.has("lat") && element.has("lon")) {
+            return LatLon(element.getDouble("lat"), element.getDouble("lon"))
+        }
+        val geometry = element.optJSONArray("geometry") ?: return null
+        val point = geometry.optJSONObject(0) ?: return null
+        if (!point.has("lat") || !point.has("lon")) return null
+        return LatLon(point.getDouble("lat"), point.getDouble("lon"))
     }
 
     private fun longArray(array: org.json.JSONArray?): LongArray? {
@@ -107,14 +142,24 @@ class OverpassClient(
     private val endpoint: String = DEFAULT_ENDPOINT,
     private val userAgent: String = USER_AGENT,
 ) {
-    fun fetchWays(bounds: Bounds, timeoutSeconds: Int = 30): List<OsmWay> {
+    fun fetchTile(bounds: Bounds, timeoutSeconds: Int = 30): OverpassAnswer.Tile {
         val query = buildString {
             append("[out:json][timeout:").append(timeoutSeconds).append("];")
+            append("(")
             append("way[\"highway\"](")
             append(bounds.minLat).append(',')
             append(bounds.minLon).append(',')
             append(bounds.maxLat).append(',')
             append(bounds.maxLon)
+            append(");")
+            // One request carries both road geometry and traffic lights: a
+            // second query would double the wait for the same bounding box.
+            append("node[\"highway\"=\"traffic_signals\"](")
+            append(bounds.minLat).append(',')
+            append(bounds.minLon).append(',')
+            append(bounds.maxLat).append(',')
+            append(bounds.maxLon)
+            append(");")
             append(");out tags geom;")
         }
 
@@ -144,7 +189,7 @@ class OverpassClient(
             }
             val body = stream.bufferedReader().use { it.readText() }
             return when (val answer = OverpassParser.parseAnswer(body)) {
-                is OverpassAnswer.Ways -> answer.ways
+                is OverpassAnswer.Tile -> answer
                 is OverpassAnswer.Failed ->
                     throw IOException("Overpass: ${answer.reason}")
             }

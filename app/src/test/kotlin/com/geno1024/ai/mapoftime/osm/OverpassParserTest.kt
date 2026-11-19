@@ -49,6 +49,13 @@ class OverpassParserTest {
               "tags": {"highway": "crossing"}
             },
             {
+              "type": "node",
+              "id": 11,
+              "lat": 39.9055,
+              "lon": 116.3005,
+              "tags": {"highway": "traffic_signals"}
+            },
+            {
               "type": "way",
               "id": 126,
               "nodes": [8, 9, 10],
@@ -97,9 +104,20 @@ class OverpassParserTest {
     }
 
     @Test
+    fun parsesTrafficSignalsButNotZebraCrossings() {
+        val answer = OverpassParser.parseAnswer(response)
+        assertTrue(answer is OverpassAnswer.Tile)
+        val signals = (answer as OverpassAnswer.Tile).signals
+        assertEquals(1, signals.size)
+        assertEquals(11L, signals.first().id)
+        assertEquals(39.9055, signals.first().at.lat, 1e-9)
+        assertEquals(116.3005, signals.first().at.lon, 1e-9)
+    }
+
+    @Test
     fun emptyAnswerIsEmptyNotAnError() {
         assertTrue(OverpassParser.parse("""{"elements":[]}""").isEmpty())
-        assertTrue(OverpassParser.parseAnswer("""{"elements":[]}""") is OverpassAnswer.Ways)
+        assertTrue(OverpassParser.parseAnswer("""{"elements":[]}""") is OverpassAnswer.Tile)
     }
 
     @Test
