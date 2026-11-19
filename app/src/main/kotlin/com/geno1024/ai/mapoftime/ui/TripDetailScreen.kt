@@ -3,6 +3,7 @@ package com.geno1024.ai.mapoftime.ui
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +23,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
@@ -209,85 +213,43 @@ fun TripDetailScreen(
             onBack = onBack,
         )
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+        // Pinned: the map and the selected leg stay in place while the list
+        // below scrolls. Picking a leg then never means scrolling back up to
+        // look at the map, which is exactly what comparing legs is about.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .height(240.dp),
         ) {
-            item {
-                TrackMap(
-                    tracks = tracks,
-                    modifier = Modifier.fillMaxWidth().height(280.dp),
-                    markers = markers,
-                    tilesEnabled = settings.mapTiles,
-                    basemap = settings.basemap,
-                    customTileUrl = settings.customTileUrl,
-                    customTilesGcj02 = settings.customTilesGcj02,
-                    highlight = selectedTrack,
+            TrackMap(
+                tracks = tracks,
+                modifier = Modifier.fillMaxSize(),
+                markers = markers,
+                tilesEnabled = settings.mapTiles,
+                basemap = settings.basemap,
+                customTileUrl = settings.customTileUrl,
+                customTilesGcj02 = settings.customTilesGcj02,
+                highlight = selectedTrack,
+            )
+            selectedLeg?.let { leg ->
+                LegOverlay(
+                    leg = leg,
+                    identity = selectedIdentity,
+                    onClear = { selectedLegId = null },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(8.dp),
                 )
             }
+        }
+        Spacer(Modifier.height(12.dp))
 
-            selectedLeg?.let { leg ->
-                item {
-                    SectionCard(title = stringResource(R.string.leg_selected)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    text = leg.label ?: stringResource(R.string.leg_unnamed),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold,
-                                    maxLines = 1,
-                                )
-                                Text(
-                                    text = stringResource(
-                                        R.string.leg_window,
-                                        formatClock(leg.startMs),
-                                        formatClock(leg.endMs),
-                                    ),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                            selectedIdentity?.let { MatchBadge(it) }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        KeyValueRow(
-                            stringResource(R.string.trip_duration),
-                            formatDuration(leg.durationMs),
-                        )
-                        KeyValueRow(
-                            stringResource(R.string.record_distance),
-                            formatDistance(leg.distanceM),
-                        )
-                        KeyValueRow(
-                            stringResource(R.string.segment_moving_time),
-                            formatDuration(leg.movingMs),
-                        )
-                        if (leg.stoppedMs > 0) {
-                            KeyValueRow(
-                                stringResource(R.string.segment_waiting_time),
-                                formatDuration(leg.stoppedMs),
-                            )
-                        }
-                        if (leg.signalWaitMs > 0) {
-                            KeyValueRow(
-                                stringResource(R.string.segment_signal_wait),
-                                formatDuration(leg.signalWaitMs),
-                            )
-                        }
-                        KeyValueRow(
-                            stringResource(R.string.segment_directions),
-                            stringResource(
-                                if (leg.direction > 0) R.string.segment_forward else R.string.segment_backward,
-                            ),
-                        )
-                        TextButton(onClick = { selectedLegId = null }) {
-                            Text(stringResource(R.string.leg_show_all))
-                        }
-                    }
-                }
-            }
-
+        LazyColumn(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             item {
                 SectionCard {
                     val value = trip
@@ -404,6 +366,64 @@ fun TripDetailScreen(
             }
 
             item {
+                Text(
+                    text = stringResource(R.string.trip_legs_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp),
+                )
+                if (legs.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.trip_legs_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
+            }
+
+            if (legs.isEmpty()) {
+                item {
+                    SectionCard {
+                        Text(
+                            text = stringResource(R.string.trip_no_legs),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            } else {
+                itemsIndexed(legs, key = { _, leg -> leg.id }) { index, leg ->
+                    LegRow(
+                        index = index,
+                        leg = leg,
+                        identity = when {
+                            leg.partial -> MatchKind.PARTIAL
+                            leg.segmentId == null -> MatchKind.UNMATCHED
+                            else -> identities[leg.segmentId] ?: MatchKind.UNMATCHED
+                        },
+                        selected = leg.id == selectedLegId,
+                        onClick = {
+                            selectedLegId = if (selectedLegId == leg.id) null else leg.id
+                        },
+                    )
+                }
+            }
+
+            message?.let { text ->
+                item {
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    )
+                }
+            }
+
+            // Re-analysing and deleting are rare, destructive or slow actions;
+            // they belong after the data, not between it and the map.
+            item {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = {
@@ -450,61 +470,74 @@ fun TripDetailScreen(
                     }
                 }
             }
+        }
+    }
+}
 
-            message?.let { text ->
-                item {
+@Composable
+private fun LegOverlay(
+    leg: Leg,
+    identity: MatchKind?,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        shadowElevation = 3.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, top = 6.dp, end = 4.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = text,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 4.dp),
+                        text = leg.label ?: stringResource(R.string.leg_unnamed),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
                     )
-                }
-            }
-
-            item {
-                Text(
-                    text = stringResource(R.string.trip_legs_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(start = 4.dp, top = 4.dp),
-                )
-                if (legs.isNotEmpty()) {
-                    Text(
-                        text = stringResource(R.string.trip_legs_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(start = 4.dp),
-                    )
-                }
-            }
-
-            if (legs.isEmpty()) {
-                item {
-                    SectionCard {
-                        Text(
-                            text = stringResource(R.string.trip_no_legs),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    identity?.let {
+                        Spacer(Modifier.width(8.dp))
+                        MatchBadge(it)
                     }
                 }
-            } else {
-                itemsIndexed(legs, key = { _, leg -> leg.id }) { index, leg ->
-                    LegRow(
-                        index = index,
-                        leg = leg,
-                        identity = when {
-                            leg.partial -> MatchKind.PARTIAL
-                            leg.segmentId == null -> MatchKind.UNMATCHED
-                            else -> identities[leg.segmentId] ?: MatchKind.UNMATCHED
-                        },
-                        selected = leg.id == selectedLegId,
-                        onClick = {
-                            selectedLegId = if (selectedLegId == leg.id) null else leg.id
-                        },
-                    )
-                }
+                Text(
+                    text = buildString {
+                        append(stringResource(R.string.leg_time_short, formatDuration(leg.durationMs)))
+                        append(" · ")
+                        append(formatDistance(leg.distanceM))
+                        if (leg.stoppedMs > 0) {
+                            append(" · ")
+                            append(stringResource(R.string.leg_wait_short, formatSeconds(leg.stoppedMs)))
+                        }
+                        if (leg.signalWaitMs > 0) {
+                            append(" · ")
+                            append(stringResource(R.string.leg_signal_short, formatSeconds(leg.signalWaitMs)))
+                        }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = stringResource(
+                        R.string.leg_window,
+                        formatClock(leg.startMs),
+                        formatClock(leg.endMs),
+                    ) + " · " + stringResource(
+                        if (leg.direction > 0) R.string.segment_forward else R.string.segment_backward,
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = onClear) {
+                Text("✕")
             }
         }
     }
