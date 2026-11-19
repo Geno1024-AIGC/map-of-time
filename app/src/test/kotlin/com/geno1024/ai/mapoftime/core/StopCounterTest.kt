@@ -57,6 +57,27 @@ class StopCounterTest {
     }
 
     @Test
+    fun aStopKnowsWhereItHappened() {
+        val track = TrackBuilder().straight(100.0).standStill(20).straight(100.0).build()
+        val result = Segmenter.segment(track, walk)
+        val slice = result.legs.single()
+        val spans = StopCounter.spans(
+            points = result.points,
+            speeds = Segmenter.speedsOf(result.points),
+            slice = slice,
+            profile = walk,
+            endMs = result.points[slice.to - 1].t,
+        )
+
+        assertEquals(1, spans.size)
+        // The builder starts at 39.9 and walks north, so the wait must be
+        // somewhere along that line, not at the origin.
+        assertTrue(spans.first().at.lat > 39.9)
+        assertTrue(spans.first().durationMs in 19_000L..21_000L)
+        assertEquals(spans.first().durationMs, timingOf(track).stoppedMs)
+    }
+
+    @Test
     fun aWaitThatEndsTheLegUsesTheLegEnd() {
         val track = TrackBuilder().straight(100.0).standStill(15).build()
         val timing = timingOf(track)

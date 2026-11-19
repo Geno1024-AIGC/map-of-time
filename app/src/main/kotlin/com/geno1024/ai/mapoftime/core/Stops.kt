@@ -30,6 +30,21 @@ data class LegTiming(
 }
 
 /**
+ * One standstill inside a leg, with the place it happened. The position is what
+ * turns "the user waited 24 s" into "the user waited 24 s at this light".
+ */
+data class StopSpan(val startMs: Long, val endMs: Long, val at: LatLon) {
+    val durationMs: Long get() = (endMs - startMs).coerceAtLeast(0)
+}
+
+/**
+ * How close a standstill must be to an OSM `highway=traffic_signals` node to be
+ * called "waiting at a light". Wide enough for GPS error and for stopping a
+ * few metres before the stop line; narrow enough not to catch the next block.
+ */
+const val SIGNAL_RADIUS_METERS = 30.0
+
+/**
  * Finds the standstills inside one leg.
  *
  * Uses the same smoothed speeds the segmenter used to find long pauses, so the
@@ -51,15 +66,21 @@ object StopCounter {
         profile: ModeProfile,
         startMs: Long,
         endMs: Long,
-    ): LegTiming {
-        val total = (endMs - startMs).coerceAtLeast(0)
-        if (total == 0L || slice.size < 2 || speeds.size < points.size) {
-            return LegTiming(total, total, 0, 0, 0)
-        }
+    ): LegTiming = timing(
+        totalMs = (endMs - startMs).coerceAtLeast(0),
+        stops = spans(points, speeds, slice, profile, endMs),
+    )
 
-        var stopped = 0L
-        var count = 0
-        var longest = 0L
+    /** The standstills themselves, each anchored at the fix where it began. */
+    fun spans(
+        points: List<TrackPoint>,
+        speeds: DoubleArray,
+        slice: TrackSlice,
+        profile: ModeProfile,
+        endMs: Long,
+    ): List<StopSpan> {
+        if (slice.size < 2 || speeds.size < points.size) return emptyList()
+        val out = ArrayList<StopSpan>()
         var runStart = -1
 
         fun close(end: Long) {
@@ -67,12 +88,8 @@ object StopCounter {
             if (start < 0) return
             // The trace stood still from the first still fix until movement
             // resumed at `end`; sampling error cancels out on average.
-            val duration = end - points[start].t
-            if (duration >= LegTiming.MIN_STOP_MS) {
-                stopped += duration
-                count++
-                if (duration > longest) longest = duration
-            }
+            val span = StopSpan(points[start].t, end, points[start].at)
+            if (span.durationMs >= LegTiming.MIN_STOP_MS) out += span
             runStart = -1
         }
 
@@ -86,14 +103,19 @@ object StopCounter {
         }
         // Still standing when the leg ends: the wait belongs to this leg.
         close(endMs.coerceAtLeast(points[slice.to - 1].t))
+        return out
+    }
 
-        stopped = stopped.coerceIn(0L, total)
+    /** Turns the spans into the duration split the leg stores. */
+    fun timing(totalMs: Long, stops: List<StopSpan>): LegTiming {
+        if (totalMs == 0L) return LegTiming(0, 0, 0, 0, 0)
+        val stopped = stops.sumOf { it.durationMs }.coerceIn(0L, totalMs)
         return LegTiming(
-            totalMs = total,
-            movingMs = total - stopped,
+            totalMs = totalMs,
+            movingMs = totalMs - stopped,
             stoppedMs = stopped,
-            stopCount = count,
-            longestStopMs = longest,
+            stopCount = stops.size,
+            longestStopMs = stops.maxOfOrNull { it.durationMs } ?: 0L,
         )
     }
 }
