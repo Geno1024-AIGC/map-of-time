@@ -259,6 +259,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     JSONObject().apply {
                         put("startedAt", sample.startedAt)
                         put("durationMs", sample.durationMs)
+                        put("movingMs", sample.movingMs)
+                        put("stoppedMs", sample.stoppedMs)
+                        put("stopCount", sample.stopCount)
                         put("distanceM", sample.distanceM)
                         put("direction", sample.direction)
                     },
@@ -295,6 +298,10 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         put("segmentId", leg.segmentId)
                         put("label", leg.label)
                         put("partial", leg.partial)
+                        put("movingMs", leg.movingMs)
+                        put("stoppedMs", leg.stoppedMs)
+                        put("stopCount", leg.stopCount)
+                        put("longestStopMs", leg.longestStopMs)
                         put("polyline", leg.polyline)
                     },
                 )
