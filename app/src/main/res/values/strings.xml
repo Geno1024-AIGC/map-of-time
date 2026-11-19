@@ -125,6 +125,8 @@
     <string name="update_notes">What changed</string>
     <string name="update_published">Published %1$s</string>
     <string name="update_download">Download and install</string>
+    <string name="update_source">APK download source</string>
+    <string name="update_source_custom">Custom mirror prefix (blank = GitHub)</string>
     <string name="update_downloading">Downloading… %1$d%%</string>
     <string name="update_ready">Downloaded. Tap Install to continue.</string>
     <string name="update_install">Install</string>
@@ -133,7 +135,7 @@
     <string name="update_failed_rate_limit">GitHub is limiting update checks. Try again later.</string>
     <string name="update_failed_unreadable">The release lists no usable APK.</string>
     <string name="update_failed_version">The installed version could not be read.</string>
-    <string name="update_failed_download">The update could not be downloaded.</string>
+    <string name="update_failed_download">All download sources failed.</string>
     <string name="update_failed_install">The installer could not be opened.</string>
     <string name="update_badge">Update available</string>
     <string name="settings_attribution">Map data © OpenStreetMap contributors</string>

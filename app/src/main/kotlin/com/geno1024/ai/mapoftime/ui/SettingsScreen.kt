@@ -3,6 +3,7 @@ package com.geno1024.ai.mapoftime.ui
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -42,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
+import com.geno1024.ai.mapoftime.update.Mirrors
 import com.geno1024.ai.mapoftime.update.UpdateError
 import com.geno1024.ai.mapoftime.update.UpdateState
 import kotlinx.coroutines.Dispatchers
@@ -79,7 +82,14 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            UpdateCard(viewModel = viewModel, currentVersion = rememberVersionName())
+            UpdateCard(
+                viewModel = viewModel,
+                currentVersion = rememberVersionName(),
+                mirrorPrefix = settings.updateMirrorPrefix,
+                onSelectMirror = { prefix ->
+                    viewModel.settings.update { it.copy(updateMirrorPrefix = prefix) }
+                },
+            )
 
             SectionCard(title = stringResource(R.string.settings_matching)) {
                 SwitchRow(
@@ -261,7 +271,12 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
  * never has to guess whether to check, download or install.
  */
 @Composable
-private fun UpdateCard(viewModel: AppViewModel, currentVersion: String) {
+private fun UpdateCard(
+    viewModel: AppViewModel,
+    currentVersion: String,
+    mirrorPrefix: String,
+    onSelectMirror: (String) -> Unit,
+) {
     val state = viewModel.update
     SectionCard(title = stringResource(R.string.settings_update)) {
         KeyValueRow(
@@ -396,6 +411,29 @@ private fun UpdateCard(viewModel: AppViewModel, currentVersion: String) {
         ) {
             Text(stringResource(R.string.update_check))
         }
+
+        // Only the APK transfer is mirrored; release metadata stays on the API.
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.update_source),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Mirrors.PRESETS.forEach { mirror ->
+                FilterChip(
+                    selected = mirror.prefix == mirrorPrefix,
+                    onClick = { onSelectMirror(mirror.prefix) },
+                    label = { Text(mirror.label) },
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        SettingField(
+            label = stringResource(R.string.update_source_custom),
+            value = mirrorPrefix,
+            onCommit = onSelectMirror,
+        )
     }
 }
 

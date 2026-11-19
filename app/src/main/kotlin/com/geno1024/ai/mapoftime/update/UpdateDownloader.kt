@@ -16,6 +16,10 @@ import java.net.URL
  * starts over. Bytes land in `<name>.part` first and are renamed into place only
  * after the size and the ZIP magic pass, so an interrupted download can never be
  * mistaken for a finished APK.
+ *
+ * Release metadata is always read from the GitHub API. Only this file transfer
+ * may use a mirror: the chosen source is tried first, then the presets in order,
+ * so one dead domain cannot block an update.
  */
 class UpdateDownloader(
     private val userAgent: String = UpdateChecker.USER_AGENT,
@@ -23,14 +27,31 @@ class UpdateDownloader(
     suspend fun download(
         asset: ReleaseAsset,
         directory: File,
+        mirrors: List<Mirror>,
         onProgress: (percent: Int) -> Unit,
     ): File = withContext(Dispatchers.IO) {
         directory.mkdirs()
         // An older APK would only sit in the cache; the release is a rolling tag.
         directory.listFiles()?.forEach { it.delete() }
 
+        val candidates = mirrors.distinctBy { it.prefix }.ifEmpty { listOf(Mirrors.DIRECT) }
+        var failure: Throwable? = null
+        for (mirror in candidates) {
+            try {
+                return@withContext fetch(mirror.wrap(asset.downloadUrl), asset, directory, onProgress)
+            } catch (e: UpdateException) {
+                failure = e
+            } catch (e: IOException) {
+                failure = UpdateException(UpdateError.DOWNLOAD, e)
+            }
+        }
+        throw failure as? UpdateException ?: UpdateException(UpdateError.DOWNLOAD)
+    }
+
+    /** One source only; every failure is recoverable by trying the next mirror. */
+    private fun fetch(url: String, asset: ReleaseAsset, directory: File, onProgress: (Int) -> Unit): File {
         val target = File(directory, asset.name)
-        val connection = (URL(asset.downloadUrl).openConnection() as HttpURLConnection).apply {
+        val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 15_000
             readTimeout = 60_000
@@ -46,10 +67,7 @@ class UpdateDownloader(
             connection.inputStream.use { input ->
                 writeAtomically(input, target, expected, onProgress)
             }
-        } catch (e: UpdateException) {
-            throw e
-        } catch (e: IOException) {
-            throw UpdateException(UpdateError.DOWNLOAD, e)
+            return target
         } finally {
             connection.disconnect()
         }

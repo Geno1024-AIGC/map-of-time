@@ -3,6 +3,7 @@ package com.geno1024.ai.mapoftime.data
 import android.content.Context
 import androidx.core.content.edit
 import com.geno1024.ai.mapoftime.osm.OverpassClient
+import com.geno1024.ai.mapoftime.update.Mirrors
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -21,6 +22,8 @@ data class SettingsSnapshot(
     val includePartial: Boolean = false,
     /** Epoch millis of the last successful GitHub check; 0 when never. */
     val lastUpdateCheckAt: Long = 0L,
+    /** Preferred APK download proxy; empty means direct GitHub. */
+    val updateMirrorPrefix: String = "",
 ) {
     companion object {
         const val DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -47,6 +50,7 @@ class AppSettings(context: Context) {
             putInt(KEY_SNAP, next.junctionSnapMeters)
             putBoolean(KEY_PARTIAL, next.includePartial)
             putLong(KEY_LAST_UPDATE_CHECK, next.lastUpdateCheckAt)
+            putString(KEY_UPDATE_MIRROR, next.updateMirrorPrefix)
         }
         _state.value = next
     }
@@ -62,6 +66,9 @@ class AppSettings(context: Context) {
         junctionSnapMeters = prefs.getInt(KEY_SNAP, 30).coerceIn(10, 60),
         includePartial = prefs.getBoolean(KEY_PARTIAL, false),
         lastUpdateCheckAt = prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L),
+        updateMirrorPrefix = Mirrors.resolve(
+            prefs.getString(KEY_UPDATE_MIRROR, "").orEmpty(),
+        ).prefix,
     )
 
     private companion object {
@@ -73,5 +80,6 @@ class AppSettings(context: Context) {
         const val KEY_SNAP = "junction_snap_meters"
         const val KEY_PARTIAL = "include_partial"
         const val KEY_LAST_UPDATE_CHECK = "last_update_check"
+        const val KEY_UPDATE_MIRROR = "update_mirror_prefix"
     }
 }

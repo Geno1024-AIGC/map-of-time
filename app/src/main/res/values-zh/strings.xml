@@ -125,6 +125,8 @@
     <string name="update_notes">更新内容</string>
     <string name="update_published">发布于 %1$s</string>
     <string name="update_download">下载并安装</string>
+    <string name="update_source">APK 下载源</string>
+    <string name="update_source_custom">自定义镜像前缀（留空为 GitHub）</string>
     <string name="update_downloading">正在下载… %1$d%%</string>
     <string name="update_ready">已下载，点击「安装」继续。</string>
     <string name="update_install">安装</string>
@@ -133,7 +135,7 @@
     <string name="update_failed_rate_limit">GitHub 暂时限制了更新检查，请稍后再试。</string>
     <string name="update_failed_unreadable">这个发布里没有可安装的 APK。</string>
     <string name="update_failed_version">无法读取已安装的版本号。</string>
-    <string name="update_failed_download">更新包下载失败。</string>
+    <string name="update_failed_download">所有下载源都失败了。</string>
     <string name="update_failed_install">无法打开系统安装器。</string>
     <string name="update_badge">有可用更新</string>
     <string name="settings_attribution">地图数据 © OpenStreetMap 贡献者</string>

@@ -20,6 +20,8 @@ import com.geno1024.ai.mapoftime.data.Trip
 import com.geno1024.ai.mapoftime.track.Recorder
 import com.geno1024.ai.mapoftime.update.AppVersion
 import com.geno1024.ai.mapoftime.update.InstallOutcome
+import com.geno1024.ai.mapoftime.update.Mirror
+import com.geno1024.ai.mapoftime.update.Mirrors
 import com.geno1024.ai.mapoftime.update.ReleaseInfo
 import com.geno1024.ai.mapoftime.update.UpdateChecker
 import com.geno1024.ai.mapoftime.update.UpdateDownloader
@@ -62,6 +64,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     private val updateChecker = UpdateChecker()
     private val updateDownloader = UpdateDownloader()
     private val updatesDir: File get() = File(container.appContext.cacheDir, "updates")
+
+    /** The preferred source first, then the presets; a dead mirror cannot block an update. */
+    private val mirrors: List<Mirror> get() = Mirrors.candidates(settings.state.value.updateMirrorPrefix)
 
     init {
         refresh()
@@ -207,7 +212,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             update = UpdateState.Downloading(available.release, 0)
             update = try {
-                val apk = updateDownloader.download(available.release.asset, updatesDir) { percent ->
+                val apk = updateDownloader.download(available.release.asset, updatesDir, mirrors) { percent ->
                     update = UpdateState.Downloading(available.release, percent)
                 }
                 UpdateState.Ready(available.release, apk)
