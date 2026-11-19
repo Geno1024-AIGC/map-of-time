@@ -14,6 +14,16 @@
 
 `canary` 标签始终指向最新一次成功的构建，旧包会被同名替换；签名一致，可以直接覆盖安装。版本号、构建序号和对应 commit 都写在发布说明里，便于回溯。
 
+应用内也能更新：设置页的「应用更新」卡片会读取同一个发布，发现更新的 commit 就能一键下载并交给系统安装器。
+
+## 应用内更新
+
+- 只读 `https://api.github.com/repos/Geno1024-AIGC/map-of-time/releases/tags/canary` 一个接口，无需令牌。应用启动时静默检查一次，6 小时内不重复；设置页可以手动重查。
+- 版本比较只用 `env`（commit 数），它同时就是 `versionCode`，所以「有没有新版本」与 Android 安装时的判定永远一致；同一个 commit 的 `pack` 变大不算更新。
+- APK 下载到 `cacheDir/updates/`，校验总长度与 ZIP 头（`PK`）后才交给系统安装器。Android 自己会拒绝任何不是同一个签名密钥的包。
+- 首次安装需要授予「安装未知应用」权限：应用会跳到本应用的授权页，回来后再次点「安装」即可。
+- 发现更新时，底部「设置」标签上会出现一个小圆点，下拉到设置页即可看到版本说明。
+
 ## 它想回答的问题
 
 > 从家走到地铁站，到底要多久？下雨天、早高峰、拎着东西的时候，又分别是多久？
@@ -87,12 +97,13 @@
 
 ## 联网部分与使用政策
 
-只有两处联网，且都可关闭或替换：
+只有三处联网，且都可关闭或替换：
 
 1. **OSM 栅格瓦片**（默认 `https://tile.openstreetmap.org/{z}/{x}/{y}.png`），只用于地图底图；瓦片写入磁盘缓存，离线时轨迹照常绘制。
 2. **Overpass API**（默认 `https://overpass-api.de/api/interpreter`），按约 0.02°（≈2 km）瓦片拉取 `highway` 路网，存进同一个数据库。
+3. **GitHub Releases API**，只为应用内更新读取 `canary` 发布，不发送任何设备信息。
 
-两者都发送可识别的 User-Agent：`map-of-time/0.1 (https://github.com/Geno1024-AIGC/map-of-time)`。Overpass 请求之间至少间隔 1 秒；每个行程最多请求 16 个瓦片；缓存有效期默认 120 天，可在设置页修改或清空。
+三者都发送可识别的 User-Agent：`map-of-time/0.1 (https://github.com/Geno1024-AIGC/map-of-time)`。Overpass 请求之间至少间隔 1 秒；每个行程最多请求 16 个瓦片；缓存有效期默认 120 天，可在设置页修改或清空。GitHub 匿名配额是每小时 60 次，应用按 6 小时一次的节奏自动检查，手动检查除外。
 
 请遵守 [OSM 瓦片使用政策](https://operations.osmfoundation.org/policies/tiles/) 与 [Overpass 使用条款](https://wiki.openstreetmap.org/wiki/Overpass_API)。若要大量使用，请自建瓦片服务或 Overpass 实例，并在设置页填入自己的地址。
 
@@ -153,6 +164,7 @@ app/src/main/kotlin/com/geno1024/ai/mapoftime/
 ├── data/       SQLite schema、仓储、设置、OSM 瓦片缓存
 ├── analysis/   单个行程的完整分析流水线
 ├── track/      前台定位服务、录制状态、通知、权限
+├── update/     版本戳解析、GitHub 发布检查、下载与安装
 └── ui/         Compose 界面、自绘地图、格式化
 ```
 
