@@ -78,9 +78,17 @@ data class Segment(
     val lengthM: Double,
     val firstSeen: Long,
     val lastSeen: Long,
+    /**
+     * A name the user typed. Kept apart from [name] so a re-analysis can
+     * refresh what OSM says without throwing the user's label away.
+     */
+    val userName: String? = null,
 ) {
     val from: LatLon get() = LatLon(aLat, aLon)
     val to: LatLon get() = LatLon(bLat, bLon)
+
+    /** What every screen shows: the user's name first, then OSM's, then the raw key. */
+    val displayName: String get() = userName ?: name ?: key
 }
 
 /** A locally discovered corner, used when OSM data is unavailable. */

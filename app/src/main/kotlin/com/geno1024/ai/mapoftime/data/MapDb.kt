@@ -61,6 +61,7 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
                 key TEXT NOT NULL,
                 mode TEXT NOT NULL,
                 name TEXT,
+                user_name TEXT,
                 identity TEXT NOT NULL,
                 a_lat REAL NOT NULL,
                 a_lon REAL NOT NULL,
@@ -190,10 +191,15 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_osm_signals_tile ON osm_signals(tile)")
         }
+        // v4 keeps a name the user gave a segment apart from the OSM name, so
+        // re-analysis can refresh the latter without losing the former.
+        if (oldVersion < 4) {
+            db.execSQL("ALTER TABLE segments ADD COLUMN user_name TEXT")
+        }
     }
 
     companion object {
         const val NAME = "map-of-time.db"
-        const val VERSION = 3
+        const val VERSION = 4
     }
 }
