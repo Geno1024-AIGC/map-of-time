@@ -85,6 +85,8 @@ fun TripDetailScreen(
     var message by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableStateOf(0) }
     var selectedLegId by remember(tripId) { mutableStateOf<Long?>(null) }
+    var renamingSegment by remember { mutableStateOf<Long?>(null) }
+    var renamingInitial by remember { mutableStateOf("") }
 
     LaunchedEffect(tripId, reload) {
         val tripValue = viewModel.trip(tripId)
@@ -206,6 +208,21 @@ fun TripDetailScreen(
         )
     }
 
+    renamingSegment?.let { id ->
+        SegmentNameDialog(
+            initial = renamingInitial,
+            osmName = null,
+            onDismiss = { renamingSegment = null },
+            onSave = { name ->
+                renamingSegment = null
+                scope.launch {
+                    viewModel.renameSegment(id, name)
+                    reload += 1
+                }
+            },
+        )
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         ScreenHeader(
             title = stringResource(R.string.trip_detail_title),
@@ -237,6 +254,12 @@ fun TripDetailScreen(
                     leg = leg,
                     identity = selectedIdentity,
                     onClear = { selectedLegId = null },
+                    onRename = leg.segmentId?.let { id ->
+                        {
+                            renamingInitial = leg.label.orEmpty()
+                            renamingSegment = id
+                        }
+                    },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(8.dp),
@@ -479,6 +502,7 @@ private fun LegOverlay(
     leg: Leg,
     identity: MatchKind?,
     onClear: () -> Unit,
+    onRename: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -536,7 +560,18 @@ private fun LegOverlay(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            TextButton(onClick = onClear) {
+            if (onRename != null) {
+                TextButton(
+                    onClick = onRename,
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                ) {
+                    Text("✎")
+                }
+            }
+            TextButton(
+                onClick = onClear,
+                contentPadding = PaddingValues(horizontal = 8.dp),
+            ) {
                 Text("✕")
             }
         }
