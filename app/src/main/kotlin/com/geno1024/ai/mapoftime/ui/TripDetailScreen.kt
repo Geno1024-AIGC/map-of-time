@@ -70,6 +70,7 @@ fun TripDetailScreen(
     var identities by remember(tripId) { mutableStateOf<Map<Long, MatchKind>>(emptyMap()) }
     var markPositions by remember(tripId) { mutableStateOf<List<com.geno1024.ai.mapoftime.core.LatLon>>(emptyList()) }
     var analyzing by remember { mutableStateOf(false) }
+    var changingMode by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableStateOf(0) }
@@ -200,6 +201,46 @@ fun TripDetailScreen(
                             KeyValueRow(
                                 stringResource(R.string.trip_marks),
                                 markPositions.size.toString(),
+                            )
+                        }
+ 
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(R.string.trip_mode),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        ModeFilter(
+                            selected = value.mode,
+                            includeAll = false,
+                            onSelect = { picked ->
+                                if (picked == null || picked == value.mode || changingMode) {
+                                    return@ModeFilter
+                                }
+                                scope.launch {
+                                    changingMode = true
+                                    val result = viewModel.setTripMode(tripId, picked)
+                                    changingMode = false
+                                    message = result?.let {
+                                        String.format(
+                                            Locale.getDefault(),
+                                            analysisDoneFormat,
+                                            it.legCount,
+                                            it.osmLegs,
+                                            osmStatus.getValue(it.osmOutcome),
+                                        )
+                                    }
+                                    reload += 1
+                                }
+                            },
+                        )
+                        if (changingMode) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = stringResource(R.string.trip_analyzing),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
