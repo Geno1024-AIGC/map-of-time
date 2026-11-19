@@ -91,6 +91,13 @@
     <string name="segments_title">路段</string>
     <string name="segments_empty_title">还没有路段</string>
     <string name="segments_empty_body">路段是两次路口之间的一小段路，行程分析后就会出现。</string>
+    <string name="segments_no_match_title">没有匹配的路段</string>
+    <string name="segments_no_match_body">换个名称试试，或者清空搜索和出行方式筛选。</string>
+    <string name="segments_search">按名称或路段编号搜索</string>
+    <string name="segments_sort_samples">样本最多</string>
+    <string name="segments_sort_recent">最近经过</string>
+    <string name="segments_sort_slowest">最慢</string>
+    <string name="segments_sort_name">名称</string>
     <string name="filter_all">全部</string>
     <string name="segment_stats_title">典型耗时</string>
     <string name="segment_range">区间</string>

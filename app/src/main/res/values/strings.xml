@@ -91,6 +91,13 @@
     <string name="segments_title">Segments</string>
     <string name="segments_empty_title">No segments yet</string>
     <string name="segments_empty_body">A segment is the piece of road between two crossings. It appears once a trip has been analyzed.</string>
+    <string name="segments_no_match_title">No matching segment</string>
+    <string name="segments_no_match_body">Try another name, or clear the search and the mode filter.</string>
+    <string name="segments_search">Search by name or key</string>
+    <string name="segments_sort_samples">Most samples</string>
+    <string name="segments_sort_recent">Recent</string>
+    <string name="segments_sort_slowest">Slowest</string>
+    <string name="segments_sort_name">Name</string>
     <string name="filter_all">All</string>
     <string name="segment_stats_title">Typical time</string>
     <string name="segment_range">Range</string>
