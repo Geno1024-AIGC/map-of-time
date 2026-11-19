@@ -90,7 +90,9 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
                 moving_ms INTEGER NOT NULL DEFAULT 0,
                 stopped_ms INTEGER NOT NULL DEFAULT 0,
                 stop_count INTEGER NOT NULL DEFAULT 0,
-                longest_stop_ms INTEGER NOT NULL DEFAULT 0
+                longest_stop_ms INTEGER NOT NULL DEFAULT 0,
+                signal_stop_count INTEGER NOT NULL DEFAULT 0,
+                signal_wait_ms INTEGER NOT NULL DEFAULT 0
             )
             """.trimIndent(),
         )
@@ -137,6 +139,17 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
             )
             """.trimIndent(),
         )
+        db.execSQL(
+            """
+            CREATE TABLE osm_signals(
+                signal_id INTEGER NOT NULL,
+                lat REAL NOT NULL,
+                lon REAL NOT NULL,
+                tile TEXT NOT NULL,
+                PRIMARY KEY(signal_id, tile)
+            )
+            """.trimIndent(),
+        )
 
         db.execSQL("CREATE INDEX idx_points_trip ON points(trip_id, t)")
         db.execSQL("CREATE INDEX idx_legs_trip ON legs(trip_id, seq)")
@@ -144,6 +157,7 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
         db.execSQL("CREATE INDEX idx_segments_mode ON segments(mode)")
         db.execSQL("CREATE INDEX idx_geo_nodes_cell ON geo_nodes(cell_x, cell_y)")
         db.execSQL("CREATE INDEX idx_osm_way_tiles_tile ON osm_way_tiles(tile)")
+        db.execSQL("CREATE INDEX idx_osm_signals_tile ON osm_signals(tile)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -158,10 +172,28 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
             // travel. That keeps totals right and claims no wait we never saw.
             db.execSQL("UPDATE legs SET moving_ms = end_ms - start_ms")
         }
+        // Traffic lights arrived with v3; the OSM tables are a cache, so they
+        // are created in place instead of being thrown away.
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE legs ADD COLUMN signal_stop_count INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE legs ADD COLUMN signal_wait_ms INTEGER NOT NULL DEFAULT 0")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS osm_signals(
+                    signal_id INTEGER NOT NULL,
+                    lat REAL NOT NULL,
+                    lon REAL NOT NULL,
+                    tile TEXT NOT NULL,
+                    PRIMARY KEY(signal_id, tile)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_osm_signals_tile ON osm_signals(tile)")
+        }
     }
 
     companion object {
         const val NAME = "map-of-time.db"
-        const val VERSION = 2
+        const val VERSION = 3
     }
 }

@@ -4,6 +4,7 @@ import android.content.ContentValues
 import androidx.core.database.sqlite.transaction
 import com.geno1024.ai.mapoftime.core.Bounds
 import com.geno1024.ai.mapoftime.core.LatLon
+import com.geno1024.ai.mapoftime.osm.OsmSignal
 import com.geno1024.ai.mapoftime.osm.OsmWay
 import com.geno1024.ai.mapoftime.osm.OverpassClient
 import kotlin.math.floor
@@ -68,6 +69,7 @@ class OsmRepository(
         val writable = db.writableDatabase
         writable.delete("osm_way_tiles", null, null)
         writable.delete("osm_ways", null, null)
+        writable.delete("osm_signals", null, null)
         writable.delete("osm_tiles", null, null)
     }
 
@@ -79,10 +81,10 @@ class OsmRepository(
     /** Stores one tile; throws when Overpass did not give a usable answer. */
     private fun fetchTile(tile: String) {
         val bounds = tileBounds(tile).expanded(TILE_MARGIN_METERS)
-        val ways = clientProvider().fetchWays(bounds)
+        val answer = clientProvider().fetchTile(bounds)
         val writable = db.writableDatabase
         writable.transaction {
-            for (way in ways) {
+            for (way in answer.ways) {
                 writable.insertWithOnConflict(
                     "osm_ways",
                     null,
@@ -107,16 +109,52 @@ class OsmRepository(
                     android.database.sqlite.SQLiteDatabase.CONFLICT_IGNORE,
                 )
             }
+            // Refreshing a tile must not keep lights that were removed from OSM.
+            writable.delete("osm_signals", "tile = ?", arrayOf(tile))
+            for (signal in answer.signals) {
+                writable.insertWithOnConflict(
+                    "osm_signals",
+                    null,
+                    ContentValues().apply {
+                        put("signal_id", signal.id)
+                        put("lat", signal.at.lat)
+                        put("lon", signal.at.lon)
+                        put("tile", tile)
+                    },
+                    android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE,
+                )
+            }
             writable.insertWithOnConflict(
                 "osm_tiles",
                 null,
                 ContentValues().apply {
                     put("tile", tile)
                     put("fetched_at", clock())
-                    put("way_count", ways.size)
+                    put("way_count", answer.ways.size)
                 },
                 android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE,
             )
+        }
+    }
+
+    /**
+     * Lights from the tiles that are already cached. Never fetches: the
+     * analyzer has just asked for the same bounds, so the tile is either there
+     * or the whole area fell back to local corners.
+     */
+    fun signalsFor(bounds: Bounds): List<OsmSignal> {
+        val tiles = tilesFor(bounds)
+        if (tiles.isEmpty()) return emptyList()
+        val placeholders = tiles.joinToString(",") { "?" }
+        return db.readableDatabase.rawQuery(
+            "SELECT DISTINCT signal_id, lat, lon FROM osm_signals WHERE tile IN ($placeholders)",
+            tiles.toTypedArray(),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(OsmSignal(cursor.getLong(0), LatLon(cursor.getDouble(1), cursor.getDouble(2))))
+                }
+            }
         }
     }
 
