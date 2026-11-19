@@ -9,9 +9,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
@@ -34,10 +37,13 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
+import com.geno1024.ai.mapoftime.update.UpdateError
+import com.geno1024.ai.mapoftime.update.UpdateState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -73,6 +79,8 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            UpdateCard(viewModel = viewModel, currentVersion = rememberVersionName())
+
             SectionCard(title = stringResource(R.string.settings_matching)) {
                 SwitchRow(
                     title = stringResource(R.string.settings_matching),
@@ -243,15 +251,161 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                     )
                 }
             }
+        }
+    }
+}
 
-            SectionCard(title = stringResource(R.string.settings_about)) {
-                KeyValueRow(
-                    label = stringResource(R.string.settings_version),
-                    value = rememberVersionName(),
+/**
+ * The whole update flow in one card: what is installed, what is published, and
+ * the single next action. Every state maps to exactly one button, so the user
+ * never has to guess whether to check, download or install.
+ */
+@Composable
+private fun UpdateCard(viewModel: AppViewModel, currentVersion: String) {
+    val state = viewModel.update
+    SectionCard(title = stringResource(R.string.settings_update)) {
+        KeyValueRow(
+            label = stringResource(R.string.update_current),
+            value = currentVersion,
+        )
+        when (state) {
+            UpdateState.Idle -> Unit
+
+            UpdateState.Checking -> {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                    Text(
+                        text = stringResource(R.string.update_checking),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            UpdateState.NoRelease -> UpdateHint(stringResource(R.string.update_no_release))
+
+            is UpdateState.UpToDate -> UpdateHint(stringResource(R.string.update_up_to_date))
+
+            is UpdateState.Available -> {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.update_available, state.release.version.base),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                )
+                state.release.notes.takeIf { it.isNotBlank() }?.let { notes ->
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.update_notes),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = notes,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 6,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                if (state.release.publishedAt > 0) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.update_published,
+                            formatDateTime(state.release.publishedAt),
+                        ),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = { viewModel.downloadUpdate() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.update_download))
+                }
+            }
+
+            is UpdateState.Downloading -> {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.update_downloading, state.percent),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    progress = { state.percent / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            is UpdateState.Ready -> {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.update_ready),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (state.needsPermission) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.update_needs_permission),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    onClick = { viewModel.installUpdate() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.update_install))
+                }
+            }
+
+            is UpdateState.Failed -> {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(
+                        when (state.error) {
+                            UpdateError.NETWORK -> R.string.update_failed_network
+                            UpdateError.RATE_LIMIT -> R.string.update_failed_rate_limit
+                            UpdateError.UNREADABLE -> R.string.update_failed_unreadable
+                            UpdateError.DOWNLOAD -> R.string.update_failed_download
+                            UpdateError.INSTALL -> R.string.update_failed_install
+                        },
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
         }
+
+        // A download owns the card; checking over it would throw the bytes away.
+        val busy = state is UpdateState.Downloading
+        TextButton(
+            onClick = { viewModel.checkForUpdate(manual = true) },
+            enabled = !busy && state !is UpdateState.Checking,
+        ) {
+            Text(stringResource(R.string.update_check))
+        }
     }
+}
+
+@Composable
+private fun UpdateHint(text: String) {
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable

@@ -19,6 +19,8 @@ data class SettingsSnapshot(
     val junctionSnapMeters: Int = 30,
     /** Show segments whose start or end is the middle of a road. */
     val includePartial: Boolean = false,
+    /** Epoch millis of the last successful GitHub check; 0 when never. */
+    val lastUpdateCheckAt: Long = 0L,
 ) {
     companion object {
         const val DEFAULT_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -44,6 +46,7 @@ class AppSettings(context: Context) {
             putInt(KEY_CACHE_DAYS, next.osmCacheDays)
             putInt(KEY_SNAP, next.junctionSnapMeters)
             putBoolean(KEY_PARTIAL, next.includePartial)
+            putLong(KEY_LAST_UPDATE_CHECK, next.lastUpdateCheckAt)
         }
         _state.value = next
     }
@@ -58,6 +61,7 @@ class AppSettings(context: Context) {
         osmCacheDays = prefs.getInt(KEY_CACHE_DAYS, 120).coerceIn(0, 3650),
         junctionSnapMeters = prefs.getInt(KEY_SNAP, 30).coerceIn(10, 60),
         includePartial = prefs.getBoolean(KEY_PARTIAL, false),
+        lastUpdateCheckAt = prefs.getLong(KEY_LAST_UPDATE_CHECK, 0L),
     )
 
     private companion object {
@@ -68,5 +72,6 @@ class AppSettings(context: Context) {
         const val KEY_CACHE_DAYS = "osm_cache_days"
         const val KEY_SNAP = "junction_snap_meters"
         const val KEY_PARTIAL = "include_partial"
+        const val KEY_LAST_UPDATE_CHECK = "last_update_check"
     }
 }

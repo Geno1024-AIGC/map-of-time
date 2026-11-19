@@ -2,6 +2,8 @@ package com.geno1024.ai.mapoftime.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -15,6 +17,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import com.geno1024.ai.mapoftime.R
 
 private enum class Tab(val labelRes: Int, val glyph: String) {
@@ -35,6 +39,8 @@ fun App(viewModel: AppViewModel) {
     var tab by rememberSaveable { mutableStateOf(Tab.RECORD.name) }
     var detail by rememberSaveable { mutableStateOf<String?>(null) }
 
+    // Announced by TalkBack in place of the unlabelled dot.
+    val updateBadge = stringResource(R.string.update_badge)
     val closeDetail = { detail = null }
     BackHandler(enabled = detail != null) { detail = null }
 
@@ -51,7 +57,21 @@ fun App(viewModel: AppViewModel) {
                                 detail = null
                                 tab = entry.name
                             },
-                            icon = { Text(entry.glyph) },
+                            icon = {
+                                // The update lives in Settings, so point there.
+                                if (entry == Tab.SETTINGS && viewModel.hasUpdate) {
+                                    BadgedBox(badge = { Badge() }) {
+                                        Text(
+                                            text = entry.glyph,
+                                            modifier = Modifier.semantics {
+                                                stateDescription = updateBadge
+                                            },
+                                        )
+                                    }
+                                } else {
+                                    Text(entry.glyph)
+                                }
+                            },
                             label = { Text(stringResource(entry.labelRes)) },
                         )
                     }

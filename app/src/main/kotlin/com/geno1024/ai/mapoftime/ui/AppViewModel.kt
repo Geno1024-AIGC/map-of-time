@@ -18,11 +18,21 @@ import com.geno1024.ai.mapoftime.data.MatchKind
 import com.geno1024.ai.mapoftime.data.Segment
 import com.geno1024.ai.mapoftime.data.Trip
 import com.geno1024.ai.mapoftime.track.Recorder
+import com.geno1024.ai.mapoftime.update.AppVersion
+import com.geno1024.ai.mapoftime.update.InstallOutcome
+import com.geno1024.ai.mapoftime.update.ReleaseInfo
+import com.geno1024.ai.mapoftime.update.UpdateChecker
+import com.geno1024.ai.mapoftime.update.UpdateDownloader
+import com.geno1024.ai.mapoftime.update.UpdateError
+import com.geno1024.ai.mapoftime.update.UpdateException
+import com.geno1024.ai.mapoftime.update.UpdateInstaller
+import com.geno1024.ai.mapoftime.update.UpdateState
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 
 class AppViewModel(private val container: AppContainer) : ViewModel() {
 
@@ -40,8 +50,23 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         private set
     var note by mutableStateOf<String?>(null)
 
+    /** The in-app update flow; the settings card and the tab badge share it. */
+    var update by mutableStateOf<UpdateState>(UpdateState.Idle)
+        private set
+
+    val hasUpdate: Boolean
+        get() = update is UpdateState.Available ||
+            update is UpdateState.Downloading ||
+            update is UpdateState.Ready
+
+    private val updateChecker = UpdateChecker()
+    private val updateDownloader = UpdateDownloader()
+    private val updatesDir: File get() = File(container.appContext.cacheDir, "updates")
+
     init {
         refresh()
+        // Silent: the result only surfaces as a badge, never as a dialog.
+        checkForUpdate(manual = false)
     }
 
     fun refresh() {
@@ -140,6 +165,75 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         container.osm.cachedTileCount()
     }
 
+    // ---- In-app update -----------------------------------------------------
+
+    /**
+     * Asks GitHub for the rolling canary release and compares its commit count
+     * with the installed build. A manual tap always fetches; the automatic
+     * check respects the interval so opening the app does not burn the hourly
+     * anonymous quota.
+     */
+    fun checkForUpdate(manual: Boolean = false) {
+        val current = update
+        if (current is UpdateState.Checking || current is UpdateState.Downloading) return
+        if (!manual &&
+            System.currentTimeMillis() - settings.state.value.lastUpdateCheckAt < AUTO_CHECK_INTERVAL_MS
+        ) {
+            return
+        }
+        viewModelScope.launch {
+            update = UpdateState.Checking
+            update = try {
+                val release = updateChecker.latest()
+                settings.update { it.copy(lastUpdateCheckAt = System.currentTimeMillis()) }
+                when {
+                    release == null -> UpdateState.NoRelease
+                    isNewerThanInstalled(release) -> UpdateState.Available(release)
+                    else -> UpdateState.UpToDate(release)
+                }
+            } catch (e: UpdateException) {
+                UpdateState.Failed(e.error)
+            }
+        }
+    }
+
+    fun downloadUpdate() {
+        val available = update as? UpdateState.Available ?: return
+        viewModelScope.launch {
+            update = UpdateState.Downloading(available.release, 0)
+            update = try {
+                val apk = updateDownloader.download(available.release.asset, updatesDir) { percent ->
+                    update = UpdateState.Downloading(available.release, percent)
+                }
+                UpdateState.Ready(available.release, apk)
+            } catch (e: UpdateException) {
+                UpdateState.Failed(e.error)
+            }
+        }
+    }
+
+    fun installUpdate() {
+        val ready = update as? UpdateState.Ready ?: return
+        update = when (UpdateInstaller.install(container.appContext, ready.apk)) {
+            InstallOutcome.LAUNCHED -> ready
+            InstallOutcome.NEEDS_PERMISSION -> ready.copy(needsPermission = true)
+            InstallOutcome.UNAVAILABLE -> UpdateState.Failed(UpdateError.INSTALL)
+        }
+    }
+
+    /** `env` is the commit count and the versionCode, so it alone decides. */
+    private fun isNewerThanInstalled(release: ReleaseInfo): Boolean {
+        val installed = installedVersion() ?: return false
+        return release.version > installed
+    }
+
+    private fun installedVersion(): AppVersion? = runCatching {
+        val info = container.appContext.packageManager
+            .getPackageInfo(container.appContext.packageName, 0)
+        AppVersion.parse(info.versionName.orEmpty())
+    }.getOrNull()
+
+
     /** Everything the user owns, in one portable JSON document. */
     suspend fun exportJson(): String = withContext(container.dbDispatcher) {
         val root = JSONObject()
@@ -210,5 +304,10 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
         root.put("trips", tripArray)
         root.toString(2)
+    }
+
+    private companion object {
+        /** Six hours: frequent enough to notice a canary, quiet enough for the API. */
+        const val AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
     }
 }

@@ -1,6 +1,7 @@
 package com.geno1024.ai.mapoftime
 
 import android.app.Application
+import android.content.Context
 import com.geno1024.ai.mapoftime.analysis.TripAnalyzer
 import com.geno1024.ai.mapoftime.data.AppSettings
 import com.geno1024.ai.mapoftime.data.MapDb
@@ -17,6 +18,8 @@ import kotlinx.coroutines.launch
  * — shared by the UI, the recorder and the post-processing coroutines.
  */
 class AppContainer(application: Application) {
+    /** Long-lived context for the few platform services the view model needs. */
+    val appContext: Context = application
     val settings = AppSettings(application)
     val db = MapDb(application)
     val repository = MapRepository(db)
