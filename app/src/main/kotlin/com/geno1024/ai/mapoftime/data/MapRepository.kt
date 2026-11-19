@@ -136,6 +136,15 @@ class MapRepository(private val helper: MapDb) {
         val resolved = HashMap<Pair<String, String>, Long>()
         var segmentsAdded = 0
 
+        // Points come first: the segments restored below join on their names,
+        // so the other order would show the old labels until the next analysis.
+        val knownPoints = pointNames().toMutableMap()
+        for (point in bundle.points) {
+            if (knownPoints.containsKey(point.ref.key)) continue
+            renamePoint(point.ref, point.name)
+            knownPoints[point.ref.key] = point.name
+        }
+
         fun segmentFor(mode: TripMode, key: String?): Long? {
             if (key.isNullOrBlank()) return null
             val cacheKey = mode.id to key
@@ -145,13 +154,18 @@ class MapRepository(private val helper: MapDb) {
             if (existing != null) {
                 // Restore a name the user gave the segment, but never replace a
                 // local one with what the file happened to say.
+                val values = ContentValues()
                 if (existing.userName == null && definition?.userName != null) {
-                    db.update(
-                        "segments",
-                        ContentValues().apply { put("user_name", definition.userName) },
-                        "id = ?",
-                        arrayOf(existing.id.toString()),
-                    )
+                    values.put("user_name", definition.userName)
+                }
+                if (existing.fromKey == null && definition?.fromKey != null) {
+                    values.put("from_key", definition.fromKey)
+                }
+                if (existing.toKey == null && definition?.toKey != null) {
+                    values.put("to_key", definition.toKey)
+                }
+                if (values.size() > 0) {
+                    db.update("segments", values, "id = ?", arrayOf(existing.id.toString()))
                 }
                 resolved[cacheKey] = existing.id
                 return existing.id
@@ -168,6 +182,8 @@ class MapRepository(private val helper: MapDb) {
                     lengthM = segment.lengthM,
                     seenAt = System.currentTimeMillis(),
                     userName = segment.userName,
+                    fromKey = segment.fromKey,
+                    toKey = segment.toKey,
                 )
             } ?: return null
             resolved[cacheKey] = id
@@ -334,14 +350,24 @@ class MapRepository(private val helper: MapDb) {
 
     // ----------------------------------------------------------- segments
 
+    /**
+     * Segments carry the names of their two ends so a single point name can
+     * rename every segment through it. The join is on the full point key; the
+     * name table is tiny, so the concatenation costs nothing worth avoiding.
+     */
+    private val segmentSelect: String
+        get() = "SELECT s.*, pf.name AS from_name, pt.name AS to_name FROM segments s " +
+            "LEFT JOIN point_names pf ON pf.kind || ':' || pf.node_id = s.from_key " +
+            "LEFT JOIN point_names pt ON pt.kind || ':' || pt.node_id = s.to_key"
+
     fun segment(id: Long): Segment? =
-        db.rawQuery("SELECT * FROM segments WHERE id = ?", arrayOf(id.toString())).use { cursor ->
+        db.rawQuery("$segmentSelect WHERE s.id = ?", arrayOf(id.toString())).use { cursor ->
             if (cursor.moveToFirst()) cursor.toSegment() else null
         }
 
     fun segmentByKey(key: String, mode: TripMode): Segment? =
         db.rawQuery(
-            "SELECT * FROM segments WHERE key = ? AND mode = ?",
+            "$segmentSelect WHERE s.key = ? AND s.mode = ?",
             arrayOf(key, mode.id),
         ).use { cursor -> if (cursor.moveToFirst()) cursor.toSegment() else null }
 
@@ -355,6 +381,8 @@ class MapRepository(private val helper: MapDb) {
         lengthM: Double,
         seenAt: Long,
         userName: String? = null,
+        fromKey: String? = null,
+        toKey: String? = null,
     ): Long {
         val existing = segmentByKey(key, mode)
         if (existing != null) {
@@ -362,6 +390,10 @@ class MapRepository(private val helper: MapDb) {
                 put("last_seen", seenAt)
                 if (name != null) put("name", name)
                 put("length_m", lengthM)
+                // Earlier versions did not record which points the ends are;
+                // a re-analysis can fill them in without touching anything else.
+                if (existing.fromKey == null && fromKey != null) put("from_key", fromKey)
+                if (existing.toKey == null && toKey != null) put("to_key", toKey)
             }
             db.update("segments", values, "id = ?", arrayOf(existing.id.toString()))
             return existing.id
@@ -374,6 +406,8 @@ class MapRepository(private val helper: MapDb) {
                 put("mode", mode.id)
                 put("name", name)
                 put("user_name", userName)
+                put("from_key", fromKey)
+                put("to_key", toKey)
                 put("identity", identity.name)
                 put("a_lat", from.lat)
                 put("a_lon", from.lon)
@@ -387,10 +421,10 @@ class MapRepository(private val helper: MapDb) {
     }
 
     /**
-     * Gives a segment a name of the user's own, or clears it so OSM's name is
-     * used again. Legs carry a copy of the label for display and export, so
-     * they are rewritten in the same transaction — otherwise the trip list
-     * would keep showing the old name until the next analysis.
+     * Gives a segment a name of the user's own, or clears it so the point pair
+     * or OSM's name is used again. Legs carry a copy of the label for display
+     * and export, so they are rewritten in the same transaction — otherwise the
+     * trip list would keep showing the old name until the next analysis.
      */
     fun renameSegment(id: Long, name: String?) {
         val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
@@ -404,16 +438,79 @@ class MapRepository(private val helper: MapDb) {
             val segment = segment(id) ?: return@transaction
             db.update(
                 "legs",
-                ContentValues().apply { put("label", segment.userName ?: segment.name) },
+                ContentValues().apply { put("label", segment.preferredLabel) },
                 "segment_id = ?",
                 arrayOf(id.toString()),
             )
         }
     }
 
+    // ------------------------------------------------------------- points
+
+    /** Every point the user has named, keyed by `kind:node`. */
+    fun pointNames(): Map<String, String> =
+        db.rawQuery("SELECT kind, node_id, name FROM point_names", null).use { cursor ->
+            buildMap {
+                while (cursor.moveToNext()) {
+                    put("${cursor.getString(0)}:${cursor.getLong(1)}", cursor.getString(2))
+                }
+            }
+        }
+
+    fun namedPoints(): List<NamedPoint> =
+        db.rawQuery("SELECT kind, node_id, name FROM point_names ORDER BY name", null).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(NamedPoint(PointRef(cursor.getString(0), cursor.getLong(1)), cursor.getString(2)))
+                }
+            }
+        }
+
+    /**
+     * Names a point, or clears it when [name] is blank. Every segment that ends
+     * at this point is relabelled in the same transaction, so the list, the
+     * map and the exported legs agree without waiting for a re-analysis.
+     */
+    fun renamePoint(ref: PointRef, name: String?) {
+        val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
+        db.transaction {
+            if (trimmed == null) {
+                db.delete("point_names", "kind = ? AND node_id = ?", arrayOf(ref.kind, ref.nodeId.toString()))
+            } else {
+                db.insertWithOnConflict(
+                    "point_names",
+                    null,
+                    ContentValues().apply {
+                        put("kind", ref.kind)
+                        put("node_id", ref.nodeId)
+                        put("name", trimmed)
+                        put("named_at", System.currentTimeMillis())
+                    },
+                    SQLiteDatabase.CONFLICT_REPLACE,
+                )
+            }
+            val ids = ArrayList<Long>()
+            db.rawQuery(
+                "SELECT id FROM segments WHERE from_key = ? OR to_key = ?",
+                arrayOf(ref.key, ref.key),
+            ).use { cursor ->
+                while (cursor.moveToNext()) ids += cursor.getLong(0)
+            }
+            for (id in ids) {
+                val segment = segment(id) ?: continue
+                db.update(
+                    "legs",
+                    ContentValues().apply { put("label", segment.preferredLabel) },
+                    "segment_id = ?",
+                    arrayOf(id.toString()),
+                )
+            }
+        }
+    }
+
     fun segments(mode: TripMode? = null): List<Segment> {
-        val (where, args) = if (mode == null) "" to emptyArray<String>() else "WHERE mode = ?" to arrayOf(mode.id)
-        return db.rawQuery("SELECT * FROM segments $where ORDER BY last_seen DESC", args)
+        val (where, args) = if (mode == null) "" to emptyArray<String>() else "WHERE s.mode = ?" to arrayOf(mode.id)
+        return db.rawQuery("$segmentSelect $where ORDER BY s.last_seen DESC", args)
             .use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toSegment()) } }
     }
 
@@ -618,6 +715,10 @@ class MapRepository(private val helper: MapDb) {
         firstSeen = getLong(getColumnIndexOrThrow("first_seen")),
         lastSeen = getLong(getColumnIndexOrThrow("last_seen")),
         userName = getStringOrNull(getColumnIndexOrThrow("user_name")),
+        fromKey = getStringOrNull(getColumnIndexOrThrow("from_key")),
+        toKey = getStringOrNull(getColumnIndexOrThrow("to_key")),
+        fromName = getStringOrNull(getColumnIndexOrThrow("from_name")),
+        toName = getStringOrNull(getColumnIndexOrThrow("to_name")),
     )
 
     private fun Cursor.getLongOrNull(index: Int): Long? = if (isNull(index)) null else getLong(index)

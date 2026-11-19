@@ -19,7 +19,13 @@ data class ImportedSegment(
     val lengthM: Double,
     /** A name the user typed, kept apart from the OSM [name]. */
     val userName: String? = null,
+    /** Identities of the two ends, so point names can be restored with them. */
+    val fromKey: String? = null,
+    val toKey: String? = null,
 )
+
+/** One point the user named. */
+data class ImportedPoint(val ref: PointRef, val name: String)
 
 data class ImportedLeg(
     val startMs: Long,
@@ -51,6 +57,7 @@ data class ImportedTrip(
 
 data class ImportBundle(
     val segments: List<ImportedSegment>,
+    val points: List<ImportedPoint> = emptyList(),
     val trips: List<ImportedTrip>,
 ) {
     val legCount: Int get() = trips.sumOf { it.legs.size }
@@ -72,6 +79,7 @@ object TripImport {
         if (format !in SUPPORTED_FORMATS) return null
         return ImportBundle(
             segments = root.optJSONArray("segments").mapObjects { segment(it) },
+            points = root.optJSONArray("points").mapObjects { point(it) },
             trips = root.optJSONArray("trips").mapObjects { trip(it) },
         )
     }
@@ -91,7 +99,18 @@ object TripImport {
             to = LatLon(objectValue.optDouble("toLat"), objectValue.optDouble("toLon")),
             lengthM = objectValue.optDouble("lengthM", 0.0).coerceAtLeast(0.0),
             userName = objectValue.optStringOrNull("userName"),
+            fromKey = PointRef.parse(objectValue.optStringOrNull("fromKey"))?.key,
+            toKey = PointRef.parse(objectValue.optStringOrNull("toKey"))?.key,
         )
+    }
+
+    private fun point(objectValue: JSONObject): ImportedPoint? {
+        val kind = objectValue.optString("kind")
+        val nodeId = objectValue.optLong("nodeId", 0L)
+        val name = objectValue.optStringOrNull("name") ?: return null
+        val ref = PointRef.parse("$kind:$nodeId") ?: return null
+        if (nodeId <= 0) return null
+        return ImportedPoint(ref, name)
     }
 
     private fun trip(objectValue: JSONObject): ImportedTrip? {

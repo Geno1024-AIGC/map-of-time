@@ -62,6 +62,8 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
                 mode TEXT NOT NULL,
                 name TEXT,
                 user_name TEXT,
+                from_key TEXT,
+                to_key TEXT,
                 identity TEXT NOT NULL,
                 a_lat REAL NOT NULL,
                 a_lon REAL NOT NULL,
@@ -71,6 +73,19 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
                 first_seen INTEGER NOT NULL,
                 last_seen INTEGER NOT NULL,
                 UNIQUE(key, mode)
+            )
+            """.trimIndent(),
+        )
+        // Names live on the points, not on every segment that touches them: a
+        // junction is shared by everything that crosses it.
+        db.execSQL(
+            """
+            CREATE TABLE point_names(
+                kind TEXT NOT NULL,
+                node_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                named_at INTEGER NOT NULL,
+                PRIMARY KEY(kind, node_id)
             )
             """.trimIndent(),
         )
@@ -196,10 +211,55 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
         if (oldVersion < 4) {
             db.execSQL("ALTER TABLE segments ADD COLUMN user_name TEXT")
         }
+        // v5 names the points a segment connects, so one name covers every
+        // segment through that junction.
+        if (oldVersion < 5) {
+            db.execSQL("ALTER TABLE segments ADD COLUMN from_key TEXT")
+            db.execSQL("ALTER TABLE segments ADD COLUMN to_key TEXT")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS point_names(
+                    kind TEXT NOT NULL,
+                    node_id INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    named_at INTEGER NOT NULL,
+                    PRIMARY KEY(kind, node_id)
+                )
+                """.trimIndent(),
+            )
+            backfillEndpointKeys(db)
+        }
+    }
+
+    /**
+     * `osm:` and `geo:` keys already spell out both ends, so older segments can
+     * take part in point naming before they are analysed again. A `mix:` key
+     * sorts the two ids together and no longer says which kind each one is, so
+     * those wait for the next analysis instead of being guessed at.
+     */
+    private fun backfillEndpointKeys(db: SQLiteDatabase) {
+        val rows = ArrayList<Pair<Long, String>>()
+        db.rawQuery(
+            "SELECT id, key FROM segments WHERE key LIKE 'osm:%' OR key LIKE 'geo:%'",
+            null,
+        ).use { cursor ->
+            while (cursor.moveToNext()) rows += cursor.getLong(0) to cursor.getString(1)
+        }
+        for ((id, key) in rows) {
+            val kind = key.substringBefore(':')
+            val parts = key.substringAfter(':').split('-')
+            if (parts.size != 2) continue
+            val a = parts[0].toLongOrNull() ?: continue
+            val b = parts[1].toLongOrNull() ?: continue
+            db.execSQL(
+                "UPDATE segments SET from_key = ?, to_key = ? WHERE id = ?",
+                arrayOf("$kind:$a", "$kind:$b", id.toString()),
+            )
+        }
     }
 
     companion object {
         const val NAME = "map-of-time.db"
-        const val VERSION = 4
+        const val VERSION = 5
     }
 }
