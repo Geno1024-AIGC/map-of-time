@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.FilterChip
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.analysis.SegmentSummary
+import com.geno1024.ai.mapoftime.core.DurationStats
 import com.geno1024.ai.mapoftime.core.TripMode
 
 /** How the segment list is ordered. Every one is a question the user asks. */
@@ -154,7 +156,7 @@ private fun SegmentCard(summary: SegmentSummary, onClick: () -> Unit) {
                 Text(
                     text = modeLabel(segment.mode) + " · " +
                         pluralStringResource(R.plurals.samples_count, summary.sampleCount, summary.sampleCount) + " · " +
-                        formatDistance(segment.lengthM),
+                        formatDistance(summary.combined.medianDistanceM.takeIf { it > 0 } ?: segment.lengthM),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -162,20 +164,61 @@ private fun SegmentCard(summary: SegmentSummary, onClick: () -> Unit) {
             MatchBadge(segment.identity)
         }
         Spacer(Modifier.height(10.dp))
-        Row(verticalAlignment = Alignment.Bottom) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = if (summary.sampleCount == 0) "—" else formatSeconds(summary.combined.typicalMs),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
+        // Two carriageways, two numbers: the combined median of a divided road
+        // describes neither side. With one direction only, the median is that
+        // side and the big number stays.
+        if (summary.forward.count > 0 && summary.backward.count > 0) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                val from = stringResource(R.string.segment_from)
+                val to = stringResource(R.string.segment_to)
+                DirectionTime(
+                    label = segment.forwardName ?: "$from → $to",
+                    stats = summary.forward,
+                    modifier = Modifier.weight(1f),
                 )
-                Text(
-                    text = stringResource(R.string.typical_time),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                DirectionTime(
+                    label = segment.backwardName ?: "$to → $from",
+                    stats = summary.backward,
+                    modifier = Modifier.weight(1f),
                 )
+                Spacer(Modifier.width(8.dp))
+                ConfidenceBadge(summary.combined.confidence)
             }
-            ConfidenceBadge(summary.combined.confidence)
+        } else {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = if (summary.sampleCount == 0) "—" else formatSeconds(summary.combined.typicalMs),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = stringResource(R.string.typical_time),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                ConfidenceBadge(summary.combined.confidence)
+            }
         }
+    }
+}
+
+/** One direction's typical time on the list card. */
+@Composable
+private fun DirectionTime(label: String, stats: DurationStats, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text(
+            text = if (stats.count == 0) "—" else formatSeconds(stats.typicalMs),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
