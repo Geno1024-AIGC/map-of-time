@@ -5,6 +5,7 @@ import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.Polyline
 import com.geno1024.ai.mapoftime.core.SegmentKeys
 import com.geno1024.ai.mapoftime.core.Segmenter
+import com.geno1024.ai.mapoftime.core.SIGNAL_RADIUS_METERS
 import com.geno1024.ai.mapoftime.core.StopCounter
 import com.geno1024.ai.mapoftime.core.TrackPoint
 import com.geno1024.ai.mapoftime.core.TripMode
@@ -16,6 +17,7 @@ import com.geno1024.ai.mapoftime.data.SettingsSnapshot
 import com.geno1024.ai.mapoftime.data.TripStatus
 import com.geno1024.ai.mapoftime.osm.JunctionSplitter
 import com.geno1024.ai.mapoftime.osm.MatchedPiece
+import com.geno1024.ai.mapoftime.osm.OsmSignal
 import com.geno1024.ai.mapoftime.osm.RoadGraph
 
 /** Why a trip did or did not get OSM junctions, so the UI can say it out loud. */
@@ -88,6 +90,13 @@ class TripAnalyzer(
             }.getOrNull()
         }
         val graph = ways?.takeIf { it.isNotEmpty() }?.let { RoadGraph(it) }
+        // Traffic lights only exist where the roads do; the tile cache has just
+        // been filled, so this read is free.
+        val signals = if (graph != null && searchBounds != null) {
+            runCatching { osm.signalsFor(searchBounds) }.getOrDefault(emptyList())
+        } else {
+            emptyList<OsmSignal>()
+        }
         val osmOutcome = when {
             searchBounds == null -> OsmOutcome.DISABLED
             tooLarge -> OsmOutcome.TOO_LARGE
@@ -112,7 +121,7 @@ class TripAnalyzer(
                 minPieceMeters = trip.mode.profile.minLegForSplitMeters,
             )
             for (piece in pieces) {
-                val analyzed = toLeg(piece, segmentation.points, speeds, trip.mode.id, graph, now) ?: continue
+                val analyzed = toLeg(piece, segmentation.points, speeds, trip.mode.id, graph, signals, now) ?: continue
                 legs += analyzed.leg
                 distance += analyzed.leg.distanceM
                 when (analyzed.identity) {
@@ -150,6 +159,7 @@ class TripAnalyzer(
         speeds: DoubleArray,
         modeId: String,
         graph: RoadGraph?,
+        signals: List<OsmSignal>,
         now: Long,
     ): LegResult? {
         val fromIndex = piece.slice.from
@@ -164,14 +174,23 @@ class TripAnalyzer(
         if (meters < MIN_PIECE_METERS) return null
 
         val mode = TripMode.of(modeId)
-        val timing = StopCounter.of(
+        val stops = StopCounter.spans(
             points = points,
             speeds = speeds,
             slice = piece.slice,
             profile = mode.profile,
-            startMs = startMs,
             endMs = endMs,
         )
+        val timing = StopCounter.timing((endMs - startMs).coerceAtLeast(0), stops)
+        // A wait counts as a red light only when it happened where OSM put a
+        // traffic signal. Every other standstill stays an anonymous wait.
+        val atSignals = if (signals.isEmpty()) {
+            emptyList()
+        } else {
+            stops.filter { stop ->
+                signals.any { Geo.distanceMeters(stop.at, it.at) <= SIGNAL_RADIUS_METERS }
+            }
+        }
         val startJunction = piece.start.junctionId
         val endJunction = piece.end.junctionId
         val fullyBounded = startJunction != null && endJunction != null
@@ -222,6 +241,8 @@ class TripAnalyzer(
                 stoppedMs = timing.stoppedMs,
                 stopCount = timing.stopCount,
                 longestStopMs = timing.longestStopMs,
+                signalStopCount = atSignals.size,
+                signalWaitMs = atSignals.sumOf { it.durationMs },
             ),
             identity = identity,
         )

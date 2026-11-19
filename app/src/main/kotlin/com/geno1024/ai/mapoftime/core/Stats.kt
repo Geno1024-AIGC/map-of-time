@@ -10,6 +10,9 @@ data class TraversalSample(
     val movingMs: Long = durationMs,
     val stoppedMs: Long = 0,
     val stopCount: Int = 0,
+    /** Part of [stoppedMs] spent within [SIGNAL_RADIUS_METERS] of a traffic light. */
+    val signalStopCount: Int = 0,
+    val signalWaitMs: Long = 0,
 )
 
 /** How much the samples agree; the whole point of collecting several. */
@@ -32,6 +35,12 @@ data class DurationStats(
     val medianWaitedMs: Long,
     /** How many traversals recorded at least one standstill. */
     val waitedSamples: Int,
+    /** Typical wait at a traffic light, 0 when the light usually is green. */
+    val medianSignalWaitMs: Long,
+    /** Typical wait among the traversals that did stop at a light. */
+    val medianSignalWaitedMs: Long,
+    /** How many traversals stopped within reach of an OSM traffic light. */
+    val signalWaitedSamples: Int,
     val meanMs: Long,
     val trimmedMeanMs: Long,
     val p25Ms: Long,
@@ -64,6 +73,9 @@ data class DurationStats(
             medianStoppedMs = 0,
             medianWaitedMs = 0,
             waitedSamples = 0,
+            medianSignalWaitMs = 0,
+            medianSignalWaitedMs = 0,
+            signalWaitedSamples = 0,
             meanMs = 0,
             trimmedMeanMs = 0,
             p25Ms = 0,
@@ -83,6 +95,8 @@ data class DurationStats(
             val moving = samples.map { it.movingMs }.sorted()
             val stopped = samples.map { it.stoppedMs }.sorted()
             val waits = stopped.filter { it > 0 }
+            val signalWaits = samples.map { it.signalWaitMs }.sorted()
+            val waitedAtSignals = signalWaits.filter { it > 0 }
             val median = percentile(durations, 50.0)
             val p25 = percentile(durations, 25.0)
             val p75 = percentile(durations, 75.0)
@@ -99,6 +113,9 @@ data class DurationStats(
                 medianStoppedMs = percentile(stopped, 50.0),
                 medianWaitedMs = percentile(waits, 50.0),
                 waitedSamples = waits.size,
+                medianSignalWaitMs = percentile(signalWaits, 50.0),
+                medianSignalWaitedMs = percentile(waitedAtSignals, 50.0),
+                signalWaitedSamples = waitedAtSignals.size,
                 meanMs = durations.average().toLong(),
                 trimmedMeanMs = trimmedMean(durations),
                 p25Ms = p25,

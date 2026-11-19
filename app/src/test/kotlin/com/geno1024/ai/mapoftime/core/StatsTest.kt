@@ -102,6 +102,23 @@ class StatsTest {
     }
 
     @Test
+    fun signalWaitsAreASeparateSubsetOfTheWait() {
+        val stats = DurationStats.of(
+            listOf(
+                TraversalSample(100_000, 100.0, 1, 0, movingMs = 100_000),
+                TraversalSample(130_000, 100.0, 1, 1, movingMs = 100_000, stoppedMs = 30_000, signalWaitMs = 30_000, signalStopCount = 1),
+                TraversalSample(125_000, 100.0, 1, 2, movingMs = 105_000, stoppedMs = 20_000),
+            ),
+        )
+
+        assertEquals(2, stats.waitedSamples)
+        assertEquals(1, stats.signalWaitedSamples)
+        assertEquals(30_000L, stats.medianSignalWaitedMs)
+        // A random traversal waits 0 s at a light: only one of three did.
+        assertEquals(0L, stats.medianSignalWaitMs)
+    }
+
+    @Test
     fun percentileInterpolates() {
         assertEquals(15L, DurationStats.percentile(listOf(10L, 20L), 50.0))
         assertEquals(10L, DurationStats.percentile(listOf(10L, 20L), 0.0))

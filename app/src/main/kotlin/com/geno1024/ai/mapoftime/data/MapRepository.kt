@@ -183,6 +183,8 @@ class MapRepository(private val helper: MapDb) {
                         put("stopped_ms", leg.stoppedMs)
                         put("stop_count", leg.stopCount)
                         put("longest_stop_ms", leg.longestStopMs)
+                        put("signal_stop_count", leg.signalStopCount)
+                        put("signal_wait_ms", leg.signalWaitMs)
                     },
                 )
             }
@@ -279,7 +281,8 @@ class MapRepository(private val helper: MapDb) {
 
     fun samples(segmentId: Long, includePartial: Boolean = false): List<TraversalSample> =
         db.rawQuery(
-            "SELECT end_ms, start_ms, distance_m, direction, moving_ms, stopped_ms, stop_count FROM legs " +
+            "SELECT end_ms, start_ms, distance_m, direction, moving_ms, stopped_ms, stop_count, " +
+                "signal_wait_ms, signal_stop_count FROM legs " +
                 "WHERE segment_id = ?" + if (includePartial) "" else " AND partial = 0" +
                 " ORDER BY start_ms",
             arrayOf(segmentId.toString()),
@@ -297,6 +300,8 @@ class MapRepository(private val helper: MapDb) {
                             movingMs = cursor.getLong(4),
                             stoppedMs = cursor.getLong(5),
                             stopCount = cursor.getInt(6),
+                            signalWaitMs = cursor.getLong(7),
+                            signalStopCount = cursor.getInt(8),
                         ),
                     )
                 }
@@ -309,7 +314,7 @@ class MapRepository(private val helper: MapDb) {
         db.rawQuery(
             """
             SELECT l.segment_id, l.end_ms, l.start_ms, l.distance_m, l.direction,
-                   l.moving_ms, l.stopped_ms, l.stop_count
+                   l.moving_ms, l.stopped_ms, l.stop_count, l.signal_wait_ms, l.signal_stop_count
             FROM legs l JOIN segments s ON s.id = l.segment_id
             WHERE s.mode = ?${if (includePartial) "" else " AND l.partial = 0"}
             """.trimIndent(),
@@ -329,6 +334,8 @@ class MapRepository(private val helper: MapDb) {
                             movingMs = cursor.getLong(5),
                             stoppedMs = cursor.getLong(6),
                             stopCount = cursor.getInt(7),
+                            signalWaitMs = cursor.getLong(8),
+                            signalStopCount = cursor.getInt(9),
                         ),
                     )
             }
@@ -455,6 +462,8 @@ class MapRepository(private val helper: MapDb) {
         stoppedMs = getLong(getColumnIndexOrThrow("stopped_ms")),
         stopCount = getInt(getColumnIndexOrThrow("stop_count")),
         longestStopMs = getLong(getColumnIndexOrThrow("longest_stop_ms")),
+        signalStopCount = getInt(getColumnIndexOrThrow("signal_stop_count")),
+        signalWaitMs = getLong(getColumnIndexOrThrow("signal_wait_ms")),
     )
 
     private fun Cursor.toSegment() = Segment(

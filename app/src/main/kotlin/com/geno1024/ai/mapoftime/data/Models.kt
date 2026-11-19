@@ -55,6 +55,9 @@ data class Leg(
     val stoppedMs: Long,
     val stopCount: Int,
     val longestStopMs: Long,
+    /** Standstills that happened within [SIGNAL_RADIUS_METERS] of a traffic light. */
+    val signalStopCount: Int = 0,
+    val signalWaitMs: Long = 0,
 ) {
     val durationMs: Long get() = (endMs - startMs).coerceAtLeast(0)
 
@@ -97,4 +100,6 @@ data class PendingLeg(
     val stoppedMs: Long,
     val stopCount: Int,
     val longestStopMs: Long,
+    val signalStopCount: Int = 0,
+    val signalWaitMs: Long = 0,
 )
