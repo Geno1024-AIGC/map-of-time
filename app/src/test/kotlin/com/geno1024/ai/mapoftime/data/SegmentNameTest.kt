@@ -2,10 +2,16 @@ package com.geno1024.ai.mapoftime.data
 
 import com.geno1024.ai.mapoftime.core.TripMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SegmentNameTest {
-    private fun segment(name: String?, userName: String? = null) = Segment(
+    private fun segment(
+        name: String?,
+        userName: String? = null,
+        fromName: String? = null,
+        toName: String? = null,
+    ) = Segment(
         id = 1,
         key = "geo:1-2",
         mode = TripMode.WALK,
@@ -19,11 +25,38 @@ class SegmentNameTest {
         firstSeen = 0,
         lastSeen = 0,
         userName = userName,
+        fromKey = "geo:1",
+        toKey = "geo:2",
+        fromName = fromName,
+        toName = toName,
     )
 
     @Test
-    fun aNameTheUserTypedWinsOverTheOsmName() {
-        assertEquals("My short cut", segment("Main Street", "My short cut").displayName)
+    fun aNameTheUserTypedWinsOverEverything() {
+        assertEquals(
+            "My short cut",
+            segment("Main Street", userName = "My short cut", fromName = "A", toName = "B").displayName,
+        )
+    }
+
+    @Test
+    fun twoNamedEndsNameTheSegment() {
+        assertEquals("north gate – metro", segment(null, fromName = "north gate", toName = "metro").displayName)
+    }
+
+    @Test
+    fun thePointPairOutranksTheOsmName() {
+        assertEquals(
+            "north gate – metro",
+            segment("Main Street", fromName = "north gate", toName = "metro").displayName,
+        )
+    }
+
+    @Test
+    fun oneNamedEndIsNotEnough() {
+        // "north gate – ..." says less than the road's own name, so OSM wins.
+        assertNull(segment("Main Street", fromName = "north gate").pointName)
+        assertEquals("Main Street", segment("Main Street", fromName = "north gate").displayName)
     }
 
     @Test
@@ -36,5 +69,14 @@ class SegmentNameTest {
         // The key is ugly but stable, and never blank: the list needs something
         // to show and something to search.
         assertEquals("geo:1-2", segment(name = null).displayName)
+    }
+
+    @Test
+    fun pointKeysParseOnlyTheKindsWeCanName() {
+        assertEquals(PointRef("osm", 123), PointRef.parse("osm:123"))
+        assertEquals(PointRef("geo", 7), PointRef.parse("geo:7"))
+        assertNull(PointRef.parse("mix:7-9"))
+        assertNull(PointRef.parse("osm:"))
+        assertNull(PointRef.parse(null))
     }
 }

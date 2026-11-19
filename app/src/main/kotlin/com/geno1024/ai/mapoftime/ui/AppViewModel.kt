@@ -359,6 +359,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     put("mode", segment.mode.id)
                     put("name", segment.name)
                     put("userName", segment.userName)
+                    put("fromKey", segment.fromKey)
+                    put("toKey", segment.toKey)
                     put("identity", segment.identity.name)
                     put("lengthM", segment.lengthM)
                     put("fromLat", segment.aLat)
@@ -372,6 +374,20 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             )
         }
         root.put("segments", segmentArray)
+
+        // The names the user gave to points travel with the document: without
+        // them a restore would fall back to OSM names for every segment.
+        val pointArray = JSONArray()
+        for (point in repository.namedPoints()) {
+            pointArray.put(
+                JSONObject().apply {
+                    put("kind", point.ref.kind)
+                    put("nodeId", point.ref.nodeId)
+                    put("name", point.name)
+                },
+            )
+        }
+        root.put("points", pointArray)
 
         // A leg refers to its segment by id in the database, but ids are local
         // to this install. The key + mode pair is what survives a restore.

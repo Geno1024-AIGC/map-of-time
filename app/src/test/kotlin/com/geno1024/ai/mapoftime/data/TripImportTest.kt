@@ -16,11 +16,19 @@ class TripImportTest {
               "mode": "walk",
               "name": "Main Street",
               "userName": "My short cut",
+              "fromKey": "geo:4",
+              "toKey": "geo:7",
               "identity": "GEOMETRIC",
               "lengthM": 120.5,
               "fromLat": 39.9, "fromLon": 116.3,
               "toLat": 39.901, "toLon": 116.301
             }
+          ],
+          "points": [
+            {"kind": "geo", "nodeId": 4, "name": "north gate"},
+            {"kind": "osm", "nodeId": 99, "name": "metro"},
+            {"kind": "osm", "nodeId": 0, "name": "not a point"},
+            {"kind": "nope", "nodeId": 5, "name": "also not"}
           ],
           "trips": [
             {
@@ -65,7 +73,15 @@ class TripImportTest {
         assertEquals(1, bundle.segments.size)
         assertEquals("Main Street", bundle.segments.first().name)
         assertEquals("My short cut", bundle.segments.first().userName)
+        assertEquals("geo:4", bundle.segments.first().fromKey)
+        assertEquals("geo:7", bundle.segments.first().toKey)
         assertEquals(120.5, bundle.segments.first().lengthM, 1e-9)
+
+        // Importing a point whose kind or id makes no sense would create a name
+        // nothing can ever point at, so those rows are dropped.
+        assertEquals(2, bundle.points.size)
+        assertEquals(PointRef("geo", 4), bundle.points.first().ref)
+        assertEquals("north gate", bundle.points.first().name)
 
         assertEquals(1, bundle.trips.size)
         val trip = bundle.trips.first()
