@@ -66,7 +66,12 @@
     <string name="trip_analyzing">分析中…</string>
     <string name="trip_delete">删除行程</string>
     <string name="trip_delete_confirm">删除这个行程及其所有样本？</string>
-    <string name="trip_analysis_done">分段 %1$d · OSM %2$d</string>
+    <string name="trip_analysis_done">分段 %1$d · OSM %2$d · %3$s</string>
+    <string name="osm_matched">已匹配</string>
+    <string name="osm_disabled">未开启匹配</string>
+    <string name="osm_too_large">范围过大</string>
+    <string name="osm_unavailable">请求失败</string>
+    <string name="osm_no_data">无路网数据</string>
 
     <string name="segments_title">路段</string>
     <string name="segments_empty_title">还没有路段</string>

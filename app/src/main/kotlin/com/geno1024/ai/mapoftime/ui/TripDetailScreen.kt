@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
+import com.geno1024.ai.mapoftime.analysis.OsmOutcome
 import com.geno1024.ai.mapoftime.core.Polyline
 import com.geno1024.ai.mapoftime.core.TrackPoint
 import com.geno1024.ai.mapoftime.data.Leg
@@ -55,6 +56,13 @@ fun TripDetailScreen(
     val scope = rememberCoroutineScope()
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
     val analysisDoneFormat = stringResource(R.string.trip_analysis_done)
+    val osmStatus = mapOf(
+        OsmOutcome.MATCHED to stringResource(R.string.osm_matched),
+        OsmOutcome.DISABLED to stringResource(R.string.osm_disabled),
+        OsmOutcome.TOO_LARGE to stringResource(R.string.osm_too_large),
+        OsmOutcome.UNAVAILABLE to stringResource(R.string.osm_unavailable),
+        OsmOutcome.NO_DATA to stringResource(R.string.osm_no_data),
+    )
 
     var trip by remember(tripId) { mutableStateOf<Trip?>(null) }
     var legs by remember(tripId) { mutableStateOf<List<Leg>>(emptyList()) }
@@ -199,6 +207,7 @@ fun TripDetailScreen(
                                         analysisDoneFormat,
                                         it.legCount,
                                         it.osmLegs,
+                                        osmStatus.getValue(it.osmOutcome),
                                     )
                                 }
                                 reload += 1

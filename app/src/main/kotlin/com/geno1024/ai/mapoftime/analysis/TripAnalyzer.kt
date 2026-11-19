@@ -18,6 +18,24 @@ import com.geno1024.ai.mapoftime.osm.JunctionSplitter
 import com.geno1024.ai.mapoftime.osm.MatchedPiece
 import com.geno1024.ai.mapoftime.osm.RoadGraph
 
+/** Why a trip did or did not get OSM junctions, so the UI can say it out loud. */
+enum class OsmOutcome {
+    /** Road data was available and legs were cut at real junctions. */
+    MATCHED,
+
+    /** The user turned road matching off, or the trace has no usable bounds. */
+    DISABLED,
+
+    /** The trip spans more tiles than one analysis may fetch. */
+    TOO_LARGE,
+
+    /** Nothing was cached and the request produced no data. */
+    UNAVAILABLE,
+
+    /** The tiles answered, but contain no highways at all. */
+    NO_DATA,
+}
+
 /**
  * The whole post-processing chain for one finished trip:
  *
@@ -43,6 +61,7 @@ class TripAnalyzer(
         val partialLegs: Int,
         val geometricLegs: Int,
         val usedOsm: Boolean,
+        val osmOutcome: OsmOutcome,
         val distanceM: Double,
         val pointCount: Int,
     )
@@ -59,13 +78,23 @@ class TripAnalyzer(
         val config = settings()
 
         val bounds = Geo.bounds(segmentation.points.map { it.at })
-        val graph = if (config.osmMatching && bounds != null) {
-            val ways = runCatching {
-                osm.waysFor(bounds.expanded(80.0), config.osmCacheDays.toLong() * DAY_MS)
-            }.getOrNull()
-            ways?.takeIf { it.isNotEmpty() }?.let { RoadGraph(it) }
-        } else {
+        val searchBounds = if (config.osmMatching) bounds?.expanded(80.0) else null
+        val tooLarge = searchBounds != null && !osm.canCover(searchBounds)
+        val ways = if (searchBounds == null || tooLarge) {
             null
+        } else {
+            runCatching {
+                osm.waysFor(searchBounds, config.osmCacheDays.toLong() * DAY_MS)
+            }.getOrNull()
+        }
+        val graph = ways?.takeIf { it.isNotEmpty() }?.let { RoadGraph(it) }
+        val osmOutcome = when {
+            searchBounds == null -> OsmOutcome.DISABLED
+            tooLarge -> OsmOutcome.TOO_LARGE
+            ways == null -> OsmOutcome.UNAVAILABLE
+            ways.isEmpty() -> OsmOutcome.NO_DATA
+            graph == null -> OsmOutcome.UNAVAILABLE
+            else -> OsmOutcome.MATCHED
         }
 
         val legs = ArrayList<PendingLeg>()
@@ -107,6 +136,7 @@ class TripAnalyzer(
             partialLegs = partialLegs,
             geometricLegs = geometricLegs,
             usedOsm = graph != null,
+            osmOutcome = osmOutcome,
             distanceM = distance,
             pointCount = raw.size,
         )

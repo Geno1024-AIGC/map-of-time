@@ -66,7 +66,12 @@
     <string name="trip_analyzing">Analyzing…</string>
     <string name="trip_delete">Delete trip</string>
     <string name="trip_delete_confirm">Delete this trip and all of its samples?</string>
-    <string name="trip_analysis_done">Legs: %1$d · OSM: %2$d</string>
+    <string name="trip_analysis_done">Legs: %1$d · OSM: %2$d · %3$s</string>
+    <string name="osm_matched">matched</string>
+    <string name="osm_disabled">matching off</string>
+    <string name="osm_too_large">area too large</string>
+    <string name="osm_unavailable">request failed</string>
+    <string name="osm_no_data">no map data</string>
 
     <string name="segments_title">Segments</string>
     <string name="segments_empty_title">No segments yet</string>
