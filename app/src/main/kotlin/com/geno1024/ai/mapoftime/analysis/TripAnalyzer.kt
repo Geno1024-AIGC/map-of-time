@@ -238,7 +238,9 @@ class TripAnalyzer(
                 distanceM = meters,
                 segmentId = segmentId,
                 direction = direction,
-                label = piece.label,
+                // A name the user gave the segment outranks whatever OSM calls
+                // the way; otherwise every re-analysis would undo the rename.
+                label = existing?.userName ?: piece.label,
                 partial = partial,
                 polyline = Polyline.encode(geometry),
                 movingMs = timing.movingMs,
