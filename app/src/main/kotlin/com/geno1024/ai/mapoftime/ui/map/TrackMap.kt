@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -55,7 +56,11 @@ import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-data class MapMarker(val at: LatLon, val emphasized: Boolean = false)
+/**
+ * One dot on the map. [label] is drawn next to it — a segment's two ends look
+ * identical otherwise, and "which one am I naming" is exactly the question.
+ */
+data class MapMarker(val at: LatLon, val emphasized: Boolean = false, val label: String? = null)
 
 /**
  * A slippy map drawn on a plain Canvas: raster tiles when they can be fetched,
@@ -324,6 +329,9 @@ fun TrackMap(
                     radius = radius,
                     center = p,
                 )
+                marker.label?.let { label ->
+                    drawMarkerLabel(label, p, radius, 4.dp.toPx(), 11.dp.toPx())
+                }
             }
 
             if (displayTracks.all { it.isEmpty() } && emptyHint != null) {
@@ -454,4 +462,42 @@ private class TileStore(
         const val USER_AGENT = "map-of-time/0.1 (https://github.com/Geno1024-AIGC/map-of-time)"
         const val MAX_TILE_BYTES = 2 * 1024 * 1024
     }
+}
+
+/**
+ * Draws a short label beside a marker, flipping it to the other side near an
+ * edge so it never leaves the canvas. The dark pill keeps it readable on top of
+ * any basemap, including a bright one.
+ */
+private fun DrawScope.drawMarkerLabel(
+    text: String,
+    at: Offset,
+    radius: Float,
+    gap: Float,
+    textSize: Float,
+) {
+    val paint = android.graphics.Paint().apply {
+        isAntiAlias = true
+        color = android.graphics.Color.WHITE
+        this.textSize = textSize
+        isFakeBoldText = true
+    }
+    val width = paint.measureText(text)
+    val padding = 3.dp.toPx()
+
+    var x = at.x + radius + gap
+    if (x + width + padding > size.width) x = at.x - radius - gap - width
+    x = x.coerceIn(gap, (size.width - width - gap).coerceAtLeast(gap))
+
+    // Above the dot by default; below it when the dot sits near the top edge.
+    var baseline = at.y - radius - gap
+    if (baseline - textSize < gap) baseline = at.y + radius + gap + textSize
+
+    drawRoundRect(
+        color = Color.Black.copy(alpha = 0.65f),
+        topLeft = Offset(x - padding, baseline - textSize),
+        size = Size(width + padding * 2, textSize + padding * 2),
+        cornerRadius = CornerRadius(padding),
+    )
+    drawContext.canvas.nativeCanvas.drawText(text, x, baseline, paint)
 }

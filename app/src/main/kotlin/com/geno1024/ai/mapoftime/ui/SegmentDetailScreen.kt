@@ -76,8 +76,15 @@ fun SegmentDetailScreen(
     val tracks = remember(legs) {
         legs.map { Polyline.decode(it.polyline) }.filter { it.size >= 2 }
     }
-    val markers = remember(segment) {
-        segment?.let { listOf(MapMarker(it.from), MapMarker(it.to, emphasized = true)) }.orEmpty()
+    val fromLabel = stringResource(R.string.segment_from)
+    val toLabel = stringResource(R.string.segment_to)
+    val markers = remember(segment, fromLabel, toLabel) {
+        segment?.let {
+            listOf(
+                MapMarker(it.from, label = fromLabel),
+                MapMarker(it.to, emphasized = true, label = toLabel),
+            )
+        }.orEmpty()
     }
 
     if (renaming) {
