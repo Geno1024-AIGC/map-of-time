@@ -64,6 +64,40 @@ data class Leg(
     val hasWait: Boolean get() = stoppedMs > 0
 }
 
+/**
+ * One end of a segment: an OSM node or a locally clustered corner.
+ *
+ * The kind is part of the identity because an OSM node id and a geo node id
+ * are numbered independently and would otherwise collide.
+ */
+data class PointRef(val kind: String, val nodeId: Long) {
+    val key: String get() = "$kind:$nodeId"
+
+    companion object {
+        const val OSM = "osm"
+        const val GEO = "geo"
+
+        /** Parses `osm:123` / `geo:7`; anything else is not a point we can name. */
+        fun parse(key: String?): PointRef? {
+            val value = key ?: return null
+            val kind = value.substringBefore(':', "")
+            if (kind != OSM && kind != GEO) return null
+            val id = value.substringAfter(':', "").toLongOrNull() ?: return null
+            return PointRef(kind, id)
+        }
+    }
+}
+
+/** A point the user has given a name to. */
+data class NamedPoint(val ref: PointRef, val name: String)
+
+/**
+ * "A – B" when both ends are named. One name alone says nothing useful about
+ * the piece between the ends, so it stays null and the next fallback wins.
+ */
+fun pointPairName(from: String?, to: String?): String? =
+    if (from != null && to != null) "$from – $to" else null
+
 /** A repeatable piece of road, keyed by its two endpoints. */
 data class Segment(
     val id: Long,
@@ -83,12 +117,30 @@ data class Segment(
      * refresh what OSM says without throwing the user's label away.
      */
     val userName: String? = null,
+    /** Identities of the two ends, e.g. `osm:123` / `geo:7`. */
+    val fromKey: String? = null,
+    val toKey: String? = null,
+    /** Names the user gave the two ends; joined in from [fromKey] / [toKey]. */
+    val fromName: String? = null,
+    val toName: String? = null,
 ) {
     val from: LatLon get() = LatLon(aLat, aLon)
     val to: LatLon get() = LatLon(bLat, bLon)
 
-    /** What every screen shows: the user's name first, then OSM's, then the raw key. */
-    val displayName: String get() = userName ?: name ?: key
+    val fromPoint: PointRef? get() = PointRef.parse(fromKey)
+    val toPoint: PointRef? get() = PointRef.parse(toKey)
+
+    /**
+     * The name the two endpoint names spell out. Only when both ends are named:
+     * "north gate – metro" is useful, "north gate – ..." is not.
+     */
+    val pointName: String? get() = pointPairName(fromName, toName)
+
+    /** The best name this segment has, or null when nothing is named at all. */
+    val preferredLabel: String? get() = userName ?: pointName ?: name
+
+    /** What every screen shows: the user's name, the point pair, OSM's, then the key. */
+    val displayName: String get() = preferredLabel ?: key
 }
 
 /** A locally discovered corner, used when OSM data is unavailable. */
