@@ -1,6 +1,8 @@
 package com.geno1024.ai.mapoftime.ui
 
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -18,6 +20,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -62,11 +65,46 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     var tileCount by remember { mutableStateOf<Int?>(null) }
     var cacheMessage by remember { mutableStateOf<String?>(null) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
+    var importMessage by remember { mutableStateOf<String?>(null) }
     // Hoisted: reading resources through LocalContext inside a click handler is
     // not configuration-aware and would survive a locale change with stale text.
     val clearedText = stringResource(R.string.settings_cleared)
     val exportErrorText = stringResource(R.string.settings_export_error)
     val exportTitle = stringResource(R.string.settings_export)
+    val importErrorText = stringResource(R.string.settings_import_error)
+    val importDoneFormat = stringResource(R.string.settings_import_done)
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            importMessage = null
+            val text = withContext(Dispatchers.IO) {
+                runCatching {
+                    // The grant is per-activity by default; persisting it keeps
+                    // the read valid even if this coroutine is slow.
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    )
+                    context.contentResolver.openInputStream(uri)
+                        ?.bufferedReader()
+                        ?.use { it.readText() }
+                }.getOrNull()
+            }
+            if (text == null) {
+                importMessage = importErrorText
+                return@launch
+            }
+            val result = runCatching { viewModel.importJson(text) }.getOrNull()
+            importMessage = if (result == null) {
+                importErrorText
+            } else {
+                String.format(importDoneFormat, result.tripsAdded, result.tripsSkipped)
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         tileCount = viewModel.cachedTileCount()
@@ -288,6 +326,25 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                     Text(stringResource(R.string.settings_export))
                 }
                 exportMessage?.let { text ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        importLauncher.launch(
+                            arrayOf("application/json", "text/plain", "application/octet-stream"),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.settings_import))
+                }
+                importMessage?.let { text ->
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = text,

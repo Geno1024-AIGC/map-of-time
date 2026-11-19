@@ -119,6 +119,101 @@ class MapRepository(private val helper: MapDb) {
         deleteOrphanSegments()
     }
 
+    /** Importing twice must not double every sample, so identity is mode + start + end. */
+    fun tripExists(mode: TripMode, startedAt: Long, endedAt: Long?): Boolean =
+        db.rawQuery(
+            "SELECT 1 FROM trips WHERE mode = ? AND started_at = ? AND IFNULL(ended_at, 0) = ?",
+            arrayOf(mode.id, startedAt.toString(), (endedAt ?: 0L).toString()),
+        ).use { it.moveToFirst() }
+
+    /**
+     * Restores trips and legs from an export. Segments are re-created lazily,
+     * only for legs that reference them, so a file never leaves a segment
+     * behind with zero samples.
+     */
+    fun importBundle(bundle: ImportBundle): ImportResult = db.transaction {
+        val definitions = bundle.segments.associateBy { it.mode.id to it.key }
+        val resolved = HashMap<Pair<String, String>, Long>()
+        var segmentsAdded = 0
+
+        fun segmentFor(mode: TripMode, key: String?): Long? {
+            if (key.isNullOrBlank()) return null
+            val cacheKey = mode.id to key
+            resolved[cacheKey]?.let { return it }
+            val existing = segmentByKey(key, mode)
+            val id = existing?.id ?: definitions[cacheKey]?.let { definition ->
+                segmentsAdded++
+                insertSegment(
+                    key = definition.key,
+                    mode = mode,
+                    name = definition.name,
+                    identity = definition.identity,
+                    from = definition.from,
+                    to = definition.to,
+                    lengthM = definition.lengthM,
+                    seenAt = System.currentTimeMillis(),
+                )
+            } ?: return null
+            resolved[cacheKey] = id
+            return id
+        }
+
+        var tripsAdded = 0
+        var tripsSkipped = 0
+        var legsAdded = 0
+        for (trip in bundle.trips) {
+            if (tripExists(trip.mode, trip.startedAt, trip.endedAt)) {
+                tripsSkipped++
+                continue
+            }
+            val tripId = insert(
+                "trips",
+                null,
+                ContentValues().apply {
+                    put("mode", trip.mode.id)
+                    put("started_at", trip.startedAt)
+                    trip.endedAt?.let { put("ended_at", it) }
+                    put("distance_m", trip.distanceM)
+                    put("point_count", 0)
+                    put("status", trip.status.name)
+                    trip.note?.let { put("note", it) }
+                },
+            )
+            trip.legs.forEachIndexed { index, leg ->
+                insert(
+                    "legs",
+                    null,
+                    ContentValues().apply {
+                        put("trip_id", tripId)
+                        put("seq", index)
+                        put("start_ms", leg.startMs)
+                        put("end_ms", leg.endMs)
+                        put("distance_m", leg.distanceM)
+                        segmentFor(trip.mode, leg.segmentKey)?.let { put("segment_id", it) }
+                        put("direction", leg.direction)
+                        leg.label?.let { put("label", it) }
+                        put("partial", if (leg.partial) 1 else 0)
+                        put("polyline", leg.polyline)
+                        put("moving_ms", leg.movingMs)
+                        put("stopped_ms", leg.stoppedMs)
+                        put("stop_count", leg.stopCount)
+                        put("longest_stop_ms", leg.longestStopMs)
+                        put("signal_stop_count", leg.signalStopCount)
+                        put("signal_wait_ms", leg.signalWaitMs)
+                    },
+                )
+                legsAdded++
+            }
+            tripsAdded++
+        }
+        ImportResult(
+            tripsAdded = tripsAdded,
+            tripsSkipped = tripsSkipped,
+            legsAdded = legsAdded,
+            segmentsAdded = segmentsAdded,
+        )
+    }
+
     fun points(tripId: Long): List<TrackPoint> =
         db.rawQuery(
             "SELECT t, lat, lon, acc, speed, bearing FROM points WHERE trip_id = ? ORDER BY seq",
@@ -495,8 +590,14 @@ class MapRepository(private val helper: MapDb) {
     }
 }
 
-data class ExportSample(
-    val mode: String,
+data class ImportResult(
+    val tripsAdded: Int,
+    val tripsSkipped: Int,
+    val legsAdded: Int,
+    val segmentsAdded: Int,
+)
+
+data class ExportSample(    val mode: String,
     val key: String,
     val name: String?,
     val startedAt: Long,

@@ -153,6 +153,9 @@
     <string name="settings_export">导出数据</string>
     <string name="settings_export_desc">把全部行程与样本以单个 JSON 文档分享。</string>
     <string name="settings_export_error">导出失败</string>
+    <string name="settings_import">从 JSON 文件导入</string>
+    <string name="settings_import_done">已导入 %1$d 个行程（跳过 %2$d 个重复）</string>
+    <string name="settings_import_error">无法读取该文件</string>
     <string name="settings_update">应用更新</string>
     <string name="update_current">当前安装</string>
     <string name="update_check">检查更新</string>

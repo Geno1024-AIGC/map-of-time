@@ -17,8 +17,11 @@ import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.MatchKind
+import com.geno1024.ai.mapoftime.data.EXPORT_FORMAT
+import com.geno1024.ai.mapoftime.data.ImportResult
 import com.geno1024.ai.mapoftime.data.Segment
 import com.geno1024.ai.mapoftime.data.Trip
+import com.geno1024.ai.mapoftime.data.TripImport
 import com.geno1024.ai.mapoftime.track.Recorder
 import com.geno1024.ai.mapoftime.update.AppVersion
 import com.geno1024.ai.mapoftime.update.InstallOutcome
@@ -31,6 +34,7 @@ import com.geno1024.ai.mapoftime.update.UpdateError
 import com.geno1024.ai.mapoftime.update.UpdateException
 import com.geno1024.ai.mapoftime.update.UpdateInstaller
 import com.geno1024.ai.mapoftime.update.UpdateState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -300,7 +304,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     /** Everything the user owns, in one portable JSON document. */
     suspend fun exportJson(): String = withContext(container.dbDispatcher) {
         val root = JSONObject()
-        root.put("format", "map-of-time/1")
+        root.put("format", EXPORT_FORMAT)
         root.put("exportedAt", System.currentTimeMillis())
 
         val segmentArray = JSONArray()
@@ -342,6 +346,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
         root.put("segments", segmentArray)
 
+        // A leg refers to its segment by id in the database, but ids are local
+        // to this install. The key + mode pair is what survives a restore.
+        val segmentKeys = summaries.associate { it.segment.id to it.segment.key }
         val tripArray = JSONArray()
         for (trip in repository.trips()) {
             val legArray = JSONArray()
@@ -352,6 +359,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         put("endMs", leg.endMs)
                         put("distanceM", leg.distanceM)
                         put("segmentId", leg.segmentId)
+                        put("segmentKey", leg.segmentId?.let { segmentKeys[it] })
                         put("label", leg.label)
                         put("partial", leg.partial)
                         put("movingMs", leg.movingMs)
@@ -379,6 +387,17 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
         root.put("trips", tripArray)
         root.toString(2)
+    }
+
+    /**
+     * Reads a document produced by [exportJson]. Parsing happens off the main
+     * thread because a long history can be a few megabytes of JSON.
+     */
+    suspend fun importJson(json: String): ImportResult? {
+        val bundle = withContext(Dispatchers.Default) { TripImport.parse(json) } ?: return null
+        val result = withContext(container.dbDispatcher) { container.repository.importBundle(bundle) }
+        refresh()
+        return result
     }
 
     private companion object {

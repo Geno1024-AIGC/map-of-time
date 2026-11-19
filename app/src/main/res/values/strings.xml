@@ -153,6 +153,9 @@
     <string name="settings_export">Export data</string>
     <string name="settings_export_desc">Share every trip and sample as one JSON document.</string>
     <string name="settings_export_error">Could not export the data</string>
+    <string name="settings_import">Import from a JSON file</string>
+    <string name="settings_import_done">Imported %1$d trips (%2$d duplicates skipped)</string>
+    <string name="settings_import_error">Could not read that file</string>
     <string name="settings_update">App update</string>
     <string name="update_current">Installed build</string>
     <string name="update_check">Check for updates</string>
