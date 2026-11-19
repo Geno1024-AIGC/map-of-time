@@ -39,6 +39,7 @@ import com.geno1024.ai.mapoftime.core.Bounds
 import com.geno1024.ai.mapoftime.core.Gcj
 import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.LatLon
+import com.geno1024.ai.mapoftime.core.MapCamera
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -176,37 +177,50 @@ fun TrackMap(
                     .pointerInput(Unit) {
                         detectTransformGestures { centroid, pan, zoomChange, _ ->
                             userMoved = true
-                            val viewportWidth = size.width.toDouble()
-                            val viewportHeight = size.height.toDouble()
-                            val world = TILE_PX * 2.0.pow(zoom.toDouble())
-                            val pannedLon = xToLon(lonToX(center.lon, world) - pan.x, world)
-                            val pannedLat = yToLat(latToY(center.lat, world) - pan.y, world)
-                            val newZoom = (zoom + ln(zoomChange.toDouble()) / LN_2)
+                            val targetZoom = (zoom + ln(zoomChange.toDouble()) / LN_2)
                                 .coerceIn(3.0, maxZoom.toDouble())
-                            val newWorld = TILE_PX * 2.0.pow(newZoom)
-                            val nx = lonToX(pannedLon, world) / world
-                            val ny = latToY(pannedLat, world) / world
-                            val anchorX = nx * newWorld - (centroid.x - viewportWidth / 2.0)
-                            val anchorY = ny * newWorld - (centroid.y - viewportHeight / 2.0)
-                            center = LatLon(
-                                yToLat(anchorY, newWorld).coerceIn(-85.0, 85.0),
-                                xToLon(anchorX, newWorld),
+                            // A drag is a drag: move the view by exactly the
+                            // finger's travel. The finger only becomes an
+                            // anchor when the pinch actually changes zoom.
+                            val moved = MapCamera.pan(
+                                center = center,
+                                zoom = zoom.toDouble(),
+                                dx = pan.x.toDouble(),
+                                dy = pan.y.toDouble(),
                             )
-                            zoom = newZoom.toFloat()
+                            if (abs(targetZoom - zoom) < 0.001) {
+                                center = moved
+                            } else {
+                                center = MapCamera.zoomAbout(
+                                    center = moved,
+                                    zoom = zoom.toDouble(),
+                                    ratio = 2.0.pow(targetZoom - zoom),
+                                    focusX = centroid.x.toDouble(),
+                                    focusY = centroid.y.toDouble(),
+                                    width = size.width.toDouble(),
+                                    height = size.height.toDouble(),
+                                )
+                                zoom = targetZoom.toFloat()
+                            }
                         }
                     }
                     .pointerInput(Unit) {
                         detectTapGestures(
                             onDoubleTap = { tap ->
-                                val newZoom = (zoom + 1f).coerceAtMost(maxZoom.toFloat())
-                                val world = TILE_PX * 2.0.pow(zoom.toDouble())
-                                val newWorld = TILE_PX * 2.0.pow(newZoom.toDouble())
-                                val nx = lonToX(center.lon, world) / world
-                                val ny = latToY(center.lat, world) / world
-                                val anchorX = nx * newWorld - (tap.x - size.width / 2.0)
-                                val anchorY = ny * newWorld - (tap.y - size.height / 2.0)
-                                center = LatLon(yToLat(anchorY, newWorld), xToLon(anchorX, newWorld))
-                                zoom = newZoom
+                                val targetZoom = (zoom + 1f).coerceAtMost(maxZoom.toFloat())
+                                val ratio = 2.0.pow((targetZoom - zoom).toDouble())
+                                if (ratio > 1.0001) {
+                                    center = MapCamera.zoomAbout(
+                                        center = center,
+                                        zoom = zoom.toDouble(),
+                                        ratio = ratio,
+                                        focusX = tap.x.toDouble(),
+                                        focusY = tap.y.toDouble(),
+                                        width = size.width.toDouble(),
+                                        height = size.height.toDouble(),
+                                    )
+                                    zoom = targetZoom
+                                }
                             },
                         )
                     },
@@ -311,19 +325,15 @@ private fun DrawScope.drawGrid(color: Color) {
 
 private data class TileKey(val z: Int, val x: Int, val y: Int, val drawX: Int)
 
-private const val TILE_PX = 256.0
+private const val TILE_PX = MapCamera.TILE_PX
 private const val LN_2 = 0.6931471805599453
 private fun lonToTile(lon: Double, worldTiles: Int): Double = (lon + 180.0) / 360.0 * worldTiles
 
 private fun latToTile(lat: Double, worldTiles: Int): Double = Geo.mercatorY(lat) * worldTiles
 
-private fun lonToX(lon: Double, worldPx: Double): Double = (lon + 180.0) / 360.0 * worldPx
+private fun lonToX(lon: Double, worldPx: Double): Double = MapCamera.worldX(lon, worldPx)
 
-private fun latToY(lat: Double, worldPx: Double): Double = Geo.mercatorY(lat) * worldPx
-
-private fun xToLon(x: Double, worldPx: Double): Double = x / worldPx * 360.0 - 180.0
-
-private fun yToLat(y: Double, worldPx: Double): Double = Geo.mercatorLat(y / worldPx)
+private fun latToY(lat: Double, worldPx: Double): Double = MapCamera.worldY(lat, worldPx)
 
 /** Zoom at which [bounds] fits with a little room to breathe. */
 private fun fitZoom(bounds: Bounds, size: Size): Float {
