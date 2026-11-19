@@ -14,7 +14,7 @@ class ReleaseInfoTest {
           "prerelease": true,
           "published_at": "2026-11-18T22:55:33Z",
           "target_commitish": "82fdc33a7ce5d91c92165fad9bc3993fd9238246",
-          "body": "Build #13, version 0.1.37.7.82fdc33a.\n\nSigned canary APK.",
+          "body": "Build #13, version `0.1.37.7.82fdc33a`.\n\nSigned canary APK.",
           "assets": [
             {
               "name": "map-of-time-0.1.37.7.82fdc33a-build13-82fdc33a.apk",
@@ -33,6 +33,8 @@ class ReleaseInfoTest {
         assertEquals(1_440_226L, info.asset.sizeBytes)
         assertTrue(info.asset.downloadUrl.endsWith(".apk"))
         assertTrue(info.notes.startsWith("Build #13"))
+        // Markdown ticks would be shown literally, so they are stripped.
+        assertFalse(info.notes.contains('`'))
         assertTrue(info.publishedAt > 0)
     }
 

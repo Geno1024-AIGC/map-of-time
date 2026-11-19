@@ -55,7 +55,8 @@ data class ReleaseInfo(
 
             return ReleaseInfo(
                 version = version,
-                notes = root.optString("body").trim().take(MAX_NOTES),
+                // The notes are Markdown; a phone card shows them as plain text.
+                notes = root.optString("body").replace("`", "").trim().take(MAX_NOTES),
                 publishedAt = publishedAt(root.optString("published_at")),
                 asset = chosen,
             )
