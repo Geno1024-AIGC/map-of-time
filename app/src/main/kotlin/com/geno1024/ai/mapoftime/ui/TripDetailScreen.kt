@@ -68,6 +68,7 @@ fun TripDetailScreen(
     var legs by remember(tripId) { mutableStateOf<List<Leg>>(emptyList()) }
     var points by remember(tripId) { mutableStateOf<List<TrackPoint>>(emptyList()) }
     var identities by remember(tripId) { mutableStateOf<Map<Long, MatchKind>>(emptyMap()) }
+    var markPositions by remember(tripId) { mutableStateOf<List<com.geno1024.ai.mapoftime.core.LatLon>>(emptyList()) }
     var analyzing by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -79,6 +80,7 @@ fun TripDetailScreen(
         trip = tripValue
         legs = legsValue
         points = viewModel.points(tripId)
+        markPositions = viewModel.markPositions(tripId)
         identities = viewModel.identities(legsValue.mapNotNull { it.segmentId })
     }
 
@@ -89,13 +91,16 @@ fun TripDetailScreen(
             legs.map { Polyline.decode(it.polyline) }.filter { it.size >= 2 }
         }
     }
-    val markers = remember(tracks) {
-        tracks.flatMap { track ->
+    val markers = remember(tracks, markPositions) {
+        val endpoints = tracks.flatMap { track ->
             listOf(
                 MapMarker(track.first(), emphasized = false),
                 MapMarker(track.last(), emphasized = true),
             )
         }
+        // Manually split points are worth seeing after the fact: they are the
+        // only boundaries that do not come from the algorithm.
+        endpoints + markPositions.map { MapMarker(it, emphasized = false) }
     }
 
     if (confirmDelete) {
@@ -190,6 +195,13 @@ fun TripDetailScreen(
                             stringResource(R.string.trip_duration) to formatDuration(value.durationMs),
                             stringResource(R.string.trip_points) to value.pointCount.toString(),
                         )
+                        if (markPositions.isNotEmpty()) {
+                            Spacer(Modifier.height(8.dp))
+                            KeyValueRow(
+                                stringResource(R.string.trip_marks),
+                                markPositions.size.toString(),
+                            )
+                        }
                     }
                 }
             }

@@ -10,6 +10,8 @@ import com.geno1024.ai.mapoftime.AppContainer
 import com.geno1024.ai.mapoftime.analysis.SegmentSummary
 import com.geno1024.ai.mapoftime.analysis.TripAnalyzer
 import com.geno1024.ai.mapoftime.core.DurationStats
+import com.geno1024.ai.mapoftime.core.LatLon
+import com.geno1024.ai.mapoftime.core.Segmenter
 import com.geno1024.ai.mapoftime.core.TrackPoint
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.core.TripMode
@@ -121,6 +123,18 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     suspend fun points(tripId: Long): List<TrackPoint> = withContext(container.dbDispatcher) {
         container.repository.points(tripId)
+    }
+
+    /**
+     * Where the user pressed "split here" during the walk. The marks are stored
+     * as timestamps, so the map position comes from the nearest fix — the same
+     * mapping the segmenter uses when it cuts.
+     */
+    suspend fun markPositions(tripId: Long): List<LatLon> = withContext(container.dbDispatcher) {
+        val points = container.repository.points(tripId)
+        container.repository.marks(tripId).mapNotNull { mark ->
+            Segmenter.nearestIndex(points, mark)?.let { points[it].at }
+        }
     }
 
     suspend fun segment(id: Long): Segment? = withContext(container.dbDispatcher) {

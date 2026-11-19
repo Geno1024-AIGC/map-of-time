@@ -61,6 +61,7 @@
     <string name="trip_detail_title">行程详情</string>
     <string name="trip_duration">时长</string>
     <string name="trip_points">定位点</string>
+    <string name="trip_marks">手动切段</string>
     <string name="trip_legs_title">分段</string>
     <string name="trip_no_legs">这个行程还没有分段，运行分析即可切分。</string>
     <string name="trip_reanalyze">重新分析</string>
