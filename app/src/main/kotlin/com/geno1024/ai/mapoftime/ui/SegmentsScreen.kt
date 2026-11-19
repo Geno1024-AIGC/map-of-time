@@ -136,7 +136,7 @@ private fun SortChip(
 
 /** The human name when OSM gave one, the key otherwise; also used for search. */
 private val SegmentSummary.displayName: String
-    get() = segment.name ?: segment.key
+    get() = segment.displayName
 
 @Composable
 private fun SegmentCard(summary: SegmentSummary, onClick: () -> Unit) {

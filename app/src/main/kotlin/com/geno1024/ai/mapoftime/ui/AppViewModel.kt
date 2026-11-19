@@ -98,7 +98,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         forward = DurationStats.of(samples.filter { it.direction > 0 }),
                         backward = DurationStats.of(samples.filter { it.direction < 0 }),
                     )
-                }.sortedWith(compareByDescending<SegmentSummary> { it.sampleCount }.thenBy { it.segment.name ?: "" })
+                }.sortedWith(compareByDescending<SegmentSummary> { it.sampleCount }.thenBy { it.segment.displayName })
                 trips to summaries
             }
             trips = loaded.first
@@ -143,6 +143,15 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     suspend fun segment(id: Long): Segment? = withContext(container.dbDispatcher) {
         container.repository.segment(id)
+    }
+
+    /**
+     * Names a segment (or clears the name when [name] is blank) and rewrites the
+     * labels of its legs, so every screen shows the new name immediately.
+     */
+    suspend fun renameSegment(segmentId: Long, name: String?) {
+        withContext(container.dbDispatcher) { container.repository.renameSegment(segmentId, name) }
+        refresh()
     }
 
     suspend fun samples(segmentId: Long): List<TraversalSample> = withContext(container.dbDispatcher) {
@@ -339,6 +348,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     put("key", segment.key)
                     put("mode", segment.mode.id)
                     put("name", segment.name)
+                    put("userName", segment.userName)
                     put("identity", segment.identity.name)
                     put("lengthM", segment.lengthM)
                     put("fromLat", segment.aLat)
