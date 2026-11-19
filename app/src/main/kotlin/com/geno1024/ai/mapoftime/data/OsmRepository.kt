@@ -44,14 +44,25 @@ class OsmRepository(
             val fresh = tileFetchedAt(tile)?.let { clock() - it <= maxAgeMs } == true
             if (fresh) continue
             if (!online) continue
-            val fetched = runCatching { fetchTile(tile) }.getOrNull() ?: continue
+            if (runCatching { fetchTile(tile) }.isFailure) {
+                // One refusing tile almost always means the instance is busy or
+                // unreachable. Retrying it on every remaining tile would turn a
+                // 40 s wait into several minutes with nothing to show for it.
+                break
+            }
             fetchedAny = true
-            if (fetched) Thread.sleep(TILE_PAUSE_MS)
+            Thread.sleep(TILE_PAUSE_MS)
         }
 
         val ways = loadTiles(tiles)
         return if (ways.isEmpty() && !fetchedAny) null else ways
     }
+
+    /**
+     * False when the trip's bounding box spans more tiles than one analysis may
+     * fetch. The analyzer reports this instead of silently going geometric.
+     */
+    fun canCover(bounds: Bounds): Boolean = tilesFor(bounds).size <= MAX_TILES
 
     fun clear() {
         val writable = db.writableDatabase
@@ -65,8 +76,8 @@ class OsmRepository(
             if (it.moveToFirst()) it.getInt(0) else 0
         }
 
-    /** Returns true when the tile was actually stored. */
-    private fun fetchTile(tile: String): Boolean {
+    /** Stores one tile; throws when Overpass did not give a usable answer. */
+    private fun fetchTile(tile: String) {
         val bounds = tileBounds(tile).expanded(TILE_MARGIN_METERS)
         val ways = clientProvider().fetchWays(bounds)
         val writable = db.writableDatabase
@@ -107,7 +118,6 @@ class OsmRepository(
                 android.database.sqlite.SQLiteDatabase.CONFLICT_REPLACE,
             )
         }
-        return true
     }
 
     private fun tileFetchedAt(tile: String): Long? =
