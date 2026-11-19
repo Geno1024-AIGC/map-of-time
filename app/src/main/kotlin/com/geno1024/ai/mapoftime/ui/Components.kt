@@ -310,11 +310,14 @@ fun SegmentNameDialog(
     osmName: String?,
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
+    title: String? = null,
+    hint: String? = null,
+    clearHint: String? = null,
 ) {
     var text by remember(initial) { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.segment_name)) },
+        title = { Text(title ?: stringResource(R.string.segment_name)) },
         text = {
             Column {
                 OutlinedTextField(
@@ -322,7 +325,7 @@ fun SegmentNameDialog(
                     onValueChange = { text = it },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text(stringResource(R.string.segment_name_hint)) },
+                    label = { Text(hint ?: stringResource(R.string.segment_name_hint)) },
                 )
                 val suggestion = osmName?.takeIf { it.isNotBlank() && it != text }
                 if (suggestion != null) {
@@ -332,7 +335,7 @@ fun SegmentNameDialog(
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = stringResource(R.string.segment_name_clear_hint),
+                    text = clearHint ?: stringResource(R.string.segment_name_clear_hint),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

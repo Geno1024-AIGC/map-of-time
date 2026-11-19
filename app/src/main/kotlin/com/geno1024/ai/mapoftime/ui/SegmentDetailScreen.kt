@@ -38,6 +38,7 @@ import com.geno1024.ai.mapoftime.core.TimeBucket
 import com.geno1024.ai.mapoftime.core.samples
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.data.Leg
+import com.geno1024.ai.mapoftime.data.PointRef
 import com.geno1024.ai.mapoftime.data.Segment
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
 import com.geno1024.ai.mapoftime.ui.map.TrackMap
@@ -56,6 +57,8 @@ fun SegmentDetailScreen(
     var samples by remember(segmentId) { mutableStateOf<List<TraversalSample>>(emptyList()) }
     var legs by remember(segmentId) { mutableStateOf<List<Leg>>(emptyList()) }
     var renaming by remember { mutableStateOf(false) }
+    var namingPoint by remember { mutableStateOf<PointRef?>(null) }
+    var namingPointName by remember { mutableStateOf("") }
 
     LaunchedEffect(segmentId) {
         segment = viewModel.segment(segmentId)
@@ -86,6 +89,25 @@ fun SegmentDetailScreen(
                 renaming = false
                 scope.launch {
                     viewModel.renameSegment(segmentId, name)
+                    segment = viewModel.segment(segmentId)
+                    legs = viewModel.legsForSegment(segmentId)
+                }
+            },
+        )
+    }
+
+    namingPoint?.let { ref ->
+        SegmentNameDialog(
+            initial = namingPointName,
+            osmName = null,
+            title = stringResource(R.string.point_name_title),
+            hint = stringResource(R.string.point_name_hint),
+            clearHint = stringResource(R.string.point_name_clear_hint),
+            onDismiss = { namingPoint = null },
+            onSave = { name ->
+                namingPoint = null
+                scope.launch {
+                    viewModel.renamePoint(ref, name)
                     segment = viewModel.segment(segmentId)
                     legs = viewModel.legsForSegment(segmentId)
                 }
@@ -139,6 +161,14 @@ fun SegmentDetailScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
+                            val pair = segment?.pointName
+                            if (segment?.userName != null && pair != null) {
+                                Text(
+                                    text = stringResource(R.string.segment_from_points, pair),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                         TextButton(onClick = { renaming = true }) {
                             Text(
@@ -151,6 +181,28 @@ fun SegmentDetailScreen(
                                 ),
                             )
                         }
+                    }
+
+                    val fromPoint = segment?.fromPoint
+                    val toPoint = segment?.toPoint
+                    if (fromPoint != null && toPoint != null) {
+                        ThinDivider()
+                        EndpointRow(
+                            label = stringResource(R.string.segment_from),
+                            name = segment?.fromName,
+                            onName = {
+                                namingPointName = segment?.fromName.orEmpty()
+                                namingPoint = fromPoint
+                            },
+                        )
+                        EndpointRow(
+                            label = stringResource(R.string.segment_to),
+                            name = segment?.toName,
+                            onName = {
+                                namingPointName = segment?.toName.orEmpty()
+                                namingPoint = toPoint
+                            },
+                        )
                     }
                 }
             }
@@ -452,3 +504,28 @@ private fun SampleRow(sample: TraversalSample, stats: DurationStats) {
 @Composable
 private fun TraversalSample.directionLabel(): String =
     stringResource(if (direction > 0) R.string.segment_forward else R.string.segment_backward)
+
+/** One end of the segment, with the name the user gave it and a way to change it. */
+@Composable
+private fun EndpointRow(label: String, name: String?, onName: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = name ?: stringResource(R.string.point_unnamed),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        TextButton(onClick = onName) {
+            Text(
+                stringResource(
+                    if (name == null) R.string.segment_name_add else R.string.action_edit,
+                ),
+            )
+        }
+    }
+}

@@ -19,6 +19,7 @@ import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.MatchKind
 import com.geno1024.ai.mapoftime.data.EXPORT_FORMAT
 import com.geno1024.ai.mapoftime.data.ImportResult
+import com.geno1024.ai.mapoftime.data.PointRef
 import com.geno1024.ai.mapoftime.data.Segment
 import com.geno1024.ai.mapoftime.data.Trip
 import com.geno1024.ai.mapoftime.data.TripImport
@@ -151,6 +152,15 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
      */
     suspend fun renameSegment(segmentId: Long, name: String?) {
         withContext(container.dbDispatcher) { container.repository.renameSegment(segmentId, name) }
+        refresh()
+    }
+
+    /**
+     * Names one end of a segment. Every segment through that point changes
+     * name too, which is the whole point of naming the junction once.
+     */
+    suspend fun renamePoint(ref: PointRef, name: String?) {
+        withContext(container.dbDispatcher) { container.repository.renamePoint(ref, name) }
         refresh()
     }
 
