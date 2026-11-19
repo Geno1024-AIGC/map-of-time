@@ -141,17 +141,33 @@ class MapRepository(private val helper: MapDb) {
             val cacheKey = mode.id to key
             resolved[cacheKey]?.let { return it }
             val existing = segmentByKey(key, mode)
-            val id = existing?.id ?: definitions[cacheKey]?.let { definition ->
+            val definition = definitions[cacheKey]
+            if (existing != null) {
+                // Restore a name the user gave the segment, but never replace a
+                // local one with what the file happened to say.
+                if (existing.userName == null && definition?.userName != null) {
+                    db.update(
+                        "segments",
+                        ContentValues().apply { put("user_name", definition.userName) },
+                        "id = ?",
+                        arrayOf(existing.id.toString()),
+                    )
+                }
+                resolved[cacheKey] = existing.id
+                return existing.id
+            }
+            val id = definition?.let { segment ->
                 segmentsAdded++
                 insertSegment(
-                    key = definition.key,
+                    key = segment.key,
                     mode = mode,
-                    name = definition.name,
-                    identity = definition.identity,
-                    from = definition.from,
-                    to = definition.to,
-                    lengthM = definition.lengthM,
+                    name = segment.name,
+                    identity = segment.identity,
+                    from = segment.from,
+                    to = segment.to,
+                    lengthM = segment.lengthM,
                     seenAt = System.currentTimeMillis(),
+                    userName = segment.userName,
                 )
             } ?: return null
             resolved[cacheKey] = id
@@ -338,6 +354,7 @@ class MapRepository(private val helper: MapDb) {
         to: LatLon,
         lengthM: Double,
         seenAt: Long,
+        userName: String? = null,
     ): Long {
         val existing = segmentByKey(key, mode)
         if (existing != null) {
@@ -356,6 +373,7 @@ class MapRepository(private val helper: MapDb) {
                 put("key", key)
                 put("mode", mode.id)
                 put("name", name)
+                put("user_name", userName)
                 put("identity", identity.name)
                 put("a_lat", from.lat)
                 put("a_lon", from.lon)
@@ -366,6 +384,31 @@ class MapRepository(private val helper: MapDb) {
                 put("last_seen", seenAt)
             },
         )
+    }
+
+    /**
+     * Gives a segment a name of the user's own, or clears it so OSM's name is
+     * used again. Legs carry a copy of the label for display and export, so
+     * they are rewritten in the same transaction — otherwise the trip list
+     * would keep showing the old name until the next analysis.
+     */
+    fun renameSegment(id: Long, name: String?) {
+        val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
+        db.transaction {
+            db.update(
+                "segments",
+                ContentValues().apply { put("user_name", trimmed) },
+                "id = ?",
+                arrayOf(id.toString()),
+            )
+            val segment = segment(id) ?: return@transaction
+            db.update(
+                "legs",
+                ContentValues().apply { put("label", segment.userName ?: segment.name) },
+                "segment_id = ?",
+                arrayOf(id.toString()),
+            )
+        }
     }
 
     fun segments(mode: TripMode? = null): List<Segment> {
@@ -574,6 +617,7 @@ class MapRepository(private val helper: MapDb) {
         lengthM = getDouble(getColumnIndexOrThrow("length_m")),
         firstSeen = getLong(getColumnIndexOrThrow("first_seen")),
         lastSeen = getLong(getColumnIndexOrThrow("last_seen")),
+        userName = getStringOrNull(getColumnIndexOrThrow("user_name")),
     )
 
     private fun Cursor.getLongOrNull(index: Int): Long? = if (isNull(index)) null else getLong(index)

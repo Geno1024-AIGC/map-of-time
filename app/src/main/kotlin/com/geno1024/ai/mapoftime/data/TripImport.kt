@@ -17,6 +17,8 @@ data class ImportedSegment(
     val from: LatLon,
     val to: LatLon,
     val lengthM: Double,
+    /** A name the user typed, kept apart from the OSM [name]. */
+    val userName: String? = null,
 )
 
 data class ImportedLeg(
@@ -88,6 +90,7 @@ object TripImport {
             from = LatLon(objectValue.optDouble("fromLat"), objectValue.optDouble("fromLon")),
             to = LatLon(objectValue.optDouble("toLat"), objectValue.optDouble("toLon")),
             lengthM = objectValue.optDouble("lengthM", 0.0).coerceAtLeast(0.0),
+            userName = objectValue.optStringOrNull("userName"),
         )
     }
 

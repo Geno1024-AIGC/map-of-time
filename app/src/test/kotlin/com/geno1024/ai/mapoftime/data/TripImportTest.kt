@@ -15,6 +15,7 @@ class TripImportTest {
               "key": "geo:4-7",
               "mode": "walk",
               "name": "Main Street",
+              "userName": "My short cut",
               "identity": "GEOMETRIC",
               "lengthM": 120.5,
               "fromLat": 39.9, "fromLon": 116.3,
@@ -63,6 +64,7 @@ class TripImportTest {
 
         assertEquals(1, bundle.segments.size)
         assertEquals("Main Street", bundle.segments.first().name)
+        assertEquals("My short cut", bundle.segments.first().userName)
         assertEquals(120.5, bundle.segments.first().lengthM, 1e-9)
 
         assertEquals(1, bundle.trips.size)
