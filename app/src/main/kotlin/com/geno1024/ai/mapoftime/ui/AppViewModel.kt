@@ -15,6 +15,7 @@ import com.geno1024.ai.mapoftime.analysis.SegmentSummary
 import com.geno1024.ai.mapoftime.analysis.TripAnalyzer
 import com.geno1024.ai.mapoftime.core.BucketTake
 import com.geno1024.ai.mapoftime.core.DurationStats
+import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.HolidayCalendar
 import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.Segmenter
@@ -253,14 +254,52 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
      */
     suspend fun namePlace(draft: PlaceDraft, name: String?, clearMemberNames: Boolean = false) {
         withContext(container.dbDispatcher) {
+            // The name is typed by hand. If a nearby junction already carries
+            // it, the user is adding this point to that junction — not asking
+            // for a second row with the same name. Merging here is what makes
+            // "write the same name on both halves" actually work the first
+            // time, instead of leaving two rows that then protect each other.
+            val target = PlaceDrafts.sameNameTarget(places, name, draft)
+            val placeId = target?.id ?: draft.existingPlaceId
+            val refs = (draft.refs + target?.points.orEmpty()).distinct()
+            val absorbIds = (
+                draft.absorbIds +
+                    listOfNotNull(draft.existingPlaceId).filter { it != placeId } +
+                    listOfNotNull(target?.id).filter { it != placeId }
+            ).distinct()
+
+            // Recompute the centre and radius over every member now that a
+            // same-name junction's points have been folded in; using the
+            // single-point draft's values would leave adoption too narrow.
+            val coords = HashMap<String, LatLon>()
+            for (summary in summaries) {
+                val segment = summary.segment
+                segment.fromKey?.let { coords.putIfAbsent(it, segment.from) }
+                segment.toKey?.let { coords.putIfAbsent(it, segment.to) }
+            }
+            val located = refs.mapNotNull { ref -> coords[ref.key]?.let { ref to it } }
+            val center = if (located.isEmpty()) {
+                draft.center
+            } else {
+                LatLon(
+                    located.map { it.second.lat }.average(),
+                    located.map { it.second.lon }.average(),
+                )
+            }
+            val radius = if (located.isEmpty()) {
+                draft.radiusM
+            } else {
+                located.maxOf { Geo.distanceMeters(center, it.second) }
+            }
+
             container.repository.upsertPlace(
-                id = draft.existingPlaceId,
+                id = placeId,
                 name = name,
-                members = draft.refs,
-                center = draft.center,
-                radiusM = draft.adoptRadius(),
+                members = refs,
+                center = center,
+                radiusM = maxOf(radius, draft.radiusM).coerceAtLeast(PlaceDrafts.MIN_ADOPT_M),
                 clearMemberNames = clearMemberNames,
-                absorbIds = draft.absorbIds,
+                absorbIds = absorbIds,
             )
         }
         refresh()

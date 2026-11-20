@@ -266,6 +266,63 @@ class PlaceDraftTest {
         assertTrue(draft.refs.any { it == seed })
     }
 
+    private fun loneDraft(seed: PointRef): PlaceDraft = PlaceDraft(
+        seed = seed,
+        center = coords.getValue(seed.key),
+        members = listOf(PlaceMember(seed, coords.getValue(seed.key), 0.0)),
+        spanM = 0.0,
+        radiusM = PlaceDrafts.MIN_ADOPT_M,
+    )
+
+    @Test
+    fun typingAnExistingNameTargetsThatJunction() {
+        // The user writes the name by hand on the second half of the T. That
+        // is an instruction to join the first half, not a new row.
+        val seed = point(70.0, 0.0)
+        val existingPoint = point(0.0, 0.0)
+        val name = "Guanzhang x Shuilian"
+        val existing = Place(
+            id = 5,
+            name = name,
+            at = coords.getValue(existingPoint.key),
+            radiusM = 25.0,
+            points = listOf(existingPoint),
+        )
+
+        val target = PlaceDrafts.sameNameTarget(listOf(existing), name, loneDraft(seed))
+        assertEquals(5L, target?.id)
+    }
+
+    @Test
+    fun afarAwaySameNamePlaceIsNotMerged() {
+        val seed = point(0.0, 0.0)
+        val otherTown = point(500.0, 0.0)
+        val name = "Renmin x Jianguo"
+        val existing = Place(
+            id = 5,
+            name = name,
+            at = coords.getValue(otherTown.key),
+            radiusM = 25.0,
+            points = listOf(otherTown),
+        )
+
+        assertNull(PlaceDrafts.sameNameTarget(listOf(existing), name, loneDraft(seed)))
+    }
+
+    @Test
+    fun adifferentNameNeverMerges() {
+        val seed = point(0.0, 0.0)
+        val existing = Place(
+            id = 5,
+            name = "some other junction",
+            at = coords.getValue(seed.key),
+            radiusM = 25.0,
+            points = listOf(seed),
+        )
+
+        assertNull(PlaceDrafts.sameNameTarget(listOf(existing), "a new name", loneDraft(seed)))
+    }
+
     @Test
     fun twoHalvesOfOneWideJunctionFoldIntoOneDraft() {
         // The through movement and the right-turn-only lane of one big T were
