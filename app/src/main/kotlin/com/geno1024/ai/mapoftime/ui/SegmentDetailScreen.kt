@@ -90,26 +90,27 @@ fun SegmentDetailScreen(
     // kept out of the routine table and listed separately below it. A table
     // that quietly averaged 春节 into "weekday off-peak" would be worse than
     // no table at all.
-    val routineSamples = remember(samples) {
-        samples.filter { holidayPhaseOf(it.startedAt) == HolidayPhase.NONE }
+    val calendar = settings.holidayCalendar
+    val routineSamples = remember(samples, calendar) {
+        samples.filter { holidayPhaseOf(it.startedAt, calendar = calendar) == HolidayPhase.NONE }
     }
-    val byContext = remember(routineSamples) {
-        val grouped = groupByTrafficContext(routineSamples)
+    val byContext = remember(routineSamples, calendar) {
+        val grouped = groupByTrafficContext(routineSamples, calendar = calendar)
         TrafficContext.ordered.associateWith { DurationStats.of(grouped[it].orEmpty()) }
     }
-    val holidaySamples = remember(samples) {
-        samples.filter { holidayPhaseOf(it.startedAt) != HolidayPhase.NONE }
+    val holidaySamples = remember(samples, calendar) {
+        samples.filter { holidayPhaseOf(it.startedAt, calendar = calendar) != HolidayPhase.NONE }
     }
-    val byHoliday = remember(holidaySamples) {
-        holidaySamples.groupBy { holidayPhaseOf(it.startedAt) }
+    val byHoliday = remember(holidaySamples, calendar) {
+        holidaySamples.groupBy { holidayPhaseOf(it.startedAt, calendar = calendar) }
             .mapValues { DurationStats.of(it.value) }
     }
     // The sum is offered next to the split, not instead of it: 节前 leaves and
     // 假期中 stays home, so a single average hides both. It is still the number
     // to quote for "a holiday trip", which is why it is here at all.
     val holidayTotal = remember(holidaySamples) { DurationStats.of(holidaySamples) }
-    val outsideCalendar = remember(samples) {
-        samples.any { !Holidays.covers(it.startedAt) }
+    val outsideCalendar = remember(samples, calendar) {
+        samples.any { !calendar.covers(it.startedAt) }
     }
 
     val tracks = remember(legs) {

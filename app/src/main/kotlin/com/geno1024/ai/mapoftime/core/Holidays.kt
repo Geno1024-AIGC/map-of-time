@@ -9,6 +9,10 @@ import java.time.ZoneId
 data class HolidayBlock(val first: LocalDate, val last: LocalDate) {
     operator fun contains(date: LocalDate): Boolean =
         !date.isBefore(first) && !date.isAfter(last)
+
+    /** `2026-10-01..2026-10-07`, the shape preferences and the settings field use. */
+    override fun toString(): String =
+        if (first == last) "$first" else "$first..$last"
 }
 
 /** Where a day sits relative to a public holiday. */
@@ -27,6 +31,90 @@ enum class HolidayPhase {
 }
 
 /**
+ * A holiday calendar: the shipped State Council table, plus what the user added.
+ *
+ * The app does not fetch this. A wrong calendar would silently relabel every
+ * trip in it, and the notices come out once a year — so the table ships, and
+ * anything it does not know (next year's 春节, leave an employer hands out) is
+ * something the user types in once instead of waiting for a release.
+ *
+ * Additions only ever add: a custom block cannot cancel a shipped holiday.
+ * Extending one is the common case (a company that gives two more days), and
+ * [merge] folds touching blocks into one stretch so such an extension still
+ * has exactly one return rush.
+ */
+data class HolidayCalendar(
+    val blocks: List<HolidayBlock>,
+    val makeupWorkdays: Set<LocalDate>,
+    /** Years the shipped table covers; outside them an unlisted day is a plain day. */
+    val builtInYears: IntRange,
+) {
+    fun blockAt(date: LocalDate): HolidayBlock? = blocks.firstOrNull { date in it }
+
+    fun phaseOf(date: LocalDate): HolidayPhase {
+        val block = blockAt(date)
+        if (block != null) {
+            return if (date == block.last) HolidayPhase.LAST else HolidayPhase.DURING
+        }
+        // The day before a block starts is the departure rush, whether or not
+        // it is a weekend: 2026-02-14 is a Saturday that is also 春节's eve.
+        if (blockAt(date.plusDays(1)) != null) return HolidayPhase.EVE
+        return HolidayPhase.NONE
+    }
+
+    /** Working day, with 调休 honoured and holidays excluded. */
+    fun isWorkday(date: LocalDate): Boolean = when {
+        date in makeupWorkdays -> true
+        blockAt(date) != null -> false
+        else -> date.dayOfWeek != DayOfWeek.SATURDAY && date.dayOfWeek != DayOfWeek.SUNDAY
+    }
+
+    /**
+     * Whether the shipped table has anything to say about [date]'s year. False
+     * does not make the day wrong, it makes it a plain weekday — which the
+     * screens say out loud instead of guessing at a holiday.
+     */
+    fun covers(date: LocalDate): Boolean = date.year in builtInYears
+
+    fun covers(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): Boolean =
+        covers(Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate())
+
+    companion object {
+        /** The shipped calendar with [customBlocks] and [customWorkdays] folded in. */
+        fun of(
+            customBlocks: List<HolidayBlock>,
+            customWorkdays: Set<LocalDate>,
+        ): HolidayCalendar {
+            val builtIn = Holidays.builtIn
+            return HolidayCalendar(
+                blocks = merge(builtIn.blocks + customBlocks),
+                makeupWorkdays = builtIn.makeupWorkdays + customWorkdays,
+                builtInYears = builtIn.builtInYears,
+            )
+        }
+
+        /**
+         * Overlapping or adjacent blocks are one stretch: 国庆 plus two days the
+         * employer added is still one departure and one return, not two.
+         */
+        private fun merge(blocks: List<HolidayBlock>): List<HolidayBlock> {
+            if (blocks.isEmpty()) return blocks
+            val sorted = blocks.sortedBy { it.first }
+            val merged = mutableListOf(sorted.first())
+            for (block in sorted.drop(1)) {
+                val last = merged.last()
+                if (block.first.isAfter(last.last.plusDays(1))) {
+                    merged += block
+                } else {
+                    merged[merged.lastIndex] = HolidayBlock(last.first, maxOf(last.last, block.last))
+                }
+            }
+            return merged
+        }
+    }
+}
+
+/**
  * The mainland public holiday calendar, as announced by the State Council.
  *
  * Two things a plain weekday/weekend split gets wrong, and both matter here:
@@ -35,8 +123,8 @@ enum class HolidayPhase {
  * notices; [coveredYears] says how far the table goes, and a date outside it
  * falls back to the plain weekday/weekend rule rather than to a guess.
  *
- * Adding a year is one block plus its makeup workdays. The app does not fetch
- * this: a wrong calendar would silently mislabel every trip in it.
+ * Adding a year is one block plus its makeup workdays — or, without a release,
+ * one entry in Settings (see [HolidayCalendar.of]).
  */
 object Holidays {
     private fun block(first: LocalDate, last: LocalDate) = HolidayBlock(first, last)
@@ -93,32 +181,62 @@ object Holidays {
     /** Years the table knows about; outside it, days are just weekdays and weekends. */
     val coveredYears: IntRange = 2024..2026
 
-    fun covers(date: LocalDate): Boolean = date.year in coveredYears
-
-    fun covers(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): Boolean =
-        covers(Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate())
-
-    fun blockAt(date: LocalDate): HolidayBlock? = blocks.firstOrNull { date in it }
-
-    fun phaseOf(date: LocalDate): HolidayPhase {
-        val block = blockAt(date)
-        if (block != null) {
-            return if (date == block.last) HolidayPhase.LAST else HolidayPhase.DURING
-        }
-        // The day before a block starts is the departure rush, whether or not
-        // it is a weekend: 2026-02-14 is a Saturday that is also 春节's eve.
-        if (blockAt(date.plusDays(1)) != null) return HolidayPhase.EVE
-        return HolidayPhase.NONE
-    }
-
-    /** Working day, with 调休 honoured and holidays excluded. */
-    fun isWorkday(date: LocalDate): Boolean = when {
-        date in makeupWorkdays -> true
-        blockAt(date) != null -> false
-        else -> date.dayOfWeek != DayOfWeek.SATURDAY && date.dayOfWeek != DayOfWeek.SUNDAY
-    }
+    /** The shipped calendar, before anything the user added. */
+    val builtIn: HolidayCalendar by lazy { HolidayCalendar(blocks, makeupWorkdays, coveredYears) }
 }
 
 /** The holiday phase of a moment, read on the local calendar. */
-fun holidayPhaseOf(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): HolidayPhase =
-    Holidays.phaseOf(Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate())
+fun holidayPhaseOf(
+    epochMs: Long,
+    zone: ZoneId = ZoneId.systemDefault(),
+    calendar: HolidayCalendar = Holidays.builtIn,
+): HolidayPhase = calendar.phaseOf(Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate())
+
+/**
+ * Parses one range as typed in Settings: `2026-10-01..2026-10-07`, or a single
+ * `2026-10-01` for a one-day holiday. `null` for anything else, including a
+ * reversed range — a typo must not silently become a holiday.
+ */
+fun parseHolidayBlock(text: String): HolidayBlock? {
+    val bounds = text.trim().split("..").map { it.trim() }
+    if (bounds.isEmpty() || bounds.size > 2) return null
+    val first = runCatching { LocalDate.parse(bounds[0]) }.getOrNull() ?: return null
+    if (bounds.size == 1) return HolidayBlock(first, first)
+    val last = runCatching { LocalDate.parse(bounds[1]) }.getOrNull() ?: return null
+    if (last.isBefore(first)) return null
+    return HolidayBlock(first, last)
+}
+
+/**
+ * Parses a `;`-separated list of ranges; blank pieces are ignored so a trailing
+ * separator is not an error. `null` when any piece fails to parse.
+ */
+fun parseHolidayBlocks(text: String): List<HolidayBlock>? {
+    val pieces = text.split(';', ',', '\n').map { it.trim() }.filter { it.isNotEmpty() }
+    val blocks = mutableListOf<HolidayBlock>()
+    for (piece in pieces) {
+        blocks += parseHolidayBlock(piece) ?: return null
+    }
+    return blocks
+}
+
+/** The inverse of [parseHolidayBlocks], for the preferences and the settings field. */
+fun formatHolidayBlocks(blocks: List<HolidayBlock>): String =
+    blocks.joinToString(";") { it.toString() }
+
+/**
+ * Parses a list of single dates, `,` / `;` / whitespace separated. Used for the
+ * weekends the user's employer turns into working days.
+ */
+fun parseHolidayDates(text: String): Set<LocalDate>? {
+    val pieces = text.split(',', ';', '\n', ' ', '\t').map { it.trim() }.filter { it.isNotEmpty() }
+    val dates = mutableSetOf<LocalDate>()
+    for (piece in pieces) {
+        dates += runCatching { LocalDate.parse(piece) }.getOrNull() ?: return null
+    }
+    return dates
+}
+
+/** The inverse of [parseHolidayDates]. */
+fun formatHolidayDates(dates: Set<LocalDate>): String =
+    dates.sortedBy { it }.joinToString(";") { it.toString() }

@@ -31,6 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.analysis.SegmentSummary
 import com.geno1024.ai.mapoftime.core.TrafficContext
@@ -55,7 +56,12 @@ fun SegmentsScreen(
     // Which part of the week it is, for the "now" number on each card. The
     // card would keep a stale label until the next recomposition if this were
     // remembered, and reading a clock in composition is cheaper than a ticker.
-    val now = TrafficContext.of(System.currentTimeMillis())
+    // The calendar matters here too: a 调休 Saturday is a working day.
+    val settings by viewModel.settings.state.collectAsStateWithLifecycle()
+    val now = TrafficContext.of(
+        epochMs = System.currentTimeMillis(),
+        calendar = settings.holidayCalendar,
+    )
 
     val summaries = remember(viewModel.summaries, modeFilter, sort, query) {
         val text = query.trim()

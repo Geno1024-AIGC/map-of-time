@@ -48,6 +48,10 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.core.Basemap
+import com.geno1024.ai.mapoftime.core.HolidayBlock
+import com.geno1024.ai.mapoftime.core.Holidays
+import com.geno1024.ai.mapoftime.core.parseHolidayBlock
+import com.geno1024.ai.mapoftime.core.parseHolidayDates
 import com.geno1024.ai.mapoftime.update.Mirrors
 import com.geno1024.ai.mapoftime.update.UpdateError
 import com.geno1024.ai.mapoftime.update.UpdateState
@@ -55,6 +59,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.LocalDate
 
 @Composable
 fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
@@ -176,6 +181,21 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                     },
                 )
             }
+
+            HolidayCard(
+                customHolidays = settings.customHolidays,
+                customWorkdays = settings.customWorkdays,
+                onHolidays = { next ->
+                    viewModel.settings.update { it.copy(customHolidays = next) }
+                    // The buckets are keyed by calendar: a changed table means
+                    // a changed "now" number until the next refresh.
+                    viewModel.refresh()
+                },
+                onWorkdays = { next ->
+                    viewModel.settings.update { it.copy(customWorkdays = next) }
+                    viewModel.refresh()
+                },
+            )
 
             SectionCard(title = stringResource(R.string.settings_tiles)) {
                 SwitchRow(
@@ -623,6 +643,176 @@ private fun SliderRow(
             valueRange = range,
         )
     }
+}
+
+/**
+ * The shipped table is right for the years it was written for and wrong the
+ * moment the State Council publishes the next one. Fetching a calendar would
+ * let a bad one silently relabel a year of trips, so the exceptions are typed
+ * in here instead: days off the table does not know, and weekends spent at work.
+ *
+ * Additions only ever add. A company that gives two extra days just extends the
+ * range, and the two blocks that touch are read as one stretch — one departure,
+ * one return.
+ */
+@Composable
+private fun HolidayCard(
+    customHolidays: List<HolidayBlock>,
+    customWorkdays: Set<LocalDate>,
+    onHolidays: (List<HolidayBlock>) -> Unit,
+    onWorkdays: (Set<LocalDate>) -> Unit,
+) {
+    var first by remember { mutableStateOf("") }
+    var last by remember { mutableStateOf("") }
+    var workdayText by remember { mutableStateOf("") }
+    var badBlock by remember { mutableStateOf(false) }
+    var badWorkday by remember { mutableStateOf(false) }
+    val focus = LocalFocusManager.current
+    val badDate = stringResource(R.string.settings_holidays_bad_date)
+
+    SectionCard(title = stringResource(R.string.settings_holidays)) {
+        Text(
+            text = stringResource(R.string.settings_holidays_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(6.dp))
+        KeyValueRow(
+            label = stringResource(R.string.settings_holidays_builtin),
+            value = "${Holidays.coveredYears.first}–${Holidays.coveredYears.last}",
+        )
+
+        if (customHolidays.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.settings_holidays_extra),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            for (block in customHolidays) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = formatHolidayBlock(block),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    TextButton(onClick = { onHolidays(customHolidays - block) }) {
+                        Text(stringResource(R.string.settings_holidays_remove))
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = first,
+                onValueChange = { first = it; badBlock = false },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                label = { Text(stringResource(R.string.settings_holidays_first)) },
+            )
+            OutlinedTextField(
+                value = last,
+                onValueChange = { last = it; badBlock = false },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                label = { Text(stringResource(R.string.settings_holidays_last)) },
+            )
+        }
+        if (badBlock) FieldError(badDate)
+        Spacer(Modifier.height(6.dp))
+        Button(
+            onClick = {
+                val text = if (last.isBlank()) first.trim() else "${first.trim()}..${last.trim()}"
+                val block = parseHolidayBlock(text)
+                if (block == null) {
+                    badBlock = true
+                } else {
+                    onHolidays((customHolidays + block).distinct())
+                    first = ""
+                    last = ""
+                    focus.clearFocus()
+                }
+            },
+            enabled = first.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(stringResource(R.string.settings_holidays_add))
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.settings_holidays_workdays),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            text = stringResource(R.string.settings_holidays_workdays_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        for (day in customWorkdays.sorted()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = formatHolidayDay(day),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                TextButton(onClick = { onWorkdays(customWorkdays - day) }) {
+                    Text(stringResource(R.string.settings_holidays_remove))
+                }
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedTextField(
+                value = workdayText,
+                onValueChange = { workdayText = it; badWorkday = false },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                label = { Text(stringResource(R.string.settings_holidays_workday_label)) },
+            )
+            Button(
+                onClick = {
+                    val days = parseHolidayDates(workdayText)
+                    if (days == null) {
+                        badWorkday = true
+                    } else {
+                        onWorkdays(customWorkdays + days)
+                        workdayText = ""
+                        focus.clearFocus()
+                    }
+                },
+                enabled = workdayText.isNotBlank(),
+            ) {
+                Text(stringResource(R.string.settings_holidays_add_short))
+            }
+        }
+        if (badWorkday) FieldError(badDate)
+
+        if (customHolidays.isNotEmpty() || customWorkdays.isNotEmpty()) {
+            TextButton(
+                onClick = {
+                    onHolidays(emptyList())
+                    onWorkdays(emptySet())
+                },
+            ) {
+                Text(stringResource(R.string.settings_holidays_clear))
+            }
+        }
+    }
+}
+
+@Composable
+private fun FieldError(text: String) {
+    Spacer(Modifier.height(4.dp))
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.error,
+    )
 }
 
 @Composable
