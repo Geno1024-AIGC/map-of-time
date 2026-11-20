@@ -114,6 +114,14 @@ fun TrafficContext.samples(
 ): List<TraversalSample> = samples.filter { TrafficContext.of(it.startedAt, zone) == this }
 
 /**
+ * The bucket's typical time when it holds enough samples to have one.
+ * `null` means "not this one" — the caller falls back to the pooled median
+ * rather than printing a median of two trips as if it meant something.
+ */
+fun Map<TrafficContext, BucketTake>.takeAt(context: TrafficContext): BucketTake? =
+    this[context]?.takeIf { !it.isThin }
+
+/**
  * Sorts [samples] into the four contexts in one pass, so a page with four
  * buckets and a few hundred traversals does not convert every timestamp four
  * times over.

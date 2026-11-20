@@ -171,3 +171,26 @@ data class DurationStats(
         }
     }
 }
+
+/**
+ * One bucket's typical time, cut down to the two numbers a list card prints.
+ *
+ * A summary keeps eight of these per segment (four contexts, two directions).
+ * Holding a full [DurationStats] for each would be a kilobyte of percentiles
+ * per row to show one number and a sample count.
+ */
+data class BucketTake(val medianMs: Long, val count: Int) {
+    /** Too few samples to call anything typical; the caller shows the pooled median instead. */
+    val isThin: Boolean get() = count < DurationStats.MIN_SAMPLES
+
+    companion object {
+        /** No traversal in this bucket at all. */
+        val NONE = BucketTake(0, 0)
+
+        fun of(samples: List<TraversalSample>): BucketTake {
+            if (samples.isEmpty()) return NONE
+            val stats = DurationStats.of(samples)
+            return BucketTake(stats.medianMs, stats.count)
+        }
+    }
+}

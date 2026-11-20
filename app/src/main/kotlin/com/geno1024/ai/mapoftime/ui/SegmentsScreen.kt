@@ -33,8 +33,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.analysis.SegmentSummary
-import com.geno1024.ai.mapoftime.core.DurationStats
+import com.geno1024.ai.mapoftime.core.TrafficContext
 import com.geno1024.ai.mapoftime.core.TripMode
+import com.geno1024.ai.mapoftime.core.takeAt
 
 /** How the segment list is ordered. Every one is a question the user asks. */
 private enum class SegmentSort { RECENT, SAMPLES, SLOWEST, NAME }
@@ -50,6 +51,11 @@ fun SegmentsScreen(
     var query by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) { viewModel.refresh() }
+
+    // Which part of the week it is, for the "now" number on each card. The
+    // card would keep a stale label until the next recomposition if this were
+    // remembered, and reading a clock in composition is cheaper than a ticker.
+    val now = TrafficContext.of(System.currentTimeMillis())
 
     val summaries = remember(viewModel.summaries, modeFilter, sort, query) {
         val text = query.trim()
@@ -116,7 +122,11 @@ fun SegmentsScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(summaries, key = { it.segment.id }) { summary ->
-                SegmentCard(summary = summary, onClick = { onOpenSegment(summary.segment.id) })
+                SegmentCard(
+                    summary = summary,
+                    now = now,
+                    onClick = { onOpenSegment(summary.segment.id) },
+                )
             }
         }
     }
@@ -141,8 +151,22 @@ private val SegmentSummary.displayName: String
     get() = segment.displayName
 
 @Composable
-private fun SegmentCard(summary: SegmentSummary, onClick: () -> Unit) {
+private fun SegmentCard(summary: SegmentSummary, now: TrafficContext, onClick: () -> Unit) {
     val segment = summary.segment
+    // Two carriageways, two numbers: the combined median of a divided road
+    // describes neither side. With one direction only, the median is that
+    // side and the big number stays.
+    val divided = summary.forward.count > 0 && summary.backward.count > 0
+    // A bucket of one or two trips is not a typical time, so it falls back to
+    // the pooled median. For a divided road both sides have to come from the
+    // same bucket, or the pair stops being comparable — which is the only
+    // reason it is shown as a pair.
+    val forwardNow = summary.forwardTakes.takeAt(now)
+    val backwardNow = summary.backwardTakes.takeAt(now)
+    val singleNow = if (summary.forward.count > 0) forwardNow else backwardNow
+    val specific = if (divided) forwardNow != null && backwardNow != null else singleNow != null
+    val nowLabel = dayKindLabel(now.day) + " · " + peakLabel(now.peak)
+
     SectionCard(modifier = Modifier.clickable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -164,21 +188,18 @@ private fun SegmentCard(summary: SegmentSummary, onClick: () -> Unit) {
             MatchBadge(segment.identity)
         }
         Spacer(Modifier.height(10.dp))
-        // Two carriageways, two numbers: the combined median of a divided road
-        // describes neither side. With one direction only, the median is that
-        // side and the big number stays.
-        if (summary.forward.count > 0 && summary.backward.count > 0) {
+        if (divided) {
             Row(verticalAlignment = Alignment.Bottom) {
                 val from = stringResource(R.string.segment_from)
                 val to = stringResource(R.string.segment_to)
                 DirectionTime(
                     label = segment.forwardName ?: "$from → $to",
-                    stats = summary.forward,
+                    ms = forwardNow?.medianMs ?: summary.forward.typicalMs,
                     modifier = Modifier.weight(1f),
                 )
                 DirectionTime(
                     label = segment.backwardName ?: "$to → $from",
-                    stats = summary.backward,
+                    ms = backwardNow?.medianMs ?: summary.backward.typicalMs,
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(8.dp))
@@ -186,30 +207,37 @@ private fun SegmentCard(summary: SegmentSummary, onClick: () -> Unit) {
             }
         } else {
             Row(verticalAlignment = Alignment.Bottom) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = if (summary.sampleCount == 0) "—" else formatSeconds(summary.combined.typicalMs),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = stringResource(R.string.typical_time),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Text(
+                    text = if (summary.sampleCount == 0) "—" else
+                        formatSeconds(singleNow?.medianMs ?: summary.combined.typicalMs),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
                 ConfidenceBadge(summary.combined.confidence)
             }
+        }
+        if (summary.sampleCount > 0) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = if (specific) {
+                    stringResource(R.string.typical_now, nowLabel)
+                } else {
+                    stringResource(R.string.typical_now_thin, nowLabel)
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
 
 /** One direction's typical time on the list card. */
 @Composable
-private fun DirectionTime(label: String, stats: DurationStats, modifier: Modifier = Modifier) {
+private fun DirectionTime(label: String, ms: Long, modifier: Modifier = Modifier) {
     Column(modifier) {
         Text(
-            text = if (stats.count == 0) "—" else formatSeconds(stats.typicalMs),
+            text = formatSeconds(ms),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
         )
