@@ -1,0 +1,88 @@
+package com.geno1024.ai.mapoftime.analysis
+
+import com.geno1024.ai.mapoftime.core.LatLon
+import com.geno1024.ai.mapoftime.core.TripMode
+import com.geno1024.ai.mapoftime.data.MatchKind
+import com.geno1024.ai.mapoftime.data.Segment
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class PointDetailsTest {
+    /** One degree of latitude is ~111 km; one metre of longitude is wider. */
+    private val metre = 1.0 / 111_320.0
+    private val centre = LatLon(31.2, 121.4)
+
+    private fun at(eastM: Double, northM: Double): LatLon = LatLon(
+        centre.lat + northM * metre,
+        centre.lon + eastM * metre / 0.855,
+    )
+
+    private fun road(name: String?): Segment = Segment(
+        id = 1,
+        key = "osm:1-osm:2",
+        mode = TripMode.DRIVE,
+        name = name,
+        identity = MatchKind.OSM,
+        aLat = centre.lat,
+        aLon = centre.lon,
+        bLat = centre.lat,
+        bLon = centre.lon,
+        lengthM = 30.0,
+        firstSeen = 0,
+        lastSeen = 0,
+        fromKey = "osm:1",
+        toKey = "osm:2",
+    )
+
+    @Test
+    fun aPointOnTheNorthSideIsSaidSo() {
+        assertEquals("北侧", PointDetails.of(at(0.0, 100.0), centre).bearing)
+        assertEquals("南侧", PointDetails.of(at(0.0, -100.0), centre).bearing)
+        assertEquals("东侧", PointDetails.of(at(100.0, 0.0), centre).bearing)
+    }
+
+    @Test
+    fun aCornerGetsTheDiagonalSector() {
+        assertEquals("东南侧", PointDetails.of(at(100.0, -100.0), centre).bearing)
+        assertEquals("西北侧", PointDetails.of(at(-100.0, 100.0), centre).bearing)
+    }
+
+    @Test
+    fun aPointAtTheCentreHasNoSide() {
+        assertNull(PointDetails.of(centre, centre).bearing)
+    }
+
+    @Test
+    fun roadsAreDistinctAndDropTheJunctionName() {
+        val detail = PointDetails.of(
+            at(0.0, 100.0),
+            centre,
+            placeName = "人民广场",
+            touching = listOf(
+                road("建国路"),
+                road("人民路"),
+                road("建国路"),
+                road("人民广场"),
+                road(null),
+                road("  "),
+            ),
+        )
+        assertEquals(listOf("建国路", "人民路"), detail.roads)
+    }
+
+    @Test
+    fun theCaptionJoinsBearingAndRoadsWithoutNamingWork() {
+        val detail = PointDetails.of(
+            at(0.0, 100.0),
+            centre,
+            touching = listOf(road("人民路"), road("建国路")),
+        )
+        assertEquals("北侧 · 人民路 × 建国路", detail.label)
+    }
+
+    @Test
+    fun aPointWithNothingToSayHasNoCaption() {
+        assertNull(PointDetails.of(centre, centre).label)
+    }
+}

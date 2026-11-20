@@ -93,14 +93,25 @@ fun NetworkScreen(
     val previewKeys = remember(preview) {
         preview?.refs?.mapTo(HashSet()) { it.key } ?: emptySet<String>()
     }
-    val markers = remember(graph, selectedKey, previewKeys) {
+    // While picking points for one junction, the dots need to be tellable
+    // apart: a bare "X" on all twenty of them is useless. Their auto-derived
+    // side + road caption goes on the map, without asking for a single name.
+    val markers = remember(graph, selectedKey, previewKeys, preview, viewModel.summaries, viewModel.places) {
         graph.nodes.map { node ->
+            // Only the draft's own points get a preview-relative caption; a
+            // far node in another junction has no business being described by
+            // this preview's centre.
+            val caption = if (preview != null && node.key in previewKeys) {
+                viewModel.pointDetail(node.key, node.at, preview)?.label
+            } else {
+                null
+            }
             MapMarker(
                 at = node.at,
                 emphasized = node.key == selectedKey || node.key in previewKeys,
                 // Only names: a wall of node ids would hide the map. The
                 // selected node still needs one even when it is unnamed.
-                label = if (node.key == selectedKey) node.name ?: node.key else node.name,
+                label = caption ?: if (node.key == selectedKey) node.name ?: node.key else node.name,
             )
         }
     }
@@ -261,6 +272,7 @@ fun NetworkScreen(
                     NodeCard(
                         node = selected,
                         graph = graph,
+                        detail = viewModel.pointDetail(selected.key, selected.at)?.label,
                         onOpenSegment = onOpenSegment,
                         onNamePlace = {
                             val ref = PointRef.parse(selected.key)
@@ -284,6 +296,8 @@ fun NetworkScreen(
 private fun NodeCard(
     node: NetworkNode,
     graph: NetworkGraph,
+    /** Auto-derived "north side · People's Rd" caption, never a typed name. */
+    detail: String?,
     onOpenSegment: (Long) -> Unit,
     onNamePlace: () -> Unit,
 ) {
@@ -300,6 +314,13 @@ private fun NodeCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (detail != null) {
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             Pill(
                 text = stringResource(R.string.network_degree, node.degree),

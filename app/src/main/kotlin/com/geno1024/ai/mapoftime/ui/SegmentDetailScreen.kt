@@ -132,12 +132,19 @@ fun SegmentDetailScreen(
     // Both ends of a piece inside one junction carry the same name; saying
     // "X → X" would be noise, so the direction is labelled "inside X" instead.
     val insideJunction = segment?.let { it.fromName?.takeIf { name -> name == it.toName } }
-    val forwardLabel = segment?.forwardName
-        ?: insideJunction?.let { stringResource(R.string.segment_inside_junction, it) }
-        ?: "$fromLabel → $toLabel"
-    val backwardLabel = segment?.backwardName
-        ?: insideJunction?.let { stringResource(R.string.segment_inside_junction, it) }
-        ?: "$toLabel → $fromLabel"
+    // Inside one wide junction both ends share a name, so "X → X" says nothing.
+    // The OSM road this little piece belongs to does say something: it tells
+    // which arm of the interchange the traversal was on.
+    val insideRoad = segment?.name?.takeIf { it.isNotBlank() && it != insideJunction }
+    val insideText = insideJunction?.let { name ->
+        if (insideRoad == null) {
+            stringResource(R.string.segment_inside_junction, name)
+        } else {
+            stringResource(R.string.segment_inside_junction_road, name, insideRoad)
+        }
+    }
+    val forwardLabel = segment?.forwardName ?: insideText ?: "$fromLabel → $toLabel"
+    val backwardLabel = segment?.backwardName ?: insideText ?: "$toLabel → $fromLabel"
     val markers = remember(segment, fromLabel, toLabel, preview) {
         val members = preview?.refs?.mapTo(HashSet()) { it.key } ?: emptySet()
         segment?.let {

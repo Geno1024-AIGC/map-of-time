@@ -46,6 +46,7 @@
     <string name="place_name_action">Name junction</string>
     <string name="place_member_count">%1$d points share this name</string>
     <string name="segment_inside_junction">inside %1$s</string>
+    <string name="segment_inside_junction_road">inside %1$s · %2$s</string>
     <string name="nav_segments">Segments</string>
     <string name="nav_settings">Settings</string>
 
