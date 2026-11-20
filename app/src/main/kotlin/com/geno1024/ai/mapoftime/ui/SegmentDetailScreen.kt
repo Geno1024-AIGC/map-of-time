@@ -45,8 +45,10 @@ import com.geno1024.ai.mapoftime.core.PeakHour
 import com.geno1024.ai.mapoftime.core.Polyline
 import com.geno1024.ai.mapoftime.core.TimeBucket
 import com.geno1024.ai.mapoftime.core.TrafficContext
+import com.geno1024.ai.mapoftime.core.TrafficDay
 import com.geno1024.ai.mapoftime.core.groupByTrafficContext
 import com.geno1024.ai.mapoftime.core.holidayPhaseOf
+import com.geno1024.ai.mapoftime.core.trafficDayOf
 import com.geno1024.ai.mapoftime.core.samples
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.data.Leg
@@ -91,8 +93,15 @@ fun SegmentDetailScreen(
     // that quietly averaged 春节 into "weekday off-peak" would be worse than
     // no table at all.
     val calendar = settings.holidayCalendar
+    // Three kinds of day, counted once each: the routine week the table
+    // measures, the Friday evening rush, and holidays.
     val routineSamples = remember(samples, calendar) {
-        samples.filter { holidayPhaseOf(it.startedAt, calendar = calendar) == HolidayPhase.NONE }
+        samples.filter { trafficDayOf(it.startedAt, calendar = calendar) == TrafficDay.ROUTINE }
+    }
+    val fridayStats = remember(samples, calendar) {
+        DurationStats.of(
+            samples.filter { trafficDayOf(it.startedAt, calendar = calendar) == TrafficDay.FRIDAY_RUSH },
+        )
     }
     val byContext = remember(routineSamples, calendar) {
         val grouped = groupByTrafficContext(routineSamples, calendar = calendar)
@@ -458,6 +467,41 @@ fun SegmentDetailScreen(
                         subtitle = stringResource(R.string.segment_by_day_hint),
                     ) {
                         TrafficMatrix(byContext)
+                        if (fridayStats.count > 0) {
+                            Spacer(Modifier.height(10.dp))
+                            ThinDivider()
+                            Spacer(Modifier.height(8.dp))
+                            KeyValueRow(
+                                label = stringResource(R.string.day_friday_rush),
+                                value = formatSeconds(fridayStats.medianMs) + " · " +
+                                    pluralStringResource(
+                                        R.plurals.samples_count,
+                                        fridayStats.count,
+                                        fridayStats.count,
+                                    ),
+                            )
+                            // The comparison is what makes the row useful: "5:31"
+                            // alone does not say whether Friday really is worse.
+                            val weekdayPeak = byContext.getValue(
+                                TrafficContext(DayKind.WEEKDAY, PeakHour.PEAK),
+                            )
+                            if (
+                                fridayStats.count >= DurationStats.MIN_SAMPLES &&
+                                weekdayPeak.count >= DurationStats.MIN_SAMPLES
+                            ) {
+                                Text(
+                                    text = stringResource(
+                                        R.string.day_friday_rush_vs,
+                                        formatPercentDelta(
+                                            fridayStats.medianMs,
+                                            weekdayPeak.medianMs,
+                                        ),
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                     }
                 }
 
