@@ -88,6 +88,14 @@ object PlaceDrafts {
     /** A gate against a pathological chain; a real junction is well under this. */
     const val MAX_POINTS = 32
 
+    /**
+     * How far apart two same-name places may be and still be joined when the
+     * user types that name. The widest junction the UI can preview is 400 m,
+     * so anything within that is one junction the user is still building;
+     * further away it is a different crossing that happens to share a name.
+     */
+    val SAME_NAME_MERGE_M: Double get() = REACH_STEPS_M.last()
+
     /** Adoption needs a floor, or a one-point junction would swallow nothing. */
     const val MIN_ADOPT_M = 25.0
 
@@ -269,6 +277,23 @@ object PlaceDrafts {
             carried = carried,
             absorbIds = twinIds,
         )
+    }
+
+    /**
+     * The existing junction a name typed at save time should join. The name is
+     * typed by the user, so an identical name on a nearby junction is an
+     * instruction — "add me there" — not a coincidence to be replicated into
+     * a second row. That second row is exactly what makes the two halves of a
+     * wide T impossible to merge later. Far-away same-name places are left
+     * alone: a city can have two crossings with the same name.
+     */
+    fun sameNameTarget(places: List<Place>, name: String?, draft: PlaceDraft): Place? {
+        val trimmed = name?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        return places.asSequence()
+            .filter { it.id != draft.existingPlaceId }
+            .filter { it.name == trimmed }
+            .filter { Geo.distanceMeters(it.at, draft.center) <= SAME_NAME_MERGE_M }
+            .minByOrNull { Geo.distanceMeters(it.at, draft.center) }
     }
 
     /**
