@@ -87,6 +87,12 @@ fun TrackMap(
      * used as the camera bounds, so tapping a leg zooms the map to it.
      */
     highlight: List<LatLon>? = null,
+    /**
+     * Called with the index into [markers] when a tap lands on one. The map
+     * does the hit test in screen space, so callers never have to undo the
+     * projection (or the GCJ-02 shift) themselves.
+     */
+    onMarkerTap: ((Int) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
@@ -130,6 +136,16 @@ fun TrackMap(
     }
     var zoom by remember(bounds) { mutableStateOf(15f) }
     var userMoved by remember { mutableStateOf(false) }
+
+    // Screen position of a marker right now, using the same fractional-zoom
+    // world the canvas draws with. Only read from the tap handler.
+    val projectMarker: (LatLon) -> Offset = { point ->
+        val world = MapCamera.worldSize(zoom.toDouble())
+        Offset(
+            ((lonToX(point.lon, world) - lonToX(center.lon, world)) + size.width / 2.0).toFloat(),
+            ((latToY(point.lat, world) - latToY(center.lat, world)) + size.height / 2.0).toFloat(),
+        )
+    }
 
     LaunchedEffect(bounds, size) {
         if (bounds != null && size.width > 1f && size.height > 1f) {
@@ -224,8 +240,22 @@ fun TrackMap(
                             }
                         }
                     }
-                    .pointerInput(Unit) {
+                    .pointerInput(displayMarkers, onMarkerTap, center, zoom, size) {
                         detectTapGestures(
+                            onTap = { tap ->
+                                val handler = onMarkerTap ?: return@detectTapGestures
+                                val reach = 22.dp.toPx()
+                                var bestIndex = -1
+                                var bestDistance = Float.MAX_VALUE
+                                displayMarkers.forEachIndexed { index, marker ->
+                                    val distance = (projectMarker(marker.at) - tap).getDistance()
+                                    if (distance < bestDistance) {
+                                        bestDistance = distance
+                                        bestIndex = index
+                                    }
+                                }
+                                if (bestIndex >= 0 && bestDistance <= reach) handler(bestIndex)
+                            },
                             onDoubleTap = { tap ->
                                 val targetZoom = (zoom + 1f).coerceAtMost(maxZoom.toFloat())
                                 val ratio = 2.0.pow((targetZoom - zoom).toDouble())

@@ -28,8 +28,22 @@
 
     <string name="nav_record">Record</string>
     <string name="nav_trips">Trips</string>
+    <string name="nav_network">Network</string>
     <string name="nav_segments">Segments</string>
     <string name="nav_settings">Settings</string>
+
+    <string name="network_title">Network</string>
+    <string name="network_summary">%1$d junctions · %2$d segments</string>
+    <string name="network_summary_parts">%1$d junctions · %2$d segments · %3$d unconnected clusters</string>
+    <string name="network_hint">Tap a junction to see the segments leaving it</string>
+    <string name="network_pick_node">Tap a dot on the map to see what leaves that junction.</string>
+    <string name="network_node_unnamed">Unnamed junction</string>
+    <string name="network_degree">%1$d segments</string>
+    <string name="network_other_unnamed">unnamed end</string>
+    <string name="network_out_time">Away %1$s</string>
+    <string name="network_back_time">Back %1$s</string>
+    <string name="network_empty_title">No network yet</string>
+    <string name="network_empty_body">Analyse a trip with OSM junctions and the roads you travelled appear here, connected at the crossings they share.</string>
 
     <string name="match_osm">OSM junctions</string>
     <string name="match_geometric">Local corners</string>
