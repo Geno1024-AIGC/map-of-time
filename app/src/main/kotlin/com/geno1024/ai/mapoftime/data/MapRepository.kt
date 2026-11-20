@@ -593,6 +593,12 @@ class MapRepository(private val helper: MapDb) {
         center: LatLon,
         radiusM: Double,
         clearMemberNames: Boolean = false,
+        /**
+         * Same-name rows folded into this junction by the place draft. Their
+         * points are already in [members]; deleting the rows (their
+         * place_points cascade away) leaves one row for the whole junction.
+         */
+        absorbIds: List<Long> = emptyList(),
     ): Long? {
         val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
         var placeId = id
@@ -617,6 +623,11 @@ class MapRepository(private val helper: MapDb) {
                 id
             }
             val target = placeId ?: return@transaction
+            for (otherId in absorbIds) {
+                if (otherId != target) {
+                    db.delete("places", "id = ?", arrayOf(otherId.toString()))
+                }
+            }
             if (clearMemberNames) {
                 for (ref in members.distinctBy { it.key }) {
                     db.delete(
