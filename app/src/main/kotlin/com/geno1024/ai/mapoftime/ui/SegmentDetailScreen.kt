@@ -97,11 +97,17 @@ fun SegmentDetailScreen(
         val grouped = groupByTrafficContext(routineSamples)
         TrafficContext.ordered.associateWith { DurationStats.of(grouped[it].orEmpty()) }
     }
-    val byHoliday = remember(samples) {
+    val holidaySamples = remember(samples) {
         samples.filter { holidayPhaseOf(it.startedAt) != HolidayPhase.NONE }
-            .groupBy { holidayPhaseOf(it.startedAt) }
+    }
+    val byHoliday = remember(holidaySamples) {
+        holidaySamples.groupBy { holidayPhaseOf(it.startedAt) }
             .mapValues { DurationStats.of(it.value) }
     }
+    // The sum is offered next to the split, not instead of it: 节前 leaves and
+    // 假期中 stays home, so a single average hides both. It is still the number
+    // to quote for "a holiday trip", which is why it is here at all.
+    val holidayTotal = remember(holidaySamples) { DurationStats.of(holidaySamples) }
     val outsideCalendar = remember(samples) {
         samples.any { !Holidays.covers(it.startedAt) }
     }
@@ -470,6 +476,20 @@ fun SegmentDetailScreen(
                                             R.plurals.samples_count,
                                             holidayStats.count,
                                             holidayStats.count,
+                                        ),
+                                )
+                            }
+                            if (byHoliday.size > 1) {
+                                Spacer(Modifier.height(4.dp))
+                                ThinDivider()
+                                Spacer(Modifier.height(4.dp))
+                                KeyValueRow(
+                                    label = stringResource(R.string.holiday_total),
+                                    value = formatSeconds(holidayTotal.medianMs) + " · " +
+                                        pluralStringResource(
+                                            R.plurals.samples_count,
+                                            holidayTotal.count,
+                                            holidayTotal.count,
                                         ),
                                 )
                             }
