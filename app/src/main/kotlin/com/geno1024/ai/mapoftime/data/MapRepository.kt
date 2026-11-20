@@ -144,6 +144,11 @@ class MapRepository(private val helper: MapDb) {
             renamePoint(point.ref, point.name)
             knownPoints[point.ref.key] = point.name
         }
+        // Junctions travel too. A point name restored above still wins over
+        // the junction name, exactly as it does locally.
+        for (place in bundle.places) {
+            mergePlace(place.name, place.center, place.radiusM, place.points)
+        }
 
         fun segmentFor(mode: TripMode, key: String?): Long? {
             if (key.isNullOrBlank()) return null
@@ -354,11 +359,14 @@ class MapRepository(private val helper: MapDb) {
      * Segments carry the names of their two ends so a single point name can
      * rename every segment through it. The join is on the full point key; the
      * name table is tiny, so the concatenation costs nothing worth avoiding.
+     *
+     * `point_labels` is the effective name: a point's own name when it has
+     * one, otherwise the name of the junction it belongs to.
      */
     private val segmentSelect: String
         get() = "SELECT s.*, pf.name AS from_name, pt.name AS to_name FROM segments s " +
-            "LEFT JOIN point_names pf ON pf.kind || ':' || pf.node_id = s.from_key " +
-            "LEFT JOIN point_names pt ON pt.kind || ':' || pt.node_id = s.to_key"
+            "LEFT JOIN point_labels pf ON pf.kind || ':' || pf.node_id = s.from_key " +
+            "LEFT JOIN point_labels pt ON pt.kind || ':' || pt.node_id = s.to_key"
 
     fun segment(id: Long): Segment? =
         db.rawQuery("$segmentSelect WHERE s.id = ?", arrayOf(id.toString())).use { cursor ->
@@ -457,6 +465,20 @@ class MapRepository(private val helper: MapDb) {
             }
         }
 
+    /**
+     * What every point is called right now: its own name if it has one, the
+     * junction's otherwise. The analyser reads this once per trip so the legs
+     * it writes already agree with what the lists show.
+     */
+    fun pointLabels(): Map<String, String> =
+        db.rawQuery("SELECT kind, node_id, name FROM point_labels", null).use { cursor ->
+            buildMap {
+                while (cursor.moveToNext()) {
+                    put("${cursor.getString(0)}:${cursor.getLong(1)}", cursor.getString(2))
+                }
+            }
+        }
+
     fun namedPoints(): List<NamedPoint> =
         db.rawQuery("SELECT kind, node_id, name FROM point_names ORDER BY name", null).use { cursor ->
             buildList {
@@ -489,22 +511,206 @@ class MapRepository(private val helper: MapDb) {
                     SQLiteDatabase.CONFLICT_REPLACE,
                 )
             }
-            val ids = ArrayList<Long>()
-            db.rawQuery(
-                "SELECT id FROM segments WHERE from_key = ? OR to_key = ?",
-                arrayOf(ref.key, ref.key),
-            ).use { cursor ->
-                while (cursor.moveToNext()) ids += cursor.getLong(0)
+            relabelSegmentsTouching(listOf(ref.key))
+        }
+    }
+
+    /**
+     * Legs carry a copy of their segment's label, so renaming a point or a
+     * junction has to rewrite them in the same transaction. Otherwise the trip
+     * list would keep the old label until the next analysis, and the two would
+     * quietly disagree in the meantime.
+     */
+    private fun relabelSegmentsTouching(keys: Collection<String>) {
+        if (keys.isEmpty()) return
+        val placeholders = keys.joinToString(",") { "?" }
+        val args = keys.toTypedArray()
+        val ids = ArrayList<Long>()
+        db.rawQuery(
+            "SELECT id FROM segments WHERE from_key IN ($placeholders) OR to_key IN ($placeholders)",
+            args + args,
+        ).use { cursor -> while (cursor.moveToNext()) ids += cursor.getLong(0) }
+        for (id in ids) {
+            val segment = segment(id) ?: continue
+            db.update(
+                "legs",
+                ContentValues().apply { put("label", segment.preferredLabel) },
+                "segment_id = ?",
+                arrayOf(id.toString()),
+            )
+        }
+    }
+
+    // ------------------------------------------------------------- places
+
+    /** Every junction the user has named, with the points under it. */
+    fun places(): List<Place> {
+        val members = HashMap<Long, MutableList<PointRef>>()
+        db.rawQuery("SELECT place_id, kind, node_id FROM place_points", null).use { cursor ->
+            while (cursor.moveToNext()) {
+                members.getOrPut(cursor.getLong(0)) { ArrayList() } +=
+                    PointRef(cursor.getString(1), cursor.getLong(2))
             }
-            for (id in ids) {
-                val segment = segment(id) ?: continue
-                db.update(
-                    "legs",
-                    ContentValues().apply { put("label", segment.preferredLabel) },
-                    "segment_id = ?",
-                    arrayOf(id.toString()),
+        }
+        return db.rawQuery(
+            "SELECT id, name, lat, lon, radius_m FROM places ORDER BY name",
+            null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(0)
+                    add(
+                        Place(
+                            id = id,
+                            name = cursor.getString(1),
+                            at = LatLon(cursor.getDouble(2), cursor.getDouble(3)),
+                            radiusM = cursor.getDouble(4),
+                            points = members[id].orEmpty(),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Names a junction, or dissolves it when [name] is blank.
+     *
+     * [members] replaces the whole membership: the caller hands over the set it
+     * wants the name to cover, so the points that grew in since the last edit
+     * are included and any the user took out are released. A point keeps its
+     * own name if it has one — an override stays an override.
+     */
+    fun upsertPlace(
+        id: Long?,
+        name: String?,
+        members: List<PointRef>,
+        center: LatLon,
+        radiusM: Double,
+    ): Long? {
+        val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
+        var placeId = id
+        db.transaction {
+            val previous = if (id == null) emptyList() else placePoints(id)
+            if (trimmed == null) {
+                if (id != null) db.delete("places", "id = ?", arrayOf(id.toString()))
+                relabelSegmentsTouching(previous.map { it.key })
+                return@transaction
+            }
+            val values = ContentValues().apply {
+                put("name", trimmed)
+                put("lat", center.lat)
+                put("lon", center.lon)
+                put("radius_m", radiusM)
+            }
+            placeId = if (id == null) {
+                values.put("created_at", System.currentTimeMillis())
+                db.insert("places", null, values)
+            } else {
+                db.update("places", values, "id = ?", arrayOf(id.toString()))
+                id
+            }
+            val target = placeId ?: return@transaction
+            db.delete("place_points", "place_id = ?", arrayOf(target.toString()))
+            for (ref in members.distinctBy { it.key }) {
+                db.insertWithOnConflict(
+                    "place_points",
+                    null,
+                    ContentValues().apply {
+                        put("kind", ref.kind)
+                        put("node_id", ref.nodeId)
+                        put("place_id", target)
+                    },
+                    SQLiteDatabase.CONFLICT_REPLACE,
                 )
             }
+            relabelSegmentsTouching((previous + members).map { it.key })
+        }
+        return placeId
+    }
+
+    /**
+     * Restores a junction from an export. A place this install already knows
+     * under the same name keeps its points and gains the imported ones, so
+     * importing a file from another device adds to the junction instead of
+     * replacing it.
+     */
+    fun mergePlace(name: String, center: LatLon, radiusM: Double, members: List<PointRef>): Long? {
+        val trimmed = name.trim().takeIf { it.isNotEmpty() } ?: return null
+        val (existingId, existingRadius) = db.rawQuery(
+            "SELECT id, radius_m FROM places WHERE name = ? LIMIT 1",
+            arrayOf(trimmed),
+        ).use { cursor ->
+            if (cursor.moveToNext()) cursor.getLong(0) to cursor.getDouble(1) else null to 0.0
+        }
+        val merged = if (existingId == null) members else placePoints(existingId) + members
+        return upsertPlace(
+            id = existingId,
+            name = trimmed,
+            members = merged,
+            center = center,
+            radiusM = maxOf(radiusM, existingRadius),
+        )
+    }
+
+    private fun placePoints(placeId: Long): List<PointRef> =
+        db.rawQuery(
+            "SELECT kind, node_id FROM place_points WHERE place_id = ?",
+            arrayOf(placeId.toString()),
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(PointRef(cursor.getString(0), cursor.getLong(1)))
+            }
+        }
+
+    /**
+     * Lets the points that turned up during the last analysis join the
+     * junction they fell inside, so a name given once keeps covering the
+     * corners that later turning movements discover.
+     *
+     * Run after an analysis or an import rather than per leg: one pass costs
+     * a couple of queries, and a point that is already named or already a
+     * member is left alone.
+     */
+    fun adoptNewEndpoints() {
+        val places = places()
+        if (places.isEmpty()) return
+        val owned = HashSet<String>()
+        db.rawQuery("SELECT kind, node_id FROM place_points", null).use { cursor ->
+            while (cursor.moveToNext()) owned += "${cursor.getString(0)}:${cursor.getLong(1)}"
+        }
+        db.rawQuery("SELECT kind, node_id FROM point_names", null).use { cursor ->
+            while (cursor.moveToNext()) owned += "${cursor.getString(0)}:${cursor.getLong(1)}"
+        }
+
+        val candidates = LinkedHashMap<String, LatLon>()
+        val endpointSelect =
+            "SELECT from_key, a_lat, a_lon FROM segments WHERE from_key IS NOT NULL " +
+                "UNION ALL SELECT to_key, b_lat, b_lon FROM segments WHERE to_key IS NOT NULL"
+        db.rawQuery(endpointSelect, null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val ref = PointRef.parse(cursor.getString(0)) ?: continue
+                if (!owned.add(ref.key)) continue
+                candidates[ref.key] = LatLon(cursor.getDouble(1), cursor.getDouble(2))
+            }
+        }
+        if (candidates.isEmpty()) return
+
+        for ((key, at) in candidates) {
+            val ref = PointRef.parse(key) ?: continue
+            val nearest = places.minByOrNull { Geo.distanceMeters(at, it.at) } ?: continue
+            if (Geo.distanceMeters(at, nearest.at) > nearest.radiusM) continue
+            db.insertWithOnConflict(
+                "place_points",
+                null,
+                ContentValues().apply {
+                    put("kind", ref.kind)
+                    put("node_id", ref.nodeId)
+                    put("place_id", nearest.id)
+                },
+                SQLiteDatabase.CONFLICT_IGNORE,
+            )
+            relabelSegmentsTouching(listOf(ref.key))
         }
     }
 

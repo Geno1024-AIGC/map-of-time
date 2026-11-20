@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -32,10 +34,13 @@ import com.geno1024.ai.mapoftime.analysis.NetworkGraph
 import com.geno1024.ai.mapoftime.analysis.NetworkGraphs
 import com.geno1024.ai.mapoftime.analysis.NetworkLink
 import com.geno1024.ai.mapoftime.analysis.NetworkNode
+import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.core.DurationStats
 import com.geno1024.ai.mapoftime.core.TripMode
+import com.geno1024.ai.mapoftime.data.PointRef
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
 import com.geno1024.ai.mapoftime.ui.map.TrackMap
+import kotlinx.coroutines.launch
 
 /**
  * The segments as a network: junctions are the dots, segments the lines
@@ -51,6 +56,8 @@ fun NetworkScreen(
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
     var modeFilter by remember { mutableStateOf<TripMode?>(null) }
     var selectedKey by remember { mutableStateOf<String?>(null) }
+    var namingPlace by remember { mutableStateOf<PlaceDraft?>(null) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 
@@ -79,6 +86,24 @@ fun NetworkScreen(
     }
     val selectNode = remember(graph) {
         { index: Int -> selectedKey = graph.nodes.getOrNull(index)?.key }
+    }
+
+    namingPlace?.let { draft ->
+        PlaceNameDialog(
+            initial = selected?.name.orEmpty(),
+            pointCount = draft.count,
+            spanM = draft.spanM,
+            named = draft.existingPlaceId != null,
+            onDismiss = { namingPlace = null },
+            onSave = { name ->
+                namingPlace = null
+                scope.launch { viewModel.namePlace(draft, name) }
+            },
+            onSavePointOnly = { name ->
+                namingPlace = null
+                scope.launch { viewModel.renamePoint(draft.seed, name) }
+            },
+        )
     }
 
     Column(modifier.fillMaxSize()) {
@@ -153,6 +178,10 @@ fun NetworkScreen(
                         node = selected,
                         graph = graph,
                         onOpenSegment = onOpenSegment,
+                        onNamePlace = {
+                            val ref = PointRef.parse(selected.key)
+                            if (ref != null) namingPlace = viewModel.placeDraft(ref, selected.at)
+                        },
                     )
                 }
             }
@@ -165,6 +194,7 @@ private fun NodeCard(
     node: NetworkNode,
     graph: NetworkGraph,
     onOpenSegment: (Long) -> Unit,
+    onNamePlace: () -> Unit,
 ) {
     SectionCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -184,6 +214,17 @@ private fun NodeCard(
                 text = stringResource(R.string.network_degree, node.degree),
                 color = MaterialTheme.colorScheme.primary,
             )
+        }
+        // A node here is one point; the junction it belongs to may cover a
+        // dozen. Naming it from the network is the natural place to do it.
+        if (PointRef.parse(node.key) != null) {
+            TextButton(onClick = onNamePlace) {
+                Text(
+                    stringResource(
+                        if (node.name == null) R.string.place_name_action else R.string.action_edit,
+                    ),
+                )
+            }
         }
         ThinDivider()
         node.links.forEachIndexed { index, link ->

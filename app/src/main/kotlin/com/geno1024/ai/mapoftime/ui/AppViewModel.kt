@@ -7,6 +7,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geno1024.ai.mapoftime.AppContainer
+import com.geno1024.ai.mapoftime.analysis.PlaceDraft
+import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
 import com.geno1024.ai.mapoftime.analysis.SegmentSummary
 import com.geno1024.ai.mapoftime.analysis.TripAnalyzer
 import com.geno1024.ai.mapoftime.core.DurationStats
@@ -19,6 +21,7 @@ import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.MatchKind
 import com.geno1024.ai.mapoftime.data.EXPORT_FORMAT
 import com.geno1024.ai.mapoftime.data.ImportResult
+import com.geno1024.ai.mapoftime.data.Place
 import com.geno1024.ai.mapoftime.data.PointRef
 import com.geno1024.ai.mapoftime.data.Segment
 import com.geno1024.ai.mapoftime.data.Trip
@@ -54,6 +57,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     var trips by mutableStateOf<List<Trip>>(emptyList())
         private set
     var summaries by mutableStateOf<List<SegmentSummary>>(emptyList())
+        private set
+    var places by mutableStateOf<List<Place>>(emptyList())
         private set
     var loading by mutableStateOf(false)
         private set
@@ -100,10 +105,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         backward = DurationStats.of(samples.filter { it.direction < 0 }),
                     )
                 }.sortedWith(compareByDescending<SegmentSummary> { it.sampleCount }.thenBy { it.segment.displayName })
-                trips to summaries
+                Triple(trips, summaries, container.repository.places())
             }
             trips = loaded.first
             summaries = loaded.second
+            places = loaded.third
             loading = false
         }
     }
@@ -161,6 +167,35 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
      */
     suspend fun renamePoint(ref: PointRef, name: String?) {
         withContext(container.dbDispatcher) { container.repository.renamePoint(ref, name) }
+        refresh()
+    }
+
+    /**
+     * What the app proposes to call "this junction" when the user taps [ref]:
+     * the point, the points around it, and the name they may already share.
+     * Cheap enough to recompute on a tap; the lists are small.
+     */
+    fun placeDraft(ref: PointRef, at: LatLon? = null): PlaceDraft? =
+        PlaceDrafts.draft(ref, summaries.map { it.segment }, places, at)
+
+    fun placeOf(ref: PointRef): Place? = places.firstOrNull { place ->
+        place.points.any { it.key == ref.key }
+    }
+
+    /**
+     * Names a whole junction in one go. A blank [name] dissolves it and the
+     * points fall back to their own names or to the road they sit on.
+     */
+    suspend fun namePlace(draft: PlaceDraft, name: String?) {
+        withContext(container.dbDispatcher) {
+            container.repository.upsertPlace(
+                id = draft.existingPlaceId,
+                name = name,
+                members = draft.refs,
+                center = draft.center,
+                radiusM = draft.adoptRadius(),
+            )
+        }
         refresh()
     }
 
@@ -388,6 +423,31 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             )
         }
         root.put("points", pointArray)
+
+        // Junctions are names too, and one of them can cover a dozen points.
+        // A reader that predates this key ignores it and still gets the rest.
+        val placeArray = JSONArray()
+        for (place in repository.places()) {
+            val members = JSONArray()
+            for (ref in place.points) {
+                members.put(
+                    JSONObject().apply {
+                        put("kind", ref.kind)
+                        put("nodeId", ref.nodeId)
+                    },
+                )
+            }
+            placeArray.put(
+                JSONObject().apply {
+                    put("name", place.name)
+                    put("lat", place.at.lat)
+                    put("lon", place.at.lon)
+                    put("radiusM", place.radiusM)
+                    put("points", members)
+                },
+            )
+        }
+        root.put("places", placeArray)
 
         // A leg refers to its segment by id in the database, but ids are local
         // to this install. The key + mode pair is what survives a restore.

@@ -27,6 +27,17 @@ data class ImportedSegment(
 /** One point the user named. */
 data class ImportedPoint(val ref: PointRef, val name: String)
 
+/**
+ * One junction the user named. Older files have no `places` array at all, so
+ * this is optional and those files simply restore the per-point names.
+ */
+data class ImportedPlace(
+    val name: String,
+    val center: LatLon,
+    val radiusM: Double,
+    val points: List<PointRef>,
+)
+
 data class ImportedLeg(
     val startMs: Long,
     val endMs: Long,
@@ -58,6 +69,7 @@ data class ImportedTrip(
 data class ImportBundle(
     val segments: List<ImportedSegment>,
     val points: List<ImportedPoint> = emptyList(),
+    val places: List<ImportedPlace> = emptyList(),
     val trips: List<ImportedTrip>,
 ) {
     val legCount: Int get() = trips.sumOf { it.legs.size }
@@ -80,6 +92,7 @@ object TripImport {
         return ImportBundle(
             segments = root.optJSONArray("segments").mapObjects { segment(it) },
             points = root.optJSONArray("points").mapObjects { point(it) },
+            places = root.optJSONArray("places").mapObjects { place(it) },
             trips = root.optJSONArray("trips").mapObjects { trip(it) },
         )
     }
@@ -111,6 +124,18 @@ object TripImport {
         val ref = PointRef.parse("$kind:$nodeId") ?: return null
         if (nodeId <= 0) return null
         return ImportedPoint(ref, name)
+    }
+
+    private fun place(objectValue: JSONObject): ImportedPlace? {
+        val name = objectValue.optStringOrNull("name") ?: return null
+        val members = objectValue.optJSONArray("points").mapObjects { point(it) }
+        if (members.isEmpty()) return null
+        return ImportedPlace(
+            name = name,
+            center = LatLon(objectValue.optDouble("lat"), objectValue.optDouble("lon")),
+            radiusM = objectValue.optDouble("radiusM", 0.0).coerceAtLeast(0.0),
+            points = members.map { it.ref },
+        )
     }
 
     private fun trip(objectValue: JSONObject): ImportedTrip? {

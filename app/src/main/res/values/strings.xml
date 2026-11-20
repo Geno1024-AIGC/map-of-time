@@ -29,6 +29,17 @@
     <string name="nav_record">Record</string>
     <string name="nav_trips">Trips</string>
     <string name="nav_network">Network</string>
+
+    <string name="place_name_title">Name this junction</string>
+    <string name="place_name_hint">Junction name</string>
+    <string name="place_name_apply">Name it</string>
+    <string name="place_summary">%1$d points · %2$s across</string>
+    <string name="place_body">All of them take this name. A corner that shows up later inside the junction joins on its own.</string>
+    <string name="place_clear_hint">Leave it empty to dissolve the junction; the points go back to their own names or the road they sit on.</string>
+    <string name="place_only_point">Name just this point</string>
+    <string name="place_name_action">Name junction</string>
+    <string name="place_member_count">%1$d points share this name</string>
+    <string name="segment_inside_junction">inside %1$s</string>
     <string name="nav_segments">Segments</string>
     <string name="nav_settings">Settings</string>
 
@@ -149,9 +160,7 @@
     <string name="segment_from">From</string>
     <string name="segment_to">To</string>
     <string name="segment_from_points">Ends: %1$s</string>
-    <string name="point_name_title">Name this point</string>
     <string name="point_name_hint">e.g. north gate</string>
-    <string name="point_name_clear_hint">Save it empty to leave this point unnamed.</string>
     <string name="point_unnamed">Unnamed</string>
     <string name="segment_osm_name">OSM: %1$s</string>
     <string name="segment_directions">By direction</string>
