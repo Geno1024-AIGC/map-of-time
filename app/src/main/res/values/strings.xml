@@ -39,6 +39,7 @@
     <string name="place_only_point">Name just this point</string>
     <string name="place_preview_name">Name them</string>
     <string name="place_preview_wider">Wider</string>
+    <string name="place_preview_pick_hint">Tap any other dot on the map to add it to the junction, or tap it again to take it out.</string>
     <string name="place_preview_hint">The dashed circle is the ground this junction claims. Nothing is saved until you name it. If it is a big interchange, tap Wider.</string>
     <string name="place_overridden">%1$d points already have their own names</string>
     <string name="place_overridden_hint">Their own name wins over the junction\'s. Turn this on to let the junction name cover them.</string>
