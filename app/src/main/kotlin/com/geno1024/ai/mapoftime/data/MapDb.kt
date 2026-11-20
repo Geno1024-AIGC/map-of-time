@@ -89,6 +89,46 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
             )
             """.trimIndent(),
         )
+        // A wide crossing is many OSM nodes, one per lane and one per corner
+        // refuge, and more of them show up every time a new turning movement
+        // brushes another corner. The junction is therefore its own thing: a
+        // name with a set of points under it, so one name covers all of them
+        // and later arrivals inherit it without being named again.
+        db.execSQL(
+            """
+            CREATE TABLE places(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                lat REAL NOT NULL,
+                lon REAL NOT NULL,
+                radius_m REAL NOT NULL,
+                created_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE place_points(
+                kind TEXT NOT NULL,
+                node_id INTEGER NOT NULL,
+                place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+                PRIMARY KEY(kind, node_id)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE VIEW point_labels AS
+                SELECT kind, node_id, name FROM point_names
+                UNION ALL
+                SELECT pp.kind, pp.node_id, p.name
+                  FROM place_points pp JOIN places p ON p.id = pp.place_id
+                 WHERE NOT EXISTS (
+                    SELECT 1 FROM point_names pn
+                     WHERE pn.kind = pp.kind AND pn.node_id = pp.node_id
+                 )
+            """.trimIndent(),
+        )
         db.execSQL(
             """
             CREATE TABLE legs(
@@ -168,6 +208,7 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
         )
 
         db.execSQL("CREATE INDEX idx_points_trip ON points(trip_id, t)")
+        db.execSQL("CREATE INDEX idx_place_points_place ON place_points(place_id)")
         db.execSQL("CREATE INDEX idx_legs_trip ON legs(trip_id, seq)")
         db.execSQL("CREATE INDEX idx_legs_segment ON legs(segment_id)")
         db.execSQL("CREATE INDEX idx_segments_mode ON segments(mode)")
@@ -229,6 +270,47 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
             )
             backfillEndpointKeys(db)
         }
+        // v6 makes the junction a naming unit of its own: a wide crossing is
+        // many points, and asking the user to name each one never converges.
+        if (oldVersion < 6) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS places(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    lat REAL NOT NULL,
+                    lon REAL NOT NULL,
+                    radius_m REAL NOT NULL,
+                    created_at INTEGER NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS place_points(
+                    kind TEXT NOT NULL,
+                    node_id INTEGER NOT NULL,
+                    place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+                    PRIMARY KEY(kind, node_id)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_place_points_place ON place_points(place_id)")
+            db.execSQL("DROP VIEW IF EXISTS point_labels")
+            db.execSQL(
+                """
+                CREATE VIEW point_labels AS
+                    SELECT kind, node_id, name FROM point_names
+                    UNION ALL
+                    SELECT pp.kind, pp.node_id, p.name
+                      FROM place_points pp JOIN places p ON p.id = pp.place_id
+                     WHERE NOT EXISTS (
+                        SELECT 1 FROM point_names pn
+                         WHERE pn.kind = pp.kind AND pn.node_id = pp.node_id
+                     )
+                """.trimIndent(),
+            )
+        }
     }
 
     /**
@@ -260,6 +342,6 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
 
     companion object {
         const val NAME = "map-of-time.db"
-        const val VERSION = 5
+        const val VERSION = 6
     }
 }

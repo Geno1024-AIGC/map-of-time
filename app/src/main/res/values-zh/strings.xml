@@ -29,6 +29,17 @@
     <string name="nav_record">记录</string>
     <string name="nav_trips">行程</string>
     <string name="nav_network">路网</string>
+
+    <string name="place_name_title">命名这个路口</string>
+    <string name="place_name_hint">路口名称</string>
+    <string name="place_name_apply">命名</string>
+    <string name="place_summary">%1$d 个点 · 跨度 %2$s</string>
+    <string name="place_body">这些点都会用这个名字；以后路口里新出现的点会自动加入，不用再命名一次。</string>
+    <string name="place_clear_hint">留空则解散这个路口，各点退回到自己的名字或所在道路。</string>
+    <string name="place_only_point">只命名这一个点</string>
+    <string name="place_name_action">命名路口</string>
+    <string name="place_member_count">这个路口共 %1$d 个点</string>
+    <string name="segment_inside_junction">%1$s 路口内</string>
     <string name="nav_segments">路段</string>
     <string name="nav_settings">设置</string>
 
@@ -149,9 +160,7 @@
     <string name="segment_from">起点</string>
     <string name="segment_to">终点</string>
     <string name="segment_from_points">端点：%1$s</string>
-    <string name="point_name_title">命名这个点</string>
     <string name="point_name_hint">例如：小区北门</string>
-    <string name="point_name_clear_hint">留空保存即取消这个点的命名。</string>
     <string name="point_unnamed">未命名</string>
     <string name="segment_osm_name">OSM：%1$s</string>
     <string name="segment_directions">按方向</string>

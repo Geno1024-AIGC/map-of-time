@@ -60,6 +60,16 @@ class SegmentNameTest {
     }
 
     @Test
+    fun twoEndsWithTheSameJunctionNameAreNotAPair() {
+        // Both ends of a link inside one junction carry the junction's name.
+        // "X – X" describes nothing, so the road's own name takes over.
+        val inside = segment("Jianguo Road", fromName = "Renmin × Jianguo", toName = "Renmin × Jianguo")
+        assertNull(inside.pointName)
+        assertNull(inside.forwardName)
+        assertEquals("Jianguo Road", inside.displayName)
+    }
+
+    @Test
     fun withoutAUserNameTheOsmNameIsUsed() {
         assertEquals("Main Street", segment("Main Street").displayName)
     }

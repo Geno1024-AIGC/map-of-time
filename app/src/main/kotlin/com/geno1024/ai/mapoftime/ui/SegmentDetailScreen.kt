@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
+import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.core.DurationStats
 import com.geno1024.ai.mapoftime.core.Polyline
 import com.geno1024.ai.mapoftime.core.TimeBucket
@@ -58,8 +59,7 @@ fun SegmentDetailScreen(
     var samples by remember(segmentId) { mutableStateOf<List<TraversalSample>>(emptyList()) }
     var legs by remember(segmentId) { mutableStateOf<List<Leg>>(emptyList()) }
     var renaming by remember { mutableStateOf(false) }
-    var namingPoint by remember { mutableStateOf<PointRef?>(null) }
-    var namingPointName by remember { mutableStateOf("") }
+    var namingPlace by remember { mutableStateOf<PlaceDraft?>(null) }
 
     LaunchedEffect(segmentId) {
         segment = viewModel.segment(segmentId)
@@ -79,8 +79,15 @@ fun SegmentDetailScreen(
     }
     val fromLabel = stringResource(R.string.segment_from)
     val toLabel = stringResource(R.string.segment_to)
-    val forwardLabel = segment?.forwardName ?: "$fromLabel → $toLabel"
-    val backwardLabel = segment?.backwardName ?: "$toLabel → $fromLabel"
+    // Both ends of a piece inside one junction carry the same name; saying
+    // "X → X" would be noise, so the direction is labelled "inside X" instead.
+    val insideJunction = segment?.let { it.fromName?.takeIf { name -> name == it.toName } }
+    val forwardLabel = segment?.forwardName
+        ?: insideJunction?.let { stringResource(R.string.segment_inside_junction, it) }
+        ?: "$fromLabel → $toLabel"
+    val backwardLabel = segment?.backwardName
+        ?: insideJunction?.let { stringResource(R.string.segment_inside_junction, it) }
+        ?: "$toLabel → $fromLabel"
     val markers = remember(segment, fromLabel, toLabel) {
         segment?.let {
             listOf(
@@ -106,18 +113,33 @@ fun SegmentDetailScreen(
         )
     }
 
-    namingPoint?.let { ref ->
-        SegmentNameDialog(
-            initial = namingPointName,
-            osmName = null,
-            title = stringResource(R.string.point_name_title),
-            hint = stringResource(R.string.point_name_hint),
-            clearHint = stringResource(R.string.point_name_clear_hint),
-            onDismiss = { namingPoint = null },
+    // Naming a junction names every point the app grouped under it, which is
+    // the only way a crossing with a dozen corners stays one action.
+    namingPlace?.let { draft ->
+        PlaceNameDialog(
+            initial = draft.seed.key.let { key ->
+                when (key) {
+                    segment?.fromKey -> segment?.fromName
+                    segment?.toKey -> segment?.toName
+                    else -> null
+                }.orEmpty()
+            },
+            pointCount = draft.count,
+            spanM = draft.spanM,
+            named = draft.existingPlaceId != null,
+            onDismiss = { namingPlace = null },
             onSave = { name ->
-                namingPoint = null
+                namingPlace = null
                 scope.launch {
-                    viewModel.renamePoint(ref, name)
+                    viewModel.namePlace(draft, name)
+                    segment = viewModel.segment(segmentId)
+                    legs = viewModel.legsForSegment(segmentId)
+                }
+            },
+            onSavePointOnly = { name ->
+                namingPlace = null
+                scope.launch {
+                    viewModel.renamePoint(draft.seed, name)
                     segment = viewModel.segment(segmentId)
                     legs = viewModel.legsForSegment(segmentId)
                 }
@@ -203,17 +225,17 @@ fun SegmentDetailScreen(
                         EndpointRow(
                             label = stringResource(R.string.segment_from),
                             name = segment?.fromName,
+                            note = placeNote(viewModel, fromPoint),
                             onName = {
-                                namingPointName = segment?.fromName.orEmpty()
-                                namingPoint = fromPoint
+                                namingPlace = viewModel.placeDraft(fromPoint, segment?.from)
                             },
                         )
                         EndpointRow(
                             label = stringResource(R.string.segment_to),
                             name = segment?.toName,
+                            note = placeNote(viewModel, toPoint),
                             onName = {
-                                namingPointName = segment?.toName.orEmpty()
-                                namingPoint = toPoint
+                                namingPlace = viewModel.placeDraft(toPoint, segment?.to)
                             },
                         )
                     }
@@ -526,9 +548,23 @@ private fun SampleRow(sample: TraversalSample, stats: DurationStats) {
 private fun TraversalSample.directionLabel(): String =
     stringResource(if (direction > 0) R.string.segment_forward else R.string.segment_backward)
 
+/**
+ * How many points already share this end's name, so a junction name is visibly
+ * one name over many corners rather than a lucky guess.
+ */
+@Composable
+private fun placeNote(viewModel: AppViewModel, ref: PointRef?): String? {
+    val place = ref?.let { viewModel.placeOf(it) } ?: return null
+    return if (place.points.size > 1) {
+        stringResource(R.string.place_member_count, place.points.size)
+    } else {
+        null
+    }
+}
+
 /** One end of the segment, with the name the user gave it and a way to change it. */
 @Composable
-private fun EndpointRow(label: String, name: String?, onName: () -> Unit) {
+private fun EndpointRow(label: String, name: String?, note: String?, onName: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
@@ -540,6 +576,13 @@ private fun EndpointRow(label: String, name: String?, onName: () -> Unit) {
                 text = name ?: stringResource(R.string.point_unnamed),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            if (note != null) {
+                Text(
+                    text = note,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         TextButton(onClick = onName) {
             Text(

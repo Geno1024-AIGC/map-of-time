@@ -298,6 +298,80 @@ fun ThinDivider(modifier: Modifier = Modifier) {
 }
 
 /**
+ * Asks for a name for a junction, and says how many points it will cover.
+ *
+ * The point count is the whole reason this dialog exists: a wide crossing is a
+ * dozen corners and lane ends, and they keep growing as new turns are driven.
+ * Naming them one by one never converges, so the default action names them all
+ * and [onSavePointOnly] is the escape hatch for a single point.
+ */
+@Composable
+fun PlaceNameDialog(
+    initial: String,
+    pointCount: Int,
+    spanM: Double,
+    named: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    onSavePointOnly: (String) -> Unit,
+) {
+    var text by remember(initial) { mutableStateOf(initial) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.place_name_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.place_name_hint)) },
+                )
+                if (pointCount > 1) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.place_summary, pointCount, formatDistance(spanM)),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.place_body),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.place_clear_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (pointCount > 1) {
+                    TextButton(onClick = { onSavePointOnly(text) }) {
+                        Text(stringResource(R.string.place_only_point))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text) }) {
+                Text(
+                    stringResource(
+                        if (named) R.string.action_save else R.string.place_name_apply,
+                    ),
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
+}
+
+/**
  * Asks for a name for one segment. Shared by the segment screen and the trip's
  * leg overlay, which both offer the same action.
  *

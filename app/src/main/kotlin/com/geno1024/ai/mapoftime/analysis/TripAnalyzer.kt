@@ -118,8 +118,10 @@ class TripAnalyzer(
         var geometricLegs = 0
         var distance = 0.0
         // Read once: naming a point is rare, and a per-leg query would repeat
-        // the same few rows for every piece of every trip.
-        val pointNames = repository.pointNames()
+        // the same few rows for every piece of every trip. `pointLabels` is
+        // the effective name, so a junction's name already shows here even
+        // though this trip has never seen the point before.
+        val pointNames = repository.pointLabels()
 
         for (leg in segmentation.legs) {
             val pieces = JunctionSplitter.split(
@@ -143,6 +145,9 @@ class TripAnalyzer(
         }
 
         repository.replaceLegs(tripId, legs)
+        // A corner that just turned up may belong to a junction the user
+        // already named; it inherits that name instead of waiting to be named.
+        repository.adoptNewEndpoints()
         repository.updateProgress(tripId, distance, raw.size)
         val endedAt = raw.lastOrNull()?.t ?: trip.endedAt ?: trip.startedAt
         repository.finishTrip(tripId, endedAt, TripStatus.FINISHED)

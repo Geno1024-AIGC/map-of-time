@@ -92,15 +92,37 @@ data class PointRef(val kind: String, val nodeId: Long) {
 data class NamedPoint(val ref: PointRef, val name: String)
 
 /**
+ * One junction as the user thinks of it: a name plus every point that belongs
+ * to it. A wide crossing is a dozen OSM nodes — an entry and an exit per lane,
+ * a refuge at each corner — and further turning movements keep discovering
+ * new ones. Naming the place once covers all of them, including the points
+ * that do not exist yet.
+ */
+data class Place(
+    val id: Long,
+    val name: String,
+    /** Centre of the member points; new points near it are adopted. */
+    val at: LatLon,
+    /** How far the members spread from the centre, so adoption has a bound. */
+    val radiusM: Double,
+    val points: List<PointRef> = emptyList(),
+)
+
+/**
  * "A → B" when both ends are named. One name alone says nothing useful about
  * the piece between the ends, so it stays null and the next fallback wins.
+ *
+ * Two identical names are not a pair either: both ends of a short link inside
+ * one junction carry the junction's name, and "X – X" describes nothing. That
+ * piece falls back to the road it belongs to, or to the name the user gave the
+ * segment itself.
  */
 fun pointPairName(from: String?, to: String?): String? =
-    if (from != null && to != null) "$from – $to" else null
+    if (from != null && to != null && from != to) "$from – $to" else null
 
 /** The same pair as a direction: "A → B". */
 fun directionalName(from: String?, to: String?): String? =
-    if (from != null && to != null) "$from → $to" else null
+    if (from != null && to != null && from != to) "$from → $to" else null
 
 /**
  * The names to label the two ends of one traversal with, in the order the trip
