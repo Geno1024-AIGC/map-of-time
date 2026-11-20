@@ -96,6 +96,14 @@ object PlaceDrafts {
          * default 150 m gives exactly the 45 m / 50 m rules above.
          */
         reachM: Double = SPAN_M,
+        /**
+         * Points the user picked in the preview, after seeing the circle:
+         * `true` = pull this one in, `false` = leave it out. The seed is always
+         * kept — removing it would dissolve the junction rather than edit it.
+         * Picks override the automatic rules, but still cannot take a point
+         * that belongs to another named junction.
+         */
+        manual: Map<String, Boolean> = emptyMap(),
     ): PlaceDraft? {
         val scale = reachM / SPAN_M
         val edgeLimit = SHORT_EDGE_M * scale
@@ -165,6 +173,21 @@ object PlaceDrafts {
                     grew = true
                 }
             }
+        }
+
+        // The user gets the last word. Picks are applied after the automatic
+        // rules so they can add a point no threshold would reach, or take one
+        // back out that the rules swallowed. MAX_POINTS guards the automatic
+        // chain, not an explicit list of points the user can see and count.
+        for ((key, include) in manual) {
+            if (key == seed.key) continue
+            if (!include) {
+                members -= key
+                continue
+            }
+            val point = at[key] ?: continue
+            if (foreign.any { Geo.distanceMeters(point, it.at) <= it.radiusM }) continue
+            members += key
         }
 
         val located = members.mapNotNull { key -> at[key]?.let { key to it } }

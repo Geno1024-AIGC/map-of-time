@@ -201,8 +201,12 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
      * [reachM] is the preview's "wider" step: the same rules, scaled up, for
      * the interchanges that really are 300 m across.
      */
-    fun placeDraft(ref: PointRef, at: LatLon? = null, reachM: Double = PlaceDrafts.SPAN_M): PlaceDraft? =
-        PlaceDrafts.draft(ref, summaries.map { it.segment }, places, at, reachM)
+    fun placeDraft(
+        ref: PointRef,
+        at: LatLon? = null,
+        reachM: Double = PlaceDrafts.SPAN_M,
+        manual: Map<String, Boolean> = emptyMap(),
+    ): PlaceDraft? = PlaceDrafts.draft(ref, summaries.map { it.segment }, places, at, reachM, manual)
 
     fun placeOf(ref: PointRef): Place? = places.firstOrNull { place ->
         place.points.any { it.key == ref.key }

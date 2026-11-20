@@ -214,6 +214,59 @@ class PlaceDraftTest {
     }
 
     @Test
+    fun aPickedPointCanBeAddedBeyondTheReach() {
+        val (points, segments) = wideCrossing()
+        val seed = points.first()
+        val far = point(400.0, 0.0)
+        val draft = PlaceDrafts.draft(
+            seed,
+            segments + segment(seed, far, 400.0),
+            manual = mapOf(far.key to true),
+        )!!
+        assertTrue(draft.refs.any { it == far })
+        assertTrue(draft.spanM > 300.0)
+    }
+
+    @Test
+    fun aPickedPointCanBeRemovedFromTheAutomaticDraft() {
+        val (points, segments) = wideCrossing()
+        val seed = points.first()
+        val unwanted = points[7] // east end, inside the automatic 150 m draft
+        val draft = PlaceDrafts.draft(seed, segments, manual = mapOf(unwanted.key to false))!!
+        assertEquals(11, draft.count)
+        assertTrue(draft.refs.none { it == unwanted })
+    }
+
+    @Test
+    fun aPickedPointCannotStealAnotherPlacesPoint() {
+        val seed = point(0.0, 0.0)
+        val otherSeed = point(80.0, 0.0)
+        val other = Place(
+            id = 9,
+            name = "the next one",
+            at = coords.getValue(otherSeed.key),
+            radiusM = 25.0,
+            points = listOf(otherSeed),
+        )
+        val draft = PlaceDrafts.draft(
+            seed,
+            listOf(segment(seed, otherSeed)),
+            listOf(other),
+            manual = mapOf(otherSeed.key to true),
+        )!!
+        assertTrue(draft.refs.none { it == otherSeed })
+    }
+
+    @Test
+    fun theSeedCannotBePickedAway() {
+        val (points, segments) = wideCrossing()
+        val seed = points.first()
+        val draft = PlaceDrafts.draft(seed, segments, manual = mapOf(seed.key to false))!!
+        assertEquals(12, draft.count)
+        assertTrue(draft.refs.any { it == seed })
+    }
+
+    @Test
     fun aWideCircleDoesNotAdoptTheNextCrossingDownTheRoad() {
         val first = point(0.0, 0.0)
         val member = point(30.0, 0.0)

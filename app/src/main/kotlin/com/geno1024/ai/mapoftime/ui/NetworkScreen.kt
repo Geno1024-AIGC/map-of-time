@@ -68,6 +68,8 @@ fun NetworkScreen(
     // has to stay tight or every dense crossing eats the next one.
     var previewAt by remember { mutableStateOf<LatLon?>(null) }
     var previewReach by remember { mutableStateOf(PlaceDrafts.SPAN_M) }
+    // Points the user added or removed by tapping the map while reviewing.
+    var previewManual by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var namingPlace by remember { mutableStateOf<PlaceDraft?>(null) }
     val scope = rememberCoroutineScope()
     // Drawn as a dot always; used by the camera only when there is no network
@@ -121,10 +123,20 @@ fun NetworkScreen(
             Geo.bounds(listOf(draft.center))?.expanded(draft.adoptRadius() + 60.0)
         }
     }
-    val selectNode = remember(graph) {
-        { index: Int ->
-            selectedKey = graph.nodes.getOrNull(index)?.key
+    // Normally a tap selects a node. While reviewing a junction it is a pick
+    // instead: add that point to the draft, or take it back out, and redraw
+    // the circle and count at once. Not remembered — it has to see the latest
+    // preview and picks on every recomposition.
+    val onMapTap = { index: Int ->
+        val key = graph.nodes.getOrNull(index)?.key
+        val draft = preview
+        if (draft == null || key == null) {
+            selectedKey = key
             preview = null
+        } else if (key != draft.seed.key) {
+            val included = draft.refs.any { it.key == key }
+            previewManual = previewManual + (key to !included)
+            preview = viewModel.placeDraft(draft.seed, previewAt, previewReach, previewManual)
         }
     }
 
@@ -187,7 +199,7 @@ fun NetworkScreen(
                     basemap = settings.basemap,
                     customTileUrl = settings.customTileUrl,
                     customTilesGcj02 = settings.customTilesGcj02,
-                    onMarkerTap = selectNode,
+                    onMarkerTap = onMapTap,
                     emptyHint = stringResource(R.string.network_empty_title),
                     rings = rings,
                     focusBounds = focusBounds,
@@ -197,6 +209,11 @@ fun NetworkScreen(
             // The review step: the ring is on the map, the numbers are here,
             // and nothing has been written yet.
             preview?.let { draft ->
+                Text(
+                    text = stringResource(R.string.place_preview_pick_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
                 val wider = PlaceDrafts.REACH_STEPS_M.firstOrNull { it > previewReach }
                 PlacePreviewRow(
                     draft = draft,
@@ -205,7 +222,7 @@ fun NetworkScreen(
                     onWider = wider?.let { reach ->
                         {
                             previewReach = reach
-                            preview = viewModel.placeDraft(draft.seed, previewAt, reach)
+                            preview = viewModel.placeDraft(draft.seed, previewAt, reach, previewManual)
                         }
                     },
                 )
@@ -252,6 +269,7 @@ fun NetworkScreen(
                                 // is the next tap, once the circle looks right.
                                 previewAt = selected.at
                                 previewReach = PlaceDrafts.SPAN_M
+                                previewManual = emptyMap()
                                 preview = viewModel.placeDraft(ref, selected.at, previewReach)
                             }
                         },
