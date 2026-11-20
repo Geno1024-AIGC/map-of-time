@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -63,6 +64,22 @@ import kotlin.math.roundToInt
 data class MapMarker(val at: LatLon, val emphasized: Boolean = false, val label: String? = null)
 
 /**
+ * A dashed circle on the map, measured in metres: the ground a junction claims.
+ *
+ * The radius is the junction's adoption radius, so the circle is not decoration
+ * — a point inside it joins the junction on the next analysis. Drawing it lets
+ * the user see whether a proposal stops at the crossing or runs on into the
+ * next one, which is the mistake that is hardest to undo afterwards.
+ */
+data class MapRing(
+    val at: LatLon,
+    val radiusM: Double,
+    /** Drawn above the other rings and labelled; the proposal being confirmed. */
+    val active: Boolean = false,
+    val label: String? = null,
+)
+
+/**
  * A slippy map drawn on a plain Canvas: raster tiles when they can be fetched,
  * the track itself always. Deliberately no map SDK — the app only needs a few
  * polylines and dots, and this keeps working offline.
@@ -93,6 +110,13 @@ fun TrackMap(
      * projection (or the GCJ-02 shift) themselves.
      */
     onMarkerTap: ((Int) -> Unit)? = null,
+    /** Circles of ground claimed by junctions, drawn under the markers. */
+    rings: List<MapRing> = emptyList(),
+    /**
+     * Look here instead of at [tracks]. Used while a junction proposal is on
+     * screen: the proposal is a hundred metres wide, the history is a city.
+     */
+    focusBounds: Bounds? = null,
 ) {
     val context = LocalContext.current
     val colors = MaterialTheme.colorScheme
@@ -113,12 +137,31 @@ fun TrackMap(
     val displayHighlight = remember(highlight, usesGcj) {
         if (!usesGcj) highlight else highlight?.map(Gcj::toGcj02)
     }
+    val displayRings = remember(rings, usesGcj) {
+        if (!usesGcj) rings else rings.map { it.copy(at = Gcj.toGcj02(it.at)) }
+    }
 
     // The camera follows the selected leg; the rest of the trip stays visible.
     val cameraPoints = remember(displayTracks, displayHighlight) {
         displayHighlight?.takeIf { it.size >= 2 } ?: displayTracks.flatten()
     }
-    val bounds = remember(cameraPoints) { Geo.bounds(cameraPoints) }
+    // A junction proposal is a hundred metres inside a city-wide history, so
+    // while one is being confirmed the camera looks at it instead.
+    val displayFocusBounds = remember(focusBounds, usesGcj) {
+        when {
+            focusBounds == null -> null
+            !usesGcj -> focusBounds
+            else -> {
+                // Shift the centre and keep the size: the GCJ-02 offset varies
+                // slowly enough that a 150 m box does not need four corners.
+                val moved = Gcj.toGcj02(focusBounds.center)
+                val dLat = focusBounds.maxLat - focusBounds.center.lat
+                val dLon = focusBounds.maxLon - focusBounds.center.lon
+                Bounds(moved.lat - dLat, moved.lon - dLon, moved.lat + dLat, moved.lon + dLon)
+            }
+        }
+    }
+    val bounds = displayFocusBounds ?: remember(cameraPoints) { Geo.bounds(cameraPoints) }
     val tileTemplate = basemap.tileTemplate ?: customTileUrl
     val storeKey = basemap.id + "|" + tileTemplate
     val store = remember(storeKey) {
@@ -347,6 +390,45 @@ fun TrackMap(
                         color = colors.secondary,
                         style = Stroke(width = 7.dp.toPx()),
                     )
+                }
+            }
+
+            // Junction rings sit under the dots: the dots are the points the
+            // ring claims, and a stroke over a dot hides which dot it is.
+            if (displayRings.isNotEmpty()) {
+                val metresPerPixel = MapCamera.metersPerPixel(center.lat, worldPx)
+                val dash = PathEffect.dashPathEffect(floatArrayOf(7.dp.toPx(), 5.dp.toPx()))
+                // The active proposal is drawn last so it is never buried under
+                // the junctions it is being compared with.
+                for (ring in displayRings.sortedBy { it.active }) {
+                    val p = project(ring.at)
+                    // worldPx is at the integer zoom; [scale] is what the
+                    // canvas multiplies by on the way to the screen.
+                    val radius = (ring.radiusM / metresPerPixel * scale).toFloat()
+                    if (radius < 2f) continue
+                    val width = if (ring.active) 2.5.dp.toPx() else 1.5.dp.toPx()
+                    drawCircle(
+                        color = Color.Black.copy(alpha = 0.45f),
+                        radius = radius,
+                        center = p,
+                        style = Stroke(width = width + 1.5.dp.toPx(), pathEffect = dash),
+                    )
+                    drawCircle(
+                        color = (if (ring.active) colors.secondary else colors.primary)
+                            .copy(alpha = if (ring.active) 1f else 0.75f),
+                        radius = radius,
+                        center = p,
+                        style = Stroke(width = width, pathEffect = dash),
+                    )
+                    ring.label?.let { label ->
+                        drawMarkerLabel(
+                            text = label,
+                            at = Offset(p.x, p.y - radius),
+                            radius = 0f,
+                            gap = 3.dp.toPx(),
+                            textSize = 11.dp.toPx(),
+                        )
+                    }
                 }
             }
 

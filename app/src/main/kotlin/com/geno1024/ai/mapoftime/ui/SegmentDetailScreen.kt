@@ -34,7 +34,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.analysis.PlaceDraft
+import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
 import com.geno1024.ai.mapoftime.core.DurationStats
+import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.Polyline
 import com.geno1024.ai.mapoftime.core.TimeBucket
 import com.geno1024.ai.mapoftime.core.samples
@@ -43,6 +45,7 @@ import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.PointRef
 import com.geno1024.ai.mapoftime.data.Segment
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
+import com.geno1024.ai.mapoftime.ui.map.MapRing
 import com.geno1024.ai.mapoftime.ui.map.TrackMap
 import kotlinx.coroutines.launch
 
@@ -59,6 +62,8 @@ fun SegmentDetailScreen(
     var samples by remember(segmentId) { mutableStateOf<List<TraversalSample>>(emptyList()) }
     var legs by remember(segmentId) { mutableStateOf<List<Leg>>(emptyList()) }
     var renaming by remember { mutableStateOf(false) }
+    // Same two steps as the network screen: preview the circle, then name it.
+    var preview by remember { mutableStateOf<PlaceDraft?>(null) }
     var namingPlace by remember { mutableStateOf<PlaceDraft?>(null) }
 
     LaunchedEffect(segmentId) {
@@ -88,13 +93,31 @@ fun SegmentDetailScreen(
     val backwardLabel = segment?.backwardName
         ?: insideJunction?.let { stringResource(R.string.segment_inside_junction, it) }
         ?: "$toLabel → $fromLabel"
-    val markers = remember(segment, fromLabel, toLabel) {
+    val markers = remember(segment, fromLabel, toLabel, preview) {
+        val members = preview?.refs?.mapTo(HashSet()) { it.key } ?: emptySet()
         segment?.let {
             listOf(
-                MapMarker(it.from, label = fromLabel),
+                MapMarker(
+                    at = it.from,
+                    emphasized = it.fromPoint?.key?.let { key -> key in members } == true,
+                    label = fromLabel,
+                ),
                 MapMarker(it.to, emphasized = true, label = toLabel),
             )
         }.orEmpty()
+    }
+    val rings = remember(viewModel.places, preview) {
+        buildList {
+            for (place in viewModel.places) {
+                add(MapRing(place.at, place.radiusM.coerceAtLeast(PlaceDrafts.MIN_ADOPT_M)))
+            }
+            preview?.let { add(MapRing(it.center, it.adoptRadius(), active = true)) }
+        }
+    }
+    val focusBounds = remember(preview) {
+        preview?.let { draft ->
+            Geo.bounds(listOf(draft.center))?.expanded(draft.adoptRadius() + 25.0)
+        }
     }
 
     if (renaming) {
@@ -128,9 +151,13 @@ fun SegmentDetailScreen(
             spanM = draft.spanM,
             named = draft.existingPlaceId != null,
             overriddenCount = viewModel.overriddenMembers(draft),
-            onDismiss = { namingPlace = null },
+            onDismiss = {
+                namingPlace = null
+                preview = null
+            },
             onSave = { name, takeOverNames ->
                 namingPlace = null
+                preview = null
                 scope.launch {
                     viewModel.namePlace(draft, name, clearMemberNames = takeOverNames)
                     segment = viewModel.segment(segmentId)
@@ -139,6 +166,7 @@ fun SegmentDetailScreen(
             },
             onSavePointOnly = { name ->
                 namingPlace = null
+                preview = null
                 scope.launch {
                     viewModel.renamePoint(draft.seed, name)
                     segment = viewModel.segment(segmentId)
@@ -172,7 +200,20 @@ fun SegmentDetailScreen(
                     basemap = settings.basemap,
                     customTileUrl = settings.customTileUrl,
                     customTilesGcj02 = settings.customTilesGcj02,
+                    rings = rings,
+                    focusBounds = focusBounds,
                 )
+            }
+
+            // The circle is on the map, the count is here, nothing is saved.
+            preview?.let { draft ->
+                item {
+                    PlacePreviewRow(
+                        draft = draft,
+                        onName = { namingPlace = draft },
+                        onCancel = { preview = null },
+                    )
+                }
             }
 
             item {
@@ -228,7 +269,7 @@ fun SegmentDetailScreen(
                             name = segment?.fromName,
                             note = placeNote(viewModel, fromPoint),
                             onName = {
-                                namingPlace = viewModel.placeDraft(fromPoint, segment?.from)
+                                preview = viewModel.placeDraft(fromPoint, segment?.from)
                             },
                         )
                         EndpointRow(
@@ -236,7 +277,7 @@ fun SegmentDetailScreen(
                             name = segment?.toName,
                             note = placeNote(viewModel, toPoint),
                             onName = {
-                                namingPlace = viewModel.placeDraft(toPoint, segment?.to)
+                                preview = viewModel.placeDraft(toPoint, segment?.to)
                             },
                         )
                     }
