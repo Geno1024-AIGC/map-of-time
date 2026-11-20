@@ -64,6 +64,9 @@ fun NetworkScreen(
     var preview by remember { mutableStateOf<PlaceDraft?>(null) }
     var namingPlace by remember { mutableStateOf<PlaceDraft?>(null) }
     val scope = rememberCoroutineScope()
+    // Drawn as a dot always; used by the camera only when there is no network
+    // to frame yet, because this tab is about the roads, not about the phone.
+    val here = rememberHere()
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 
@@ -180,6 +183,7 @@ fun NetworkScreen(
                     emptyHint = stringResource(R.string.network_empty_title),
                     rings = rings,
                     focusBounds = focusBounds,
+                    here = here,
                 )
             }
             // The review step: the ring is on the map, the numbers are here,

@@ -100,6 +100,12 @@ fun TrackMap(
     /** Where to look when there is no track yet, e.g. the latest live fix. */
     focus: LatLon? = null,
     /**
+     * The device position. It is where the camera starts when there is no
+     * track to frame, and it is drawn as a dot so that an otherwise blank map
+     * is not a mystery. Only read when [focus] is null.
+     */
+    here: LatLon? = null,
+    /**
      * One leg the user picked in the list. Drawn on top of the whole track and
      * used as the camera bounds, so tapping a leg zooms the map to it.
      */
@@ -133,6 +139,9 @@ fun TrackMap(
     }
     val displayFocus = remember(focus, usesGcj) {
         if (!usesGcj) focus else focus?.let(Gcj::toGcj02)
+    }
+    val displayHere = remember(here, usesGcj) {
+        if (!usesGcj) here else here?.let(Gcj::toGcj02)
     }
     val displayHighlight = remember(highlight, usesGcj) {
         if (!usesGcj) highlight else highlight?.map(Gcj::toGcj02)
@@ -175,7 +184,7 @@ fun TrackMap(
 
     var size by remember { mutableStateOf(Size.Zero) }
     var center by remember(bounds) {
-        mutableStateOf(bounds?.center ?: displayFocus ?: LatLon(39.9042, 116.4074))
+        mutableStateOf(bounds?.center ?: displayFocus ?: displayHere ?: LatLon(39.9042, 116.4074))
     }
     var zoom by remember(bounds) { mutableStateOf(15f) }
     var userMoved by remember { mutableStateOf(false) }
@@ -199,10 +208,11 @@ fun TrackMap(
     }
 
     // Before a trip has any track, follow the live fix — but never fight a
-    // pan or pinch the user did on purpose.
-    LaunchedEffect(displayFocus, bounds) {
+    // pan or pinch the user did on purpose. With no live fix the device
+    // position is the fallback: a map that opens on Beijing opens wrong.
+    LaunchedEffect(displayFocus, displayHere, bounds) {
         if (bounds != null || userMoved) return@LaunchedEffect
-        val target = displayFocus ?: return@LaunchedEffect
+        val target = displayFocus ?: displayHere ?: return@LaunchedEffect
         center = target
         if (zoom < 16f) zoom = 16f
     }
@@ -432,6 +442,22 @@ fun TrackMap(
                 }
             }
 
+            // Where the phone is. Skipped while a live fix is followed: that
+            // fix is already a marker a few metres away, and two dots that
+            // close together read as two devices.
+            displayHere?.let { point ->
+                if (displayFocus == null) {
+                    val p = project(point)
+                    drawCircle(
+                        color = colors.primary.copy(alpha = 0.22f),
+                        radius = 15.dp.toPx(),
+                        center = p,
+                    )
+                    drawCircle(color = Color.White, radius = 7.5.dp.toPx(), center = p)
+                    drawCircle(color = colors.primary, radius = 5.dp.toPx(), center = p)
+                }
+            }
+
             for (marker in displayMarkers) {
                 val p = project(marker.at)
                 val radius = if (marker.emphasized) 6.dp.toPx() else 4.dp.toPx()
@@ -447,15 +473,27 @@ fun TrackMap(
             }
 
             if (displayTracks.all { it.isEmpty() } && emptyHint != null) {
+                // The "you are here" dot owns the centre; the hint goes below
+                // it instead of on top of it. A dark shadow keeps the light
+                // text readable now that a real basemap is behind it.
+                val shift = if (displayHere != null && displayFocus == null) 26.dp.toPx() else 0f
+                val paint = android.graphics.Paint().apply {
+                    textSize = 14.dp.toPx()
+                    textAlign = android.graphics.Paint.Align.CENTER
+                }
+                paint.color = 0x66000000
                 drawContext.canvas.nativeCanvas.drawText(
                     emptyHint,
                     size.width / 2f,
-                    size.height / 2f,
-                    android.graphics.Paint().apply {
-                        color = 0x88FFFFFF.toInt()
-                        textSize = 14.dp.toPx()
-                        textAlign = android.graphics.Paint.Align.CENTER
-                    },
+                    size.height / 2f + shift + 1.dp.toPx(),
+                    paint,
+                )
+                paint.color = 0xEEFFFFFF.toInt()
+                drawContext.canvas.nativeCanvas.drawText(
+                    emptyHint,
+                    size.width / 2f,
+                    size.height / 2f + shift,
+                    paint,
                 )
             }
 
