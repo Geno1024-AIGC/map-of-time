@@ -2,16 +2,18 @@ package com.geno1024.ai.mapoftime.gradle
 
 import org.gradle.api.Project
 import java.io.File
-import java.io.RandomAccessFile
+import java.net.HttpURLConnection
+import java.net.URI
 
 /**
  * A build stamp of the form `0.1.<env>.<pack>.<sha8>`, exactly as
  * `RULES/VERSION.md` prescribes:
  *
  * - `env` is the commit count, and it is the only segment that sorts. The same
- *   checkout therefore yields the same version name locally and on CI.
- * - `pack` counts packaging builds of this module: attempts, not successes.
- *   CI reuses the committed number instead of incrementing it.
+ *   checkout therefore yields the same `env`.
+ * - `pack` is the module total returned by the org's build-count service: every
+ *   packaging request POSTs, locally and on CI alike. Attempts count, not
+ *   successes.
  * - `sha8` ties the artifact back to its revision; it never sorts.
  */
 data class Stamp(
@@ -32,6 +34,7 @@ data class Stamp(
 
 object Versioning {
     private const val NO_HEAD = "00000000"
+    private const val DEFAULT_URL = "http://build-count.invalid"
 
     /** `build` is an aggregate and exists everywhere; as a prefix it also hits `buildEnvironment`. */
     private val PACKAGING_EXACT = setOf("build")
@@ -45,9 +48,17 @@ object Versioning {
     /** JVM: names that only ever appear with a suffix. */
     private val JVM_PACKAGING_PREFIXES = listOf("shadowJar", "dist", "publish")
 
-    fun stamp(root: File, moduleDir: File): Stamp = Stamp(
+    /** Packaging builds: POST before the stamp is built, then use the returned total. */
+    fun stamp(root: File, project: Project): Stamp = Stamp(
         env = env(root),
-        pack = packOf(moduleDir),
+        pack = packOf(project),
+        sha8 = sha8(root),
+    )
+
+    /** Read-only stamp for `printVersionName`: GET the current total, never increment. */
+    fun current(root: File, project: Project): Stamp = Stamp(
+        env = env(root),
+        pack = fetch(project),
         sha8 = sha8(root),
     )
 
@@ -60,33 +71,88 @@ object Versioning {
     fun sha8(root: File): String =
         git(root, "rev-parse", "--short=8", "HEAD") ?: NO_HEAD
 
-    fun packFile(moduleDir: File) = File(moduleDir, "count.pack")
-
-    private fun packOf(moduleDir: File): String {
-        val file = packFile(moduleDir)
-        return if (file.exists()) file.readText().trim().ifEmpty { "0" } else "0"
-    }
-
     /**
-     * Counts this invocation as a packaging build of the module. Call it before
-     * [stamp], so the artifact carries its own one-based number and the file
-     * equals the number of packaging builds that have happened.
+     * Decides whether this invocation is a packaging build and, if so, POSTs
+     * before the stamp is constructed.
      *
      * The count is taken at configuration time, which is why it records
      * *requests* and not successes: a build that fails to compile, cannot sign
      * or is interrupted after configuration already has its number. Query-only
-     * tasks (`tasks`, `help`, …) and `--dry-run` stay out. `-Ppack.bump=true|false`
-     * forces the counter on or off; CI skips it by default, because an increment
-     * that is never written back would invent a number nobody has seen.
+     * tasks (`tasks`, `help`, …) and `--dry-run` stay out and stamp `pack = 0`.
+     * `-Ppack.bump=false` skips the service and uses `-Ppack.value` (default 0).
      */
-    fun bumpOnPackaging(project: Project, moduleDir: File) {
+    private fun packOf(project: Project): String {
         val params = project.gradle.startParameter
-        if (params.isDryRun) return
         val forced = params.projectProperties["pack.bump"]?.toBoolean()
-        if (forced == false) return
-        if (forced == null && !System.getenv("CI").isNullOrEmpty()) return
-        if (params.taskNames.none { requestsPackaging(project, it) }) return
-        incrementPack(moduleDir)
+        if (forced == false) return params.projectProperties["pack.value"] ?: "0"
+        if (params.isDryRun) return "0"
+        if (params.taskNames.none { requestsPackaging(project, it) }) return "0"
+        return report(project)
+    }
+
+    /** POST one packaging attempt; the body is the new module total. */
+    private fun report(project: Project): String {
+        val url = "${base()}/projects/${segment(project.rootProject.name)}" +
+            "/modules/${segment(moduleName(project))}/builds"
+        val token = System.getenv("BUILD_COUNT_TOKEN")
+            ?: error("BUILD_COUNT_TOKEN is required to count a packaging build")
+
+        val connection = (URI(url).toURL().openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            doOutput = true
+            connectTimeout = 10_000
+            readTimeout = 10_000
+            setRequestProperty("Authorization", "Bearer $token")
+        }
+        try {
+            connection.outputStream.close()
+        } catch (e: Exception) {
+            throw IllegalStateException("build-count service unreachable: $url", e)
+        }
+
+        val code = connection.responseCode
+        if (code != HttpURLConnection.HTTP_CREATED) {
+            val body = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+            error("build-count service returned HTTP $code: $body")
+        }
+        val pack = connection.inputStream.bufferedReader().use { it.readText() }.trim()
+        require(pack.matches(Regex("\\d+"))) {
+            "build-count service returned a non-numeric pack: $pack"
+        }
+        return pack
+    }
+
+    /** GET the current module total for display; never increments. */
+    private fun fetch(project: Project): String {
+        val url = "${base()}/projects/${segment(project.rootProject.name)}" +
+            "/modules/${segment(moduleName(project))}"
+        val connection = (URI(url).toURL().openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 10_000
+            readTimeout = 10_000
+        }
+        val code = connection.responseCode
+        if (code != HttpURLConnection.HTTP_OK) {
+            val body = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+            error("build-count service returned HTTP $code: $body")
+        }
+        val json = connection.inputStream.bufferedReader().use { it.readText() }
+        return Regex("\"total\"\\s*:\\s*(\\d+)").find(json)?.groupValues?.get(1)
+            ?: error("build-count service returned no total: $json")
+    }
+
+    private fun base(): String =
+        System.getenv("BUILD_COUNT_URL")?.takeIf { it.isNotBlank() } ?: DEFAULT_URL
+
+    /** `project` is the root name; `module` is the Gradle path with `:` as `.`. */
+    private fun moduleName(project: Project): String =
+        project.path.removePrefix(":").replace(':', '.').ifEmpty { project.name }
+
+    private fun segment(value: String): String {
+        require(value.matches(Regex("[A-Za-z0-9._-]{1,64}"))) {
+            "build-count segment must match [A-Za-z0-9._-]{1,64}: $value"
+        }
+        return value
     }
 
     /**
@@ -113,26 +179,6 @@ object Versioning {
             ANDROID_PACKAGING_PREFIXES.any(name::startsWith)
         } else {
             name in JVM_PACKAGING_EXACT || JVM_PACKAGING_PREFIXES.any(name::startsWith)
-        }
-    }
-
-    /**
-     * Serialised through a file lock: two builds of the same checkout would read
-     * the same value and the later write would swallow the earlier increment.
-     */
-    private fun incrementPack(moduleDir: File) {
-        val file = packFile(moduleDir)
-        file.parentFile?.mkdirs()
-        RandomAccessFile(file, "rw").use { raf ->
-            raf.channel.lock().use {
-                val bytes = ByteArray(raf.length().toInt())
-                raf.seek(0L)
-                raf.readFully(bytes)
-                val current = String(bytes, Charsets.UTF_8).trim().toIntOrNull() ?: 0
-                raf.setLength(0L)
-                raf.seek(0L)
-                raf.write("${current + 1}\n".toByteArray())
-            }
         }
     }
 
