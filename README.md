@@ -215,7 +215,9 @@ PR 不读任何 secret，因此 fork 的 PR 也能完整跑测试与 lint；PR �
 `<major>.<minor>.<env>.<pack>.<sha8>`，详见 `RULES/VERSION.md`：
 
 - `env` = `git rev-list --count HEAD`，本地与 CI 得到同一个值，是**唯一参与排序**的段。
-- `pack` = build-count 服务返回的模块总数，本地与 CI 的每次打包请求都 +1（成败都算）；服务不可达时打包构建直接失败。
+- `pack` = build-count 服务返回的模块总数，本地与 CI 的每次打包请求都 +1（成败都算）。
+- 连不上服务时（仅限网络层失败：拒绝连接、超时、DNS）打包照常进行：这一次记进 `.gradle/build-count/` 下的待补报日志，`pack` 写「已知服务总数 + 待补报数」这个预估值，构建输出打一条 warning；下一次连上服务的打包会先逐条补报，再记本次。token 错、4xx、5xx 仍然直接失败，不会伪装成离线。
+- CI 不做离线兜底：runner 的磁盘随 job 销毁，留不下待补报日志，所以 `GITHUB_ACTIONS=true` 时连不上就是失败。
 - `sha8` = `HEAD` 前 8 位，用于回溯。
 - `versionCode = env`。
 - 本地打包需要 `BUILD_COUNT_TOKEN`；服务地址默认 `http://build-count.invalid`，可用 `BUILD_COUNT_URL` 覆盖。CI 从仓库 secret 读取同名 token。
