@@ -74,6 +74,8 @@ fun SegmentDetailScreen(
     var renaming by remember { mutableStateOf(false) }
     // Same two steps as the network screen: preview the circle, then name it.
     var preview by remember { mutableStateOf<PlaceDraft?>(null) }
+    var previewAt by remember { mutableStateOf<com.geno1024.ai.mapoftime.core.LatLon?>(null) }
+    var previewReach by remember { mutableStateOf(PlaceDrafts.SPAN_M) }
     var namingPlace by remember { mutableStateOf<PlaceDraft?>(null) }
 
     LaunchedEffect(segmentId) {
@@ -157,9 +159,10 @@ fun SegmentDetailScreen(
             preview?.let { add(MapRing(it.center, it.adoptRadius(), active = true)) }
         }
     }
+    // Include the surroundings so the ring can be judged against its neighbours.
     val focusBounds = remember(preview) {
         preview?.let { draft ->
-            Geo.bounds(listOf(draft.center))?.expanded(draft.adoptRadius() + 25.0)
+            Geo.bounds(listOf(draft.center))?.expanded(draft.adoptRadius() + 60.0)
         }
     }
 
@@ -251,10 +254,17 @@ fun SegmentDetailScreen(
             // The circle is on the map, the count is here, nothing is saved.
             preview?.let { draft ->
                 item {
+                    val wider = PlaceDrafts.REACH_STEPS_M.firstOrNull { it > previewReach }
                     PlacePreviewRow(
                         draft = draft,
                         onName = { namingPlace = draft },
                         onCancel = { preview = null },
+                        onWider = wider?.let { reach ->
+                            {
+                                previewReach = reach
+                                preview = viewModel.placeDraft(draft.seed, previewAt, reach)
+                            }
+                        },
                     )
                 }
             }
@@ -312,7 +322,9 @@ fun SegmentDetailScreen(
                             name = segment?.fromName,
                             note = placeNote(viewModel, fromPoint),
                             onName = {
-                                preview = viewModel.placeDraft(fromPoint, segment?.from)
+                                previewAt = segment?.from
+                                previewReach = PlaceDrafts.SPAN_M
+                                preview = viewModel.placeDraft(fromPoint, previewAt, previewReach)
                             },
                         )
                         EndpointRow(
@@ -320,7 +332,9 @@ fun SegmentDetailScreen(
                             name = segment?.toName,
                             note = placeNote(viewModel, toPoint),
                             onName = {
-                                preview = viewModel.placeDraft(toPoint, segment?.to)
+                                previewAt = segment?.to
+                                previewReach = PlaceDrafts.SPAN_M
+                                preview = viewModel.placeDraft(toPoint, previewAt, previewReach)
                             },
                         )
                     }

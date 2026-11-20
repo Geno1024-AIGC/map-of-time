@@ -38,7 +38,8 @@
     <string name="place_clear_hint">留空则解散这个路口，各点退回到自己的名字或所在道路。</string>
     <string name="place_only_point">只命名这一个点</string>
     <string name="place_preview_name">命名这些点</string>
-    <string name="place_preview_hint">虚线圈是这个路口认领的范围。还没保存，看清楚了再命名。</string>
+    <string name="place_preview_wider">扩大范围</string>
+    <string name="place_preview_hint">虚线圈是这个路口认领的范围。还没保存，看清楚了再命名；大立交可以点「扩大范围」。</string>
     <string name="place_overridden">其中 %1$d 个点已有自己的名字</string>
     <string name="place_overridden_hint">单点名字优先于路口名。打开这个开关，让路口名接管它们。</string>
     <string name="place_name_action">命名路口</string>

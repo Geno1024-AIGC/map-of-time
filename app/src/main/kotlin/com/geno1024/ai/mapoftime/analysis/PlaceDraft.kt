@@ -49,6 +49,17 @@ data class PlaceDraft(
  * the seed is capped so a chain of nearby corners cannot swallow a whole
  * street, and points that already belong to another named junction are left
  * alone — that is the one mistake the user could not undo by renaming.
+ *
+ * ## Why there is a reach the user can raise
+ *
+ * A motorway interchange really can be 300 m across, and in the driven graph it
+ * looks exactly like 300 m of street: a chain of points joined by pieces of
+ * 80–130 m. No threshold can tell those apart, so the app does not pretend to
+ * guess. The default stays tight — it is right for the crossings you meet every
+ * day — and the preview offers the next reach up, with the circle redrawn so
+ * the cost of the decision is visible before anything is saved. Raising it
+ * scales every threshold together (the same rules, zoomed), which is what keeps
+ * the wide case from needing its own set of constants.
  */
 object PlaceDrafts {
     /** A piece of road this short is inside a junction, not between two. */
@@ -60,8 +71,15 @@ object PlaceDrafts {
     /** No proposal reaches further than this from the point that was tapped. */
     const val SPAN_M = 150.0
 
+    /**
+     * The reaches the preview can step through. 150 m is the default; 300 m is
+     * a big interchange; 400 m is the ceiling, and it is deliberately not
+     * "unlimited" — past that the circle stops describing one junction.
+     */
+    val REACH_STEPS_M = listOf(SPAN_M, 200.0, 300.0, 400.0)
+
     /** A gate against a pathological chain; a real junction is well under this. */
-    const val MAX_POINTS = 24
+    const val MAX_POINTS = 32
 
     /** Adoption needs a floor, or a one-point junction would swallow nothing. */
     const val MIN_ADOPT_M = 25.0
@@ -72,7 +90,16 @@ object PlaceDrafts {
         places: List<Place> = emptyList(),
         /** Where the seed is, when no stored segment mentions it. */
         fallbackAt: LatLon? = null,
+        /**
+         * How far the proposal may reach. Usually one of [REACH_STEPS_M]; the
+         * edge and proximity thresholds grow with it in proportion, so the
+         * default 150 m gives exactly the 45 m / 50 m rules above.
+         */
+        reachM: Double = SPAN_M,
     ): PlaceDraft? {
+        val scale = reachM / SPAN_M
+        val edgeLimit = SHORT_EDGE_M * scale
+        val nearLimit = NEAR_M * scale
         val refs = HashMap<String, PointRef>()
         val at = HashMap<String, LatLon>()
         val edges = HashMap<String, MutableList<Pair<String, Double>>>()
@@ -93,10 +120,10 @@ object PlaceDrafts {
         }
         val seedAt = at[seed.key] ?: return null
 
-        // A proposal never reaches further than SPAN_M, so everything outside
+        // A proposal never reaches further than reachM, so everything outside
         // that window can be left out before any distance is computed. A whole
         // history has thousands of endpoints; a junction has dozens.
-        val window = nearby(seedAt, at)
+        val window = nearby(seedAt, at, reachM)
 
         val existing = places.firstOrNull { place -> place.points.any { it.key == seed.key } }
         val foreign = places.filter { it.id != existing?.id }
@@ -117,17 +144,17 @@ object PlaceDrafts {
                 val here = at[key] ?: continue
                 val candidates = ArrayList<String>()
                 edges[key]?.forEach { (other, length) ->
-                    if (length <= SHORT_EDGE_M) candidates += other
+                    if (length <= edgeLimit) candidates += other
                 }
                 for (other in window) {
                     if (other == key) continue
-                    if (Geo.distanceMeters(here, at.getValue(other)) <= NEAR_M) candidates += other
+                    if (Geo.distanceMeters(here, at.getValue(other)) <= nearLimit) candidates += other
                 }
                 for (other in candidates) {
                     if (other in members) continue
                     if (members.size >= MAX_POINTS) break
                     val otherAt = at[other] ?: continue
-                    if (Geo.distanceMeters(seedAt, otherAt) > SPAN_M) continue
+                    if (Geo.distanceMeters(seedAt, otherAt) > reachM) continue
                     if (foreign.any { place ->
                             Geo.distanceMeters(otherAt, place.at) <= place.radiusM
                         }
@@ -174,9 +201,27 @@ object PlaceDrafts {
         )
     }
 
+    /**
+     * Whether a point that has just turned up belongs to [place].
+     *
+     * The stored radius says how big the junction is; it does not say that
+     * everything in that circle is part of it — a 300 m interchange's circle
+     * also covers the next crossing down the road. Membership is therefore
+     * decided by the points already in the junction: a new point has to land
+     * near one of them. That is the difference between a wide junction and a
+     * wide brush, and it is what makes raising the reach safe.
+     */
+    fun adopts(place: Place, at: LatLon, memberAt: (PointRef) -> LatLon?): Boolean {
+        if (Geo.distanceMeters(at, place.at) > place.radiusM) return false
+        return place.points.any { member ->
+            val here = memberAt(member) ?: return@any false
+            Geo.distanceMeters(at, here) <= NEAR_M
+        }
+    }
+
     /** Keys whose point could still be pulled in, by a bounding box first. */
-    private fun nearby(seed: LatLon, at: Map<String, LatLon>): List<String> {
-        val latitudeWindow = SPAN_M / METERS_PER_DEGREE
+    private fun nearby(seed: LatLon, at: Map<String, LatLon>, reachM: Double): List<String> {
+        val latitudeWindow = reachM / METERS_PER_DEGREE
         // Near the poles a longitude degree shrinks; the guard keeps the box
         // from exploding instead of dividing by almost zero.
         val cos = kotlin.math.cos(Math.toRadians(seed.lat)).coerceAtLeast(0.01)

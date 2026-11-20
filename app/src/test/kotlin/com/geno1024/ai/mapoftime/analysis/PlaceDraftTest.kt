@@ -29,7 +29,7 @@ class PlaceDraftTest {
         return ref
     }
 
-    private fun segment(from: PointRef, to: PointRef): Segment {
+    private fun segment(from: PointRef, to: PointRef, lengthM: Double = 30.0): Segment {
         val a = coords.getValue(from.key)
         val b = coords.getValue(to.key)
         return Segment(
@@ -42,7 +42,7 @@ class PlaceDraftTest {
             aLon = a.lon,
             bLat = b.lat,
             bLon = b.lon,
-            lengthM = 30.0,
+            lengthM = lengthM,
             firstSeen = 0,
             lastSeen = 0,
             fromKey = from.key,
@@ -55,8 +55,8 @@ class PlaceDraftTest {
      * refuge at each corner. That is the shape the user sees in OSM, and the
      * reason naming one point at a time never finishes.
      */
-    private fun wideCrossing(): Pair<List<PointRef>, List<Segment>> {
-        val columns = listOf(-45.0, -15.0, 15.0, 45.0)
+    private fun wideCrossing(offsetEastM: Double = 0.0): Pair<List<PointRef>, List<Segment>> {
+        val columns = listOf(-45.0, -15.0, 15.0, 45.0).map { it + offsetEastM }
         val rows = listOf(-30.0, 0.0, 30.0)
         val grid = rows.map { north -> columns.map { east -> point(east, north) } }
         val segments = ArrayList<Segment>()
@@ -154,5 +154,81 @@ class PlaceDraftTest {
         val draft = PlaceDrafts.draft(one, listOf(segment(one, two)))!!
         assertEquals(2, draft.count)
         assertEquals(PlaceDrafts.MIN_ADOPT_M, draft.adoptRadius(), 0.01)
+    }
+
+    @Test
+    fun aBigInterchangeNeedsAWiderReach() {
+        val (near, nearSegments) = wideCrossing()
+        val (far, farSegments) = wideCrossing(offsetEastM = 200.0)
+        val seed = near.first()
+        // 55 m pieces are longer than the 45 m default but shorter than the
+        // 90 m limit at 300 m. That is exactly the gap the Wider button fills.
+        val middle = point(100.0, 0.0)
+        val bridge = listOf(
+            segment(near[7], middle, 55.0), // east end of the near crossing
+            segment(middle, far[4], 55.0), // west end of the far one
+        )
+        val segments = nearSegments + farSegments + bridge
+
+        val tight = PlaceDrafts.draft(seed, segments)!!
+        assertEquals(12, tight.count)
+        assertTrue(tight.members.none { it.ref in far })
+
+        val wide = PlaceDrafts.draft(seed, segments, reachM = 300.0)!!
+        assertTrue(wide.count > 20)
+        assertTrue(far.all { ref -> wide.refs.any { it == ref } })
+    }
+
+    @Test
+    fun aWiderReachStillLeavesTheRoadAfterTheJunctionOut() {
+        val (points, segments) = wideCrossing()
+        val seed = points.first()
+        val downTheRoad = point(300.0, 0.0)
+        val draft = PlaceDrafts.draft(
+            seed,
+            segments + segment(seed, downTheRoad, 300.0),
+            reachM = 400.0,
+        )!!
+        assertTrue(draft.members.none { it.ref == downTheRoad })
+    }
+
+    @Test
+    fun wideningStillRespectsAnotherNamedJunction() {
+        val seed = point(0.0, 0.0)
+        val middle = point(100.0, 0.0)
+        val otherSeed = point(200.0, 0.0)
+        val neighbour = point(230.0, 0.0)
+        val other = Place(
+            id = 7,
+            name = "the next one",
+            at = coords.getValue(otherSeed.key),
+            radiusM = 80.0,
+            points = listOf(otherSeed, neighbour),
+        )
+        val segments = listOf(
+            segment(seed, middle, 100.0),
+            segment(middle, otherSeed, 100.0),
+        )
+        val draft = PlaceDrafts.draft(seed, segments, listOf(other), reachM = 300.0)!!
+        assertTrue(draft.members.none { it.ref == otherSeed || it.ref == neighbour })
+    }
+
+    @Test
+    fun aWideCircleDoesNotAdoptTheNextCrossingDownTheRoad() {
+        val first = point(0.0, 0.0)
+        val member = point(30.0, 0.0)
+        val place = Place(
+            id = 1,
+            name = "a big interchange",
+            at = coords.getValue(first.key),
+            radiusM = 160.0,
+            points = listOf(first, member),
+        )
+        val inside = point(20.0, 20.0)
+        val nextCrossing = point(150.0, 0.0)
+        val outsideRadius = point(200.0, 0.0)
+        assertTrue(PlaceDrafts.adopts(place, coords.getValue(inside.key)) { coords[it.key] })
+        assertTrue(!PlaceDrafts.adopts(place, coords.getValue(nextCrossing.key)) { coords[it.key] })
+        assertTrue(!PlaceDrafts.adopts(place, coords.getValue(outsideRadius.key)) { coords[it.key] })
     }
 }

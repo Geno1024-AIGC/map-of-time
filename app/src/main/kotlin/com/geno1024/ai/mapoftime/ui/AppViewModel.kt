@@ -197,9 +197,12 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
      * What the app proposes to call "this junction" when the user taps [ref]:
      * the point, the points around it, and the name they may already share.
      * Cheap enough to recompute on a tap; the lists are small.
+     *
+     * [reachM] is the preview's "wider" step: the same rules, scaled up, for
+     * the interchanges that really are 300 m across.
      */
-    fun placeDraft(ref: PointRef, at: LatLon? = null): PlaceDraft? =
-        PlaceDrafts.draft(ref, summaries.map { it.segment }, places, at)
+    fun placeDraft(ref: PointRef, at: LatLon? = null, reachM: Double = PlaceDrafts.SPAN_M): PlaceDraft? =
+        PlaceDrafts.draft(ref, summaries.map { it.segment }, places, at, reachM)
 
     fun placeOf(ref: PointRef): Place? = places.firstOrNull { place ->
         place.points.any { it.key == ref.key }

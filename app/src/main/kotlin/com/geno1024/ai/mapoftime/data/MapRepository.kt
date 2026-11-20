@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import androidx.core.database.sqlite.transaction
+import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
 import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.TrackPoint
@@ -697,6 +698,7 @@ class MapRepository(private val helper: MapDb) {
             while (cursor.moveToNext()) owned += "${cursor.getString(0)}:${cursor.getLong(1)}"
         }
 
+        val positions = HashMap<String, LatLon>()
         val candidates = LinkedHashMap<String, LatLon>()
         val endpointSelect =
             "SELECT from_key, a_lat, a_lon FROM segments WHERE from_key IS NOT NULL " +
@@ -704,8 +706,12 @@ class MapRepository(private val helper: MapDb) {
         db.rawQuery(endpointSelect, null).use { cursor ->
             while (cursor.moveToNext()) {
                 val ref = PointRef.parse(cursor.getString(0)) ?: continue
+                val at = LatLon(cursor.getDouble(1), cursor.getDouble(2))
+                // Every endpoint, including the ones already owned: the
+                // membership test below needs to know where the members are.
+                positions.putIfAbsent(ref.key, at)
                 if (!owned.add(ref.key)) continue
-                candidates[ref.key] = LatLon(cursor.getDouble(1), cursor.getDouble(2))
+                candidates[ref.key] = at
             }
         }
         if (candidates.isEmpty()) return
@@ -713,7 +719,7 @@ class MapRepository(private val helper: MapDb) {
         for ((key, at) in candidates) {
             val ref = PointRef.parse(key) ?: continue
             val nearest = places.minByOrNull { Geo.distanceMeters(at, it.at) } ?: continue
-            if (Geo.distanceMeters(at, nearest.at) > nearest.radiusM) continue
+            if (!PlaceDrafts.adopts(nearest, at) { member -> positions[member.key] }) continue
             db.insertWithOnConflict(
                 "place_points",
                 null,
