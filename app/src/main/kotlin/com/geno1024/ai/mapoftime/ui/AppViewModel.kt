@@ -11,12 +11,15 @@ import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
 import com.geno1024.ai.mapoftime.analysis.SegmentSummary
 import com.geno1024.ai.mapoftime.analysis.TripAnalyzer
+import com.geno1024.ai.mapoftime.core.BucketTake
 import com.geno1024.ai.mapoftime.core.DurationStats
 import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.Segmenter
 import com.geno1024.ai.mapoftime.core.TrackPoint
+import com.geno1024.ai.mapoftime.core.TrafficContext
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.core.TripMode
+import com.geno1024.ai.mapoftime.core.groupByTrafficContext
 import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.MatchKind
 import com.geno1024.ai.mapoftime.data.EXPORT_FORMAT
@@ -102,11 +105,15 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 }
                 val summaries = segments.map { segment ->
                     val samples = byMode[segment.mode]?.get(segment.id).orEmpty()
+                    val forward = samples.filter { it.direction > 0 }
+                    val backward = samples.filter { it.direction < 0 }
                     SegmentSummary(
                         segment = segment,
                         combined = DurationStats.of(samples),
-                        forward = DurationStats.of(samples.filter { it.direction > 0 }),
-                        backward = DurationStats.of(samples.filter { it.direction < 0 }),
+                        forward = DurationStats.of(forward),
+                        backward = DurationStats.of(backward),
+                        forwardTakes = takesByContext(forward),
+                        backwardTakes = takesByContext(backward),
                     )
                 }.sortedWith(compareByDescending<SegmentSummary> { it.sampleCount }.thenBy { it.segment.displayName })
                 Loaded(
@@ -527,6 +534,13 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         const val AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
     }
 }
+
+/**
+ * Median per part of the week. A context with no traversal is simply absent:
+ * [Map.getValue] would throw, and a zero-length bucket is not a statistic.
+ */
+private fun takesByContext(samples: List<TraversalSample>): Map<TrafficContext, BucketTake> =
+    groupByTrafficContext(samples).mapValues { (_, bucket) -> BucketTake.of(bucket) }
 
 /** Everything one background refresh loads, handed over in one go. */
 private data class Loaded(

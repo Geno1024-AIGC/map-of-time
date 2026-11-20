@@ -66,7 +66,8 @@
     <string name="match_unmatched">未匹配</string>
 
     <string name="samples_none">暂无样本</string>
-    <string name="typical_time">典型耗时</string>
+    <string name="typical_now">现在 · %1$s</string>
+    <string name="typical_now_thin">全部时段 · %1$s 的样本还不够</string>
 
     <string name="record_title">记录行程</string>
     <string name="record_mode">出行方式</string>

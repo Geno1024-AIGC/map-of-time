@@ -66,7 +66,8 @@
     <string name="match_unmatched">Unmatched</string>
 
     <string name="samples_none">No samples yet</string>
-    <string name="typical_time">Typical</string>
+    <string name="typical_now">Now · %1$s</string>
+    <string name="typical_now_thin">All hours · not enough %1$s trips yet</string>
 
     <string name="record_title">Record a trip</string>
     <string name="record_mode">Mode</string>
