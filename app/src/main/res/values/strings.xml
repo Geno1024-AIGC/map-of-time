@@ -181,7 +181,7 @@
     <string name="holiday_eve">Day before</string>
     <string name="holiday_during">Holiday</string>
     <string name="holiday_last">Last day</string>
-    <string name="holiday_calendar_outdated">The holiday calendar ends in %1$s; later dates are counted as ordinary days.</string>
+    <string name="holiday_calendar_outdated">The holiday calendar covers %1$s–%2$s; dates outside it count as ordinary days.</string>
     <string name="bucket_morning">Morning · 06–10</string>
     <string name="bucket_day">Day · 10–16</string>
     <string name="bucket_evening">Evening · 16–20</string>
