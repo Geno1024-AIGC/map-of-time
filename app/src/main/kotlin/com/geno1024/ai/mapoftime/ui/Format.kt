@@ -6,6 +6,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.core.Confidence
+import com.geno1024.ai.mapoftime.core.DayKind
+import com.geno1024.ai.mapoftime.core.PeakHour
 import com.geno1024.ai.mapoftime.core.TimeBucket
 import com.geno1024.ai.mapoftime.core.TripMode
 import java.time.Instant
@@ -92,6 +94,22 @@ fun timeBucketLabel(bucket: TimeBucket): String = stringResource(
         TimeBucket.DAY -> R.string.bucket_day
         TimeBucket.EVENING -> R.string.bucket_evening
         TimeBucket.NIGHT -> R.string.bucket_night
+    },
+)
+
+@Composable
+fun dayKindLabel(day: DayKind): String = stringResource(
+    when (day) {
+        DayKind.WEEKDAY -> R.string.day_weekday
+        DayKind.WEEKEND -> R.string.day_weekend
+    },
+)
+
+@Composable
+fun peakLabel(peak: PeakHour): String = stringResource(
+    when (peak) {
+        PeakHour.PEAK -> R.string.peak_peak
+        PeakHour.OFF_PEAK -> R.string.peak_off
     },
 )
 

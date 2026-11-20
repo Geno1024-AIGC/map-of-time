@@ -169,6 +169,12 @@
     <string name="segment_osm_name">OSM: %1$s</string>
     <string name="segment_directions">By direction</string>
     <string name="segment_by_time">By time of day</string>
+    <string name="segment_by_day">Weekday and rush hour</string>
+    <string name="segment_by_day_hint">Peak is 07:00–09:00 and 17:00–19:00. The same piece of road, split by the day and hour it was driven.</string>
+    <string name="day_weekday">Weekday</string>
+    <string name="day_weekend">Weekend</string>
+    <string name="peak_peak">Peak</string>
+    <string name="peak_off">Off-peak</string>
     <string name="bucket_morning">Morning · 06–10</string>
     <string name="bucket_day">Day · 10–16</string>
     <string name="bucket_evening">Evening · 16–20</string>

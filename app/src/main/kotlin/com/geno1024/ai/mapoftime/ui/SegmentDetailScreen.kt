@@ -30,15 +30,20 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
+import com.geno1024.ai.mapoftime.core.DayKind
 import com.geno1024.ai.mapoftime.core.DurationStats
 import com.geno1024.ai.mapoftime.core.Geo
+import com.geno1024.ai.mapoftime.core.PeakHour
 import com.geno1024.ai.mapoftime.core.Polyline
 import com.geno1024.ai.mapoftime.core.TimeBucket
+import com.geno1024.ai.mapoftime.core.TrafficContext
+import com.geno1024.ai.mapoftime.core.groupByTrafficContext
 import com.geno1024.ai.mapoftime.core.samples
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.data.Leg
@@ -77,6 +82,10 @@ fun SegmentDetailScreen(
     val backward = remember(samples) { DurationStats.of(samples.filter { it.direction < 0 }) }
     val byBucket = remember(samples) {
         TimeBucket.ordered.associateWith { DurationStats.of(it.samples(samples)) }
+    }
+    val byContext = remember(samples) {
+        val grouped = groupByTrafficContext(samples)
+        TrafficContext.ordered.associateWith { DurationStats.of(grouped[it].orEmpty()) }
     }
 
     val tracks = remember(legs) {
@@ -419,6 +428,15 @@ fun SegmentDetailScreen(
                 }
 
                 item {
+                    SectionCard(
+                        title = stringResource(R.string.segment_by_day),
+                        subtitle = stringResource(R.string.segment_by_day_hint),
+                    ) {
+                        TrafficMatrix(byContext)
+                    }
+                }
+
+                item {
                     SectionCard(title = stringResource(R.string.segment_by_time)) {
                         TimeBucket.ordered.forEach { bucket ->
                             val bucketStats = byBucket.getValue(bucket)
@@ -473,6 +491,67 @@ fun SegmentDetailScreen(
         }
     }
 }
+
+/**
+ * Weekday / weekend against peak / off-peak, as a two-by-two table.
+ *
+ * Reading down a column answers "how much slower is the rush"; reading across
+ * a row answers "is Saturday really quieter". Four key-value rows would make
+ * the reader hold one of the axes in their head; the grid does it for them.
+ */
+@Composable
+private fun TrafficMatrix(rows: Map<TrafficContext, DurationStats>) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    Row(Modifier.fillMaxWidth()) {
+        Spacer(Modifier.weight(LABEL_WEIGHT))
+        for (peak in PeakHour.entries) {
+            Text(
+                text = peakLabel(peak),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                color = muted,
+                textAlign = TextAlign.End,
+            )
+        }
+    }
+    for (day in DayKind.entries) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = dayKindLabel(day),
+                modifier = Modifier.weight(LABEL_WEIGHT),
+                style = MaterialTheme.typography.bodyMedium,
+                color = muted,
+            )
+            for (peak in PeakHour.entries) {
+                val stats = rows[TrafficContext(day, peak)]
+                val count = stats?.count ?: 0
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.End,
+                ) {
+                    Text(
+                        text = if (count == 0) "—" else formatSeconds(stats!!.medianMs),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
+                    if (count > 0) {
+                        Text(
+                            text = pluralStringResource(R.plurals.samples_count, count, count),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = muted,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Wide enough for "Off-peak" in the header, the rest split evenly. */
+private const val LABEL_WEIGHT = 1.15f
 
 @Composable
 private fun DirectionRow(label: String, stats: DurationStats, reference: Long) {
