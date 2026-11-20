@@ -102,13 +102,13 @@ object Versioning {
         var pending = state.pending
 
         while (pending > 0) {
-            val total = post(project) ?: return defer(project, state, known, pending)
+            val total = post(root, project) ?: return defer(project, state, known, pending)
             known = total
             pending -= 1
             state.write(known, pending)
         }
 
-        val total = post(project)
+        val total = post(root, project)
         if (total != null) {
             state.write(total, 0)
             return total
@@ -137,7 +137,7 @@ object Versioning {
 
     /** Read-only total: the service when reachable, otherwise "known + pending". */
     private fun currentPack(root: File, project: Project): String {
-        fetch(project)?.let { return it }
+        fetch(root, project)?.let { return it }
         val state = CountState(root, project.rootProject.name, moduleName(project))
         return (state.known.toLong() + state.pending).toString()
     }
@@ -147,10 +147,11 @@ object Versioning {
      * left (safe to count locally). An HTTP error, or a request whose response
      * was lost, fails loudly instead of slipping into the offline path.
      */
-    private fun post(project: Project): String? {
-        val token = System.getenv("BUILD_COUNT_TOKEN")
-            ?: error("BUILD_COUNT_TOKEN is required to count a packaging build")
-        val connection = (URI("${url(project)}/builds").toURL().openConnection() as HttpURLConnection)
+    private fun post(root: File, project: Project): String? {
+        val token = setting(root, "BUILD_COUNT_TOKEN")
+            ?: error("BUILD_COUNT_TOKEN is required to count a packaging build: set the " +
+                "environment variable or put it in ${File(root, "local.properties").path}")
+        val connection = (URI("${url(root, project)}/builds").toURL().openConnection() as HttpURLConnection)
             .apply {
                 requestMethod = "POST"
                 doOutput = true
@@ -168,7 +169,7 @@ object Versioning {
         val code = try {
             connection.responseCode
         } catch (e: IOException) {
-            throw IllegalStateException(lostResponse(project), e)
+            throw IllegalStateException(lostResponse(root, project), e)
         }
         if (code != HttpURLConnection.HTTP_CREATED) {
             val body = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
@@ -177,7 +178,7 @@ object Versioning {
         val pack = try {
             connection.inputStream.bufferedReader().use { it.readText() }.trim()
         } catch (e: IOException) {
-            throw IllegalStateException(lostResponse(project), e)
+            throw IllegalStateException(lostResponse(root, project), e)
         }
         require(pack.matches(Regex("\\d+"))) {
             "build-count service returned a non-numeric pack: $pack"
@@ -186,13 +187,13 @@ object Versioning {
     }
 
     /** The request went out, so the server may or may not have counted it. Do not guess. */
-    private fun lostResponse(project: Project) =
+    private fun lostResponse(root: File, project: Project) =
         "build-count POST was sent but no response came back; the count may or may not have been " +
-            "recorded. Check GET ${url(project)} before rebuilding."
+            "recorded. Check GET ${url(root, project)} before rebuilding."
 
     /** GETs the current total; `null` when the service cannot be reached. */
-    private fun fetch(project: Project): String? {
-        val connection = (URI(url(project)).toURL().openConnection() as HttpURLConnection)
+    private fun fetch(root: File, project: Project): String? {
+        val connection = (URI(url(root, project)).toURL().openConnection() as HttpURLConnection)
             .apply {
                 requestMethod = "GET"
                 connectTimeout = 10_000
@@ -217,10 +218,31 @@ object Versioning {
             ?: error("build-count service returned no total: $json")
     }
 
-    private fun url(project: Project): String =
-        "${System.getenv("BUILD_COUNT_URL")?.takeIf { it.isNotBlank() } ?: DEFAULT_URL}" +
+    private fun url(root: File, project: Project): String =
+        "${setting(root, "BUILD_COUNT_URL") ?: DEFAULT_URL}" +
             "/projects/${segment(project.rootProject.name)}" +
             "/modules/${segment(moduleName(project))}"
+
+    /**
+     * Environment first, then `local.properties`: CI only has the environment,
+     * and a developer can keep the token next to the keystore entries instead of
+     * exporting it in every shell. `local.properties` is gitignored, so it never
+     * leaves the machine.
+     */
+    private fun setting(root: File, key: String): String? =
+        System.getenv(key)?.takeIf { it.isNotBlank() } ?: localProperty(root, key)
+
+    private fun localProperty(root: File, key: String): String? {
+        val file = File(root, "local.properties")
+        if (!file.isFile) return null
+        val properties = java.util.Properties()
+        try {
+            file.inputStream().use { properties.load(it) }
+        } catch (e: IOException) {
+            error("cannot read ${file.path}: ${e.message}")
+        }
+        return properties.getProperty(key)?.takeIf { it.isNotBlank() }
+    }
 
     /** `project` is the root name; `module` is the Gradle path with `:` as `.`. */
     private fun moduleName(project: Project): String =
