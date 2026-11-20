@@ -20,6 +20,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -311,11 +312,14 @@ fun PlaceNameDialog(
     pointCount: Int,
     spanM: Double,
     named: Boolean,
+    /** Members that already carry a name of their own and would outrank it. */
+    overriddenCount: Int,
     onDismiss: () -> Unit,
-    onSave: (String) -> Unit,
+    onSave: (String, Boolean) -> Unit,
     onSavePointOnly: (String) -> Unit,
 ) {
     var text by remember(initial) { mutableStateOf(initial) }
+    var takeOverNames by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.place_name_title)) },
@@ -341,6 +345,28 @@ fun PlaceNameDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                // Points named one by one before junctions had names keep
+                // their own label; folding them in is offered, never assumed.
+                if (overriddenCount > 0) {
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(
+                                    R.string.place_overridden,
+                                    overriddenCount,
+                                ),
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                            Text(
+                                text = stringResource(R.string.place_overridden_hint),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(checked = takeOverNames, onCheckedChange = { takeOverNames = it })
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.place_clear_hint),
@@ -355,7 +381,7 @@ fun PlaceNameDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(text) }) {
+            TextButton(onClick = { onSave(text, takeOverNames) }) {
                 Text(
                     stringResource(
                         if (named) R.string.action_save else R.string.place_name_apply,

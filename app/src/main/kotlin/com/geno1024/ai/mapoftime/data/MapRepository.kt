@@ -579,7 +579,11 @@ class MapRepository(private val helper: MapDb) {
      * [members] replaces the whole membership: the caller hands over the set it
      * wants the name to cover, so the points that grew in since the last edit
      * are included and any the user took out are released. A point keeps its
-     * own name if it has one — an override stays an override.
+     * own name if it has one — an override stays an override — unless
+     * [clearMemberNames] says the junction name should take those points over
+     * too. That is how a junction named corner by corner before junctions had
+     * a name of their own gets folded into one, without guessing on the
+     * user's behalf.
      */
     fun upsertPlace(
         id: Long?,
@@ -587,6 +591,7 @@ class MapRepository(private val helper: MapDb) {
         members: List<PointRef>,
         center: LatLon,
         radiusM: Double,
+        clearMemberNames: Boolean = false,
     ): Long? {
         val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
         var placeId = id
@@ -611,6 +616,15 @@ class MapRepository(private val helper: MapDb) {
                 id
             }
             val target = placeId ?: return@transaction
+            if (clearMemberNames) {
+                for (ref in members.distinctBy { it.key }) {
+                    db.delete(
+                        "point_names",
+                        "kind = ? AND node_id = ?",
+                        arrayOf(ref.kind, ref.nodeId.toString()),
+                    )
+                }
+            }
             db.delete("place_points", "place_id = ?", arrayOf(target.toString()))
             for (ref in members.distinctBy { it.key }) {
                 db.insertWithOnConflict(

@@ -117,21 +117,22 @@ fun SegmentDetailScreen(
     // the only way a crossing with a dozen corners stays one action.
     namingPlace?.let { draft ->
         PlaceNameDialog(
-            initial = draft.seed.key.let { key ->
+            initial = viewModel.placeName(draft.existingPlaceId) ?: draft.seed.key.let { key ->
                 when (key) {
                     segment?.fromKey -> segment?.fromName
                     segment?.toKey -> segment?.toName
                     else -> null
-                }.orEmpty()
-            },
+                }
+            }.orEmpty(),
             pointCount = draft.count,
             spanM = draft.spanM,
             named = draft.existingPlaceId != null,
+            overriddenCount = viewModel.overriddenMembers(draft),
             onDismiss = { namingPlace = null },
-            onSave = { name ->
+            onSave = { name, takeOverNames ->
                 namingPlace = null
                 scope.launch {
-                    viewModel.namePlace(draft, name)
+                    viewModel.namePlace(draft, name, clearMemberNames = takeOverNames)
                     segment = viewModel.segment(segmentId)
                     legs = viewModel.legsForSegment(segmentId)
                 }

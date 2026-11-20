@@ -90,14 +90,17 @@ fun NetworkScreen(
 
     namingPlace?.let { draft ->
         PlaceNameDialog(
-            initial = selected?.name.orEmpty(),
+            initial = viewModel.placeName(draft.existingPlaceId) ?: selected?.name.orEmpty(),
             pointCount = draft.count,
             spanM = draft.spanM,
             named = draft.existingPlaceId != null,
+            overriddenCount = viewModel.overriddenMembers(draft),
             onDismiss = { namingPlace = null },
-            onSave = { name ->
+            onSave = { name, takeOverNames ->
                 namingPlace = null
-                scope.launch { viewModel.namePlace(draft, name) }
+                scope.launch {
+                    viewModel.namePlace(draft, name, clearMemberNames = takeOverNames)
+                }
             },
             onSavePointOnly = { name ->
                 namingPlace = null
