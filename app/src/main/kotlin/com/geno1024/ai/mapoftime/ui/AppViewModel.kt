@@ -9,6 +9,8 @@ import androidx.lifecycle.viewModelScope
 import com.geno1024.ai.mapoftime.AppContainer
 import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
+import com.geno1024.ai.mapoftime.analysis.PointDetail
+import com.geno1024.ai.mapoftime.analysis.PointDetails
 import com.geno1024.ai.mapoftime.analysis.SegmentSummary
 import com.geno1024.ai.mapoftime.analysis.TripAnalyzer
 import com.geno1024.ai.mapoftime.core.BucketTake
@@ -214,6 +216,27 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     fun placeName(id: Long?): String? = id?.let { wanted ->
         places.firstOrNull { it.id == wanted }?.name
+    }
+
+    /**
+     * The auto-derived caption for one point of a wide junction: which side of
+     * the junction it is on and which roads meet there. While a new junction is
+     * being previewed, [context] supplies the centre before anything is saved.
+     * Null for a point that belongs to no junction — there is no "side" to name.
+     */
+    fun pointDetail(key: String, at: LatLon, context: PlaceDraft? = null): PointDetail? {
+        val ref = PointRef.parse(key) ?: return null
+        val place = placeOf(ref)
+        // A point of a brand-new junction has no saved place yet — that is
+        // exactly when the preview context has to stand in for it. Only with
+        // no context at all is "no place" a reason to give up: there is no
+        // junction whose side this point could be on.
+        if (context == null && place == null) return null
+        val centre = context?.center ?: place!!.at
+        val placeName = context?.existingPlaceId?.let(::placeName) ?: place?.name
+        val touching = summaries.map { it.segment }
+            .filter { it.fromKey == key || it.toKey == key }
+        return PointDetails.of(at, centre, placeName, touching)
     }
 
     /**
