@@ -171,11 +171,13 @@
     <string name="segment_directions">By direction</string>
     <string name="segment_by_time">By time of day</string>
     <string name="segment_by_day">Weekday and rush hour</string>
-    <string name="segment_by_day_hint">Peak is 07:00–09:00 and 17:00–19:00. The same piece of road, split by the day and hour it was driven.</string>
+    <string name="segment_by_day_hint">Peak is 07:00–09:00 and 17:00–19:00. The same piece of road, split by the day and hour it was driven. Friday evening and holidays are counted on their own.</string>
     <string name="day_weekday">Weekday</string>
     <string name="day_weekend">Weekend</string>
     <string name="peak_peak">Peak</string>
     <string name="peak_off">Off-peak</string>
+    <string name="day_friday_rush">Friday evening</string>
+    <string name="day_friday_rush_vs">%1$s against the weekday peak</string>
     <string name="segment_by_holiday">Around public holidays</string>
     <string name="segment_by_holiday_hint">Leaving and coming back are not a Tuesday, so they stay out of the table above. The day before is a departure rush, the last day a return one; the total is there for when you want one number.</string>
     <string name="holiday_none">Ordinary day</string>

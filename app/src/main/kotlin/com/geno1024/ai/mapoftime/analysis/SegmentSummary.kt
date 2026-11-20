@@ -18,6 +18,12 @@ data class SegmentSummary(
      */
     val forwardTakes: Map<TrafficContext, BucketTake> = emptyMap(),
     val backwardTakes: Map<TrafficContext, BucketTake> = emptyMap(),
+    /**
+     * The Friday evening rush, per direction. Not in [forwardTakes]: those
+     * buckets are the routine week, and a Friday evening is counted once.
+     */
+    val forwardFridayRush: BucketTake = BucketTake.NONE,
+    val backwardFridayRush: BucketTake = BucketTake.NONE,
 ) {
     val sampleCount: Int get() = combined.count
 }

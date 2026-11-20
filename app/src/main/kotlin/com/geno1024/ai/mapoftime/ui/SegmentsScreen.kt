@@ -35,8 +35,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.analysis.SegmentSummary
 import com.geno1024.ai.mapoftime.core.TrafficContext
+import com.geno1024.ai.mapoftime.core.TrafficDay
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.core.takeAt
+import com.geno1024.ai.mapoftime.core.takeOrNull
+import com.geno1024.ai.mapoftime.core.trafficDayOf
 
 /** How the segment list is ordered. Every one is a question the user asks. */
 private enum class SegmentSort { RECENT, SAMPLES, SLOWEST, NAME }
@@ -58,10 +61,11 @@ fun SegmentsScreen(
     // remembered, and reading a clock in composition is cheaper than a ticker.
     // The calendar matters here too: a 调休 Saturday is a working day.
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
-    val now = TrafficContext.of(
-        epochMs = System.currentTimeMillis(),
-        calendar = settings.holidayCalendar,
-    )
+    val nowMs = System.currentTimeMillis()
+    val now = TrafficContext.of(epochMs = nowMs, calendar = settings.holidayCalendar)
+    // Friday 17:00–19:00 has its own bucket, so "now" has to leave the table
+    // for it; otherwise the number would be the weekday peak minus Fridays.
+    val fridayRush = trafficDayOf(nowMs, calendar = settings.holidayCalendar) == TrafficDay.FRIDAY_RUSH
 
     val summaries = remember(viewModel.summaries, modeFilter, sort, query) {
         val text = query.trim()
@@ -131,6 +135,7 @@ fun SegmentsScreen(
                 SegmentCard(
                     summary = summary,
                     now = now,
+                    fridayRush = fridayRush,
                     onClick = { onOpenSegment(summary.segment.id) },
                 )
             }
@@ -157,7 +162,12 @@ private val SegmentSummary.displayName: String
     get() = segment.displayName
 
 @Composable
-private fun SegmentCard(summary: SegmentSummary, now: TrafficContext, onClick: () -> Unit) {
+private fun SegmentCard(
+    summary: SegmentSummary,
+    now: TrafficContext,
+    fridayRush: Boolean,
+    onClick: () -> Unit,
+) {
     val segment = summary.segment
     // Two carriageways, two numbers: the combined median of a divided road
     // describes neither side. With one direction only, the median is that
@@ -167,11 +177,15 @@ private fun SegmentCard(summary: SegmentSummary, now: TrafficContext, onClick: (
     // the pooled median. For a divided road both sides have to come from the
     // same bucket, or the pair stops being comparable — which is the only
     // reason it is shown as a pair.
-    val forwardNow = summary.forwardTakes.takeAt(now)
-    val backwardNow = summary.backwardTakes.takeAt(now)
+    val forwardNow = if (fridayRush) summary.forwardFridayRush.takeOrNull() else summary.forwardTakes.takeAt(now)
+    val backwardNow = if (fridayRush) summary.backwardFridayRush.takeOrNull() else summary.backwardTakes.takeAt(now)
     val singleNow = if (summary.forward.count > 0) forwardNow else backwardNow
     val specific = if (divided) forwardNow != null && backwardNow != null else singleNow != null
-    val nowLabel = dayKindLabel(now.day) + " · " + peakLabel(now.peak)
+    val nowLabel = if (fridayRush) {
+        stringResource(R.string.day_friday_rush)
+    } else {
+        dayKindLabel(now.day) + " · " + peakLabel(now.peak)
+    }
 
     SectionCard(modifier = Modifier.clickable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -1,8 +1,10 @@
 package com.geno1024.ai.mapoftime.core
 
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZonedDateTime
 
 /**
  * Part of the day a traversal happened in.
@@ -79,8 +81,14 @@ enum class PeakHour {
     ;
 
     companion object {
-        /** 07:00–08:59 and 17:00–18:59 local time. */
-        val PEAK_HOURS = 7..8 to 17..18
+        /** 07:00–08:59 local time. */
+        val MORNING_HOURS = 7..8
+
+        /** 17:00–18:59 local time. */
+        val EVENING_HOURS = 17..18
+
+        /** Both rushes, as a pair of hour ranges. */
+        val PEAK_HOURS = MORNING_HOURS to EVENING_HOURS
 
         fun of(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): PeakHour {
             val hour = Instant.ofEpochMilli(epochMs).atZone(zone).hour
@@ -123,12 +131,61 @@ fun TrafficContext.samples(
     samples.filter { TrafficContext.of(it.startedAt, zone, calendar) == this }
 
 /**
+ * How the app splits the week for statistics.
+ *
+ * Holidays and the Friday evening rush are both systematically unlike an
+ * ordinary weekday, and both are kept out of the 2×2 table so that each cell
+ * still answers exactly one question. They are listed on their own instead —
+ * holidays by phase, Friday as a single extra row.
+ */
+enum class TrafficDay {
+    /** What the table measures: an ordinary working or resting day. */
+    ROUTINE,
+
+    /** Friday 17:00–19:00 on a working Friday that is not a holiday or its eve. */
+    FRIDAY_RUSH,
+
+    /** A holiday day, or the day before one. */
+    HOLIDAY,
+}
+
+/**
+ * Which of the three kinds of day [epochMs] falls on. The order matters: a
+ * Friday that is a holiday eve is a holiday, not a rush hour — 2026-04-03 is
+ * 清明's departure, and 2026-06-19 is 端午 itself.
+ */
+fun trafficDayOf(
+    epochMs: Long,
+    zone: ZoneId = ZoneId.systemDefault(),
+    calendar: HolidayCalendar = Holidays.builtIn,
+): TrafficDay {
+    val local = Instant.ofEpochMilli(epochMs).atZone(zone)
+    if (calendar.phaseOf(local.toLocalDate()) != HolidayPhase.NONE) return TrafficDay.HOLIDAY
+    return if (isFridayRush(local, calendar)) TrafficDay.FRIDAY_RUSH else TrafficDay.ROUTINE
+}
+
+/** Friday 17:00–19:00, on a working Friday that is not a holiday or its eve. */
+fun isFridayRush(
+    epochMs: Long,
+    zone: ZoneId = ZoneId.systemDefault(),
+    calendar: HolidayCalendar = Holidays.builtIn,
+): Boolean = isFridayRush(Instant.ofEpochMilli(epochMs).atZone(zone), calendar)
+
+private fun isFridayRush(local: ZonedDateTime, calendar: HolidayCalendar): Boolean =
+    local.dayOfWeek == DayOfWeek.FRIDAY &&
+        local.hour in PeakHour.EVENING_HOURS &&
+        calendar.isWorkday(local.toLocalDate())
+
+/**
  * The bucket's typical time when it holds enough samples to have one.
  * `null` means "not this one" — the caller falls back to the pooled median
  * rather than printing a median of two trips as if it meant something.
  */
+/** The take when it holds enough samples; `null` means "show the pooled median instead". */
+fun BucketTake.takeOrNull(): BucketTake? = takeIf { !it.isThin }
+
 fun Map<TrafficContext, BucketTake>.takeAt(context: TrafficContext): BucketTake? =
-    this[context]?.takeIf { !it.isThin }
+    this[context]?.takeOrNull()
 
 /**
  * Sorts [samples] into the four contexts in one pass, so a page with four

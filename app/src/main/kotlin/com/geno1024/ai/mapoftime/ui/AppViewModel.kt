@@ -18,9 +18,11 @@ import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.Segmenter
 import com.geno1024.ai.mapoftime.core.TrackPoint
 import com.geno1024.ai.mapoftime.core.TrafficContext
+import com.geno1024.ai.mapoftime.core.TrafficDay
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.core.groupByTrafficContext
+import com.geno1024.ai.mapoftime.core.trafficDayOf
 import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.MatchKind
 import com.geno1024.ai.mapoftime.data.EXPORT_FORMAT
@@ -116,6 +118,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         backward = DurationStats.of(backward),
                         forwardTakes = takesByContext(forward, calendar),
                         backwardTakes = takesByContext(backward, calendar),
+                        forwardFridayRush = takeOn(forward, calendar, TrafficDay.FRIDAY_RUSH),
+                        backwardFridayRush = takeOn(backward, calendar, TrafficDay.FRIDAY_RUSH),
                     )
                 }.sortedWith(compareByDescending<SegmentSummary> { it.sampleCount }.thenBy { it.segment.displayName })
                 Loaded(
@@ -545,7 +549,21 @@ private fun takesByContext(
     samples: List<TraversalSample>,
     calendar: HolidayCalendar,
 ): Map<TrafficContext, BucketTake> =
-    groupByTrafficContext(samples, calendar = calendar).mapValues { (_, bucket) -> BucketTake.of(bucket) }
+    groupByTrafficContext(
+        // Holidays and Friday evenings are left out for the same reason the
+        // detail table leaves them out: "weekday peak" has to mean one thing.
+        samples.filter { trafficDayOf(it.startedAt, calendar = calendar) == TrafficDay.ROUTINE },
+        calendar = calendar,
+    ).mapValues { (_, bucket) -> BucketTake.of(bucket) }
+
+/** The median of the traversals that fall on one kind of day. */
+private fun takeOn(
+    samples: List<TraversalSample>,
+    calendar: HolidayCalendar,
+    day: TrafficDay,
+): BucketTake = BucketTake.of(
+    samples.filter { trafficDayOf(it.startedAt, calendar = calendar) == day },
+)
 
 /** Everything one background refresh loads, handed over in one go. */
 private data class Loaded(

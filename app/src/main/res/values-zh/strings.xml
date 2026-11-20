@@ -171,11 +171,13 @@
     <string name="segment_directions">按方向</string>
     <string name="segment_by_time">按时段</string>
     <string name="segment_by_day">工作日与高峰</string>
-    <string name="segment_by_day_hint">高峰指 07:00–09:00 和 17:00–19:00。同一段路，按它是哪天、哪个时段走的拆开看。</string>
+    <string name="segment_by_day_hint">高峰指 07:00–09:00 和 17:00–19:00。同一段路，按它是哪天、哪个时段走的拆开看；周五晚高峰与节假日不进这张表。</string>
     <string name="day_weekday">工作日</string>
     <string name="day_weekend">休息日</string>
     <string name="peak_peak">高峰</string>
     <string name="peak_off">非高峰</string>
+    <string name="day_friday_rush">周五晚高峰</string>
+    <string name="day_friday_rush_vs">比工作日高峰 %1$s</string>
     <string name="segment_by_holiday">节假日前后</string>
     <string name="segment_by_holiday_hint">节前和节末的车流与平常不同，所以单列，不混进上面那张表。节前是出发、节末是返程，方向相反；想要一个总数时看最下面一行。</string>
     <string name="holiday_none">平常</string>
