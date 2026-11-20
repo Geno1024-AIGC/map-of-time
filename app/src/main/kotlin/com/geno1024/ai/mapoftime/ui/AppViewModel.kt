@@ -208,7 +208,15 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         at: LatLon? = null,
         reachM: Double = PlaceDrafts.SPAN_M,
         manual: Map<String, Boolean> = emptyMap(),
-    ): PlaceDraft? = PlaceDrafts.draft(ref, summaries.map { it.segment }, places, at, reachM, manual)
+    ): PlaceDraft? = PlaceDrafts.draft(
+        ref,
+        summaries.map { it.segment },
+        places,
+        at,
+        reachM,
+        manual,
+        pointNames.keys,
+    )
 
     fun placeOf(ref: PointRef): Place? = places.firstOrNull { place ->
         place.points.any { it.key == ref.key }
@@ -252,6 +260,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 center = draft.center,
                 radiusM = draft.adoptRadius(),
                 clearMemberNames = clearMemberNames,
+                absorbIds = draft.absorbIds,
             )
         }
         refresh()

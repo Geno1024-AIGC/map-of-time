@@ -32,6 +32,13 @@ data class PlaceDraft(
      * quietly release points the user already named.
      */
     val carried: List<PointRef> = emptyList(),
+    /**
+     * Other place rows folded into this draft because the user gave them the
+     * same name. A wide junction is often saved as several rows — the
+     * right-turn lane can be 70 m from the through lane — and saving has to
+     * absorb them so one junction is one row again.
+     */
+    val absorbIds: List<Long> = emptyList(),
 ) {
     val count: Int get() = members.size + carried.size
 
@@ -104,6 +111,13 @@ object PlaceDrafts {
          * that belongs to another named junction.
          */
         manual: Map<String, Boolean> = emptyMap(),
+        /**
+         * Points the user named one by one. A named point is its own thing —
+         * the filling station at the edge of the road is not part of the
+         * crossing just because it is close — so the automatic walk never
+         * pulls one in. An explicit [manual] pick still can.
+         */
+        namedKeys: Set<String> = emptySet(),
     ): PlaceDraft? {
         val scale = reachM / SPAN_M
         val edgeLimit = SHORT_EDGE_M * scale
@@ -134,13 +148,44 @@ object PlaceDrafts {
         val window = nearby(seedAt, at, reachM)
 
         val existing = places.firstOrNull { place -> place.points.any { it.key == seed.key } }
-        val foreign = places.filter { it.id != existing?.id }
+
+        // A wide junction is often saved as several rows under one name: the
+        // right-turn lane can sit 70 m from the through lane, too far for one
+        // draft at the default reach, so each turning movement got named on
+        // its own. The name is the reliable signal here — geometry at this
+        // scale cannot tell a big T from a stretch of road. Fold those rows in
+        // rather than protecting them as foreign; that is the whole reason
+        // the two halves could never be merged before.
+        val twins = existing?.name?.let { name ->
+            places.filter { place ->
+                place.id != existing.id &&
+                    place.name == name &&
+                    Geo.distanceMeters(place.at, seedAt) <= reachM
+            }
+        }.orEmpty()
+        val twinIds = twins.map { it.id }
+        val twinIdSet = twinIds.toHashSet()
+        val foreign = places.filter { place ->
+            place.id != existing?.id && place.id !in twinIdSet
+        }
+
+        // A named point keeps its own identity. The filling station on the
+        // corner is not part of the junction just because the near radius
+        // reaches it; nor is the short piece joining its entrance to its exit.
+        // Manual picks override this — the user can still add one on purpose.
+        val protected = HashSet<String>(namedKeys)
+        for ((key, links) in edges) {
+            if (key in namedKeys) {
+                links.forEach { (other, length) ->
+                    if (length <= edgeLimit) protected += other
+                }
+            }
+        }
+
         val members = LinkedHashSet<String>()
         val carried = ArrayList<PointRef>()
-        if (existing != null) {
-            for (ref in existing.points) {
-                if (ref.key in at) members += ref.key else carried += ref
-            }
+        for (ref in (existing?.points.orEmpty() + twins.flatMap { it.points })) {
+            if (ref.key in at) members += ref.key else carried += ref
         }
         members += seed.key
 
@@ -160,6 +205,7 @@ object PlaceDrafts {
                 }
                 for (other in candidates) {
                     if (other in members) continue
+                    if (other in protected) continue
                     if (members.size >= MAX_POINTS) break
                     val otherAt = at[other] ?: continue
                     if (Geo.distanceMeters(seedAt, otherAt) > reachM) continue
@@ -221,6 +267,7 @@ object PlaceDrafts {
             radiusM = radius,
             existingPlaceId = existing?.id,
             carried = carried,
+            absorbIds = twinIds,
         )
     }
 

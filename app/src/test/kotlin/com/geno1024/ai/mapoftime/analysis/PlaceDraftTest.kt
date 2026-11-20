@@ -267,6 +267,114 @@ class PlaceDraftTest {
     }
 
     @Test
+    fun twoHalvesOfOneWideJunctionFoldIntoOneDraft() {
+        // The through movement and the right-turn-only lane of one big T were
+        // named separately because 70 m is too far for the default near rule.
+        // They share a name — that, not geometry, says they are one junction.
+        val through = point(0.0, 0.0)
+        val rightTurn = point(70.0, 0.0)
+        val name = "Guanzhang x Shuilian"
+        val a = Place(id = 1, name = name, at = coords.getValue(through.key), radiusM = 25.0, points = listOf(through))
+        val b = Place(id = 2, name = name, at = coords.getValue(rightTurn.key), radiusM = 25.0, points = listOf(rightTurn))
+        // No short piece between them — only a long approach road, as in geo: data.
+        val segments = listOf(segment(through, point(400.0, 0.0), 4000.0))
+
+        val draft = PlaceDrafts.draft(through, segments, listOf(a, b))!!
+        assertEquals(2, draft.count)
+        assertTrue(rightTurn in draft.refs)
+        assertEquals(1L, draft.existingPlaceId)
+        assertEquals(listOf(2L), draft.absorbIds)
+    }
+
+    @Test
+    fun sameNameRowsFarBeyondReachAreNotFolded() {
+        val through = point(0.0, 0.0)
+        val otherTown = point(400.0, 0.0)
+        val name = "Renmin x Jianguo"
+        val a = Place(id = 1, name = name, at = coords.getValue(through.key), radiusM = 25.0, points = listOf(through))
+        val b = Place(id = 2, name = name, at = coords.getValue(otherTown.key), radiusM = 25.0, points = listOf(otherTown))
+
+        val draft = PlaceDrafts.draft(
+            through, emptyList(), listOf(a, b), coords.getValue(through.key),
+        )!!
+        assertEquals(1, draft.count)
+        assertTrue(draft.absorbIds.isEmpty())
+    }
+
+    @Test
+    fun aNamedPointBesideTheJunctionIsNotAutoAbsorbed() {
+        val seed = point(0.0, 0.0)
+        val station = point(70.0, 0.0)
+        // At 300 m the near limit is 100 m, so geometry alone would take it.
+        val draft = PlaceDrafts.draft(
+            seed,
+            listOf(segment(seed, station, 5000.0)),
+            namedKeys = setOf(station.key),
+            reachM = 300.0,
+        )!!
+        assertEquals(1, draft.count)
+        assertTrue(station !in draft.refs)
+    }
+
+    @Test
+    fun theShortRoadToANamedPointIsAlsoKeptOut() {
+        val seed = point(0.0, 0.0)
+        val entrance = point(70.0, 0.0) // named filling-station entrance
+        val exit = point(90.0, 0.0) // unnamed exit, joined by a short piece
+        val draft = PlaceDrafts.draft(
+            seed,
+            listOf(segment(seed, entrance, 5000.0), segment(entrance, exit, 20.0)),
+            namedKeys = setOf(entrance.key),
+            reachM = 300.0,
+        )!!
+        assertEquals(1, draft.count)
+        assertTrue(entrance !in draft.refs)
+        assertTrue(exit !in draft.refs)
+    }
+
+    @Test
+    fun aNamedPointCanStillBePickedOnPurpose() {
+        val seed = point(0.0, 0.0)
+        val station = point(70.0, 0.0)
+        val draft = PlaceDrafts.draft(
+            seed,
+            listOf(segment(seed, station, 5000.0)),
+            namedKeys = setOf(station.key),
+            reachM = 300.0,
+            manual = mapOf(station.key to true),
+        )!!
+        assertTrue(station in draft.refs)
+    }
+
+    @Test
+    fun theWideJunctionMergesWithoutTakingTheFillingStation() {
+        val through = point(0.0, 0.0)
+        val rightTurn = point(70.0, 0.0)
+        val stationIn = point(-10.0, -70.0)
+        val stationOut = point(15.0, -70.0)
+        val name = "Guanzhang x Shuilian"
+        val a = Place(id = 1, name = name, at = coords.getValue(through.key), radiusM = 25.0, points = listOf(through))
+        val b = Place(id = 2, name = name, at = coords.getValue(rightTurn.key), radiusM = 25.0, points = listOf(rightTurn))
+        val segments = listOf(
+            segment(stationIn, stationOut, 26.0), // entry ↔ exit, a short piece
+            segment(through, point(500.0, 0.0), 5000.0),
+        )
+
+        val draft = PlaceDrafts.draft(
+            through,
+            segments,
+            listOf(a, b),
+            reachM = 300.0,
+            namedKeys = setOf(stationIn.key),
+        )!!
+        assertEquals(2, draft.count)
+        assertTrue(rightTurn in draft.refs)
+        assertTrue(stationIn !in draft.refs)
+        assertTrue(stationOut !in draft.refs)
+        assertEquals(listOf(2L), draft.absorbIds)
+    }
+
+    @Test
     fun aWideCircleDoesNotAdoptTheNextCrossingDownTheRoad() {
         val first = point(0.0, 0.0)
         val member = point(30.0, 0.0)
