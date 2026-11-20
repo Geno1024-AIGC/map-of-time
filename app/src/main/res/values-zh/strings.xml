@@ -28,8 +28,22 @@
 
     <string name="nav_record">记录</string>
     <string name="nav_trips">行程</string>
+    <string name="nav_network">路网</string>
     <string name="nav_segments">路段</string>
     <string name="nav_settings">设置</string>
+
+    <string name="network_title">路网</string>
+    <string name="network_summary">%1$d 个节点 · %2$d 段</string>
+    <string name="network_summary_parts">%1$d 个节点 · %2$d 段 · %3$d 个互不相连的片区</string>
+    <string name="network_hint">点一个节点，看看从这里能去哪些路段</string>
+    <string name="network_pick_node">在地图上点一个点，查看从那里出发的路段。</string>
+    <string name="network_node_unnamed">未命名节点</string>
+    <string name="network_degree">%1$d 段</string>
+    <string name="network_other_unnamed">对端未命名</string>
+    <string name="network_out_time">去 %1$s</string>
+    <string name="network_back_time">回 %1$s</string>
+    <string name="network_empty_title">还没有路网</string>
+    <string name="network_empty_body">分析一次带 OSM 路口的行程，走过的路就会在这里按共享的路口连起来。</string>
 
     <string name="match_osm">OSM 交叉口</string>
     <string name="match_geometric">本地拐点</string>

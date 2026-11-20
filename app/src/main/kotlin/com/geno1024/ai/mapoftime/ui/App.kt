@@ -24,6 +24,7 @@ import com.geno1024.ai.mapoftime.R
 private enum class Tab(val labelRes: Int, val glyph: String) {
     RECORD(R.string.nav_record, "◉"),
     TRIPS(R.string.nav_trips, "≡"),
+    NETWORK(R.string.nav_network, "⌗"),
     SEGMENTS(R.string.nav_segments, "⌁"),
     SETTINGS(R.string.nav_settings, "⚙"),
 }
@@ -107,6 +108,12 @@ fun App(viewModel: AppViewModel) {
                     Tab.TRIPS -> TripsScreen(
                         viewModel = viewModel,
                         onOpenTrip = { id -> detail = "trip:$id" },
+                        modifier = Modifier.padding(padding),
+                    )
+
+                    Tab.NETWORK -> NetworkScreen(
+                        viewModel = viewModel,
+                        onOpenSegment = { id -> detail = "segment:$id" },
                         modifier = Modifier.padding(padding),
                     )
 
