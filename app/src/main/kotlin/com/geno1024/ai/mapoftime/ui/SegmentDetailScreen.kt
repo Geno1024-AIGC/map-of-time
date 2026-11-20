@@ -39,11 +39,14 @@ import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
 import com.geno1024.ai.mapoftime.core.DayKind
 import com.geno1024.ai.mapoftime.core.DurationStats
 import com.geno1024.ai.mapoftime.core.Geo
+import com.geno1024.ai.mapoftime.core.HolidayPhase
+import com.geno1024.ai.mapoftime.core.Holidays
 import com.geno1024.ai.mapoftime.core.PeakHour
 import com.geno1024.ai.mapoftime.core.Polyline
 import com.geno1024.ai.mapoftime.core.TimeBucket
 import com.geno1024.ai.mapoftime.core.TrafficContext
 import com.geno1024.ai.mapoftime.core.groupByTrafficContext
+import com.geno1024.ai.mapoftime.core.holidayPhaseOf
 import com.geno1024.ai.mapoftime.core.samples
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.data.Leg
@@ -83,9 +86,24 @@ fun SegmentDetailScreen(
     val byBucket = remember(samples) {
         TimeBucket.ordered.associateWith { DurationStats.of(it.samples(samples)) }
     }
-    val byContext = remember(samples) {
-        val grouped = groupByTrafficContext(samples)
+    // A holiday week is neither a weekday nor a weekend, so those days are
+    // kept out of the routine table and listed separately below it. A table
+    // that quietly averaged 春节 into "weekday off-peak" would be worse than
+    // no table at all.
+    val routineSamples = remember(samples) {
+        samples.filter { holidayPhaseOf(it.startedAt) == HolidayPhase.NONE }
+    }
+    val byContext = remember(routineSamples) {
+        val grouped = groupByTrafficContext(routineSamples)
         TrafficContext.ordered.associateWith { DurationStats.of(grouped[it].orEmpty()) }
+    }
+    val byHoliday = remember(samples) {
+        samples.filter { holidayPhaseOf(it.startedAt) != HolidayPhase.NONE }
+            .groupBy { holidayPhaseOf(it.startedAt) }
+            .mapValues { DurationStats.of(it.value) }
+    }
+    val outsideCalendar = remember(samples) {
+        samples.any { !Holidays.covers(it.startedAt) }
     }
 
     val tracks = remember(legs) {
@@ -433,6 +451,40 @@ fun SegmentDetailScreen(
                         subtitle = stringResource(R.string.segment_by_day_hint),
                     ) {
                         TrafficMatrix(byContext)
+                    }
+                }
+
+                if (byHoliday.isNotEmpty()) {
+                    item {
+                        SectionCard(
+                            title = stringResource(R.string.segment_by_holiday),
+                            subtitle = stringResource(R.string.segment_by_holiday_hint),
+                        ) {
+                            for (phase in HolidayPhase.entries) {
+                                if (phase == HolidayPhase.NONE) continue
+                                val holidayStats = byHoliday[phase] ?: continue
+                                KeyValueRow(
+                                    label = holidayPhaseLabel(phase),
+                                    value = formatSeconds(holidayStats.medianMs) + " · " +
+                                        pluralStringResource(
+                                            R.plurals.samples_count,
+                                            holidayStats.count,
+                                            holidayStats.count,
+                                        ),
+                                )
+                            }
+                            if (outsideCalendar) {
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = stringResource(
+                                        R.string.holiday_calendar_outdated,
+                                        Holidays.coveredYears.last.toString(),
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                     }
                 }
 
