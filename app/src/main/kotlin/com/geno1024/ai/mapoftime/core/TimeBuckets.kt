@@ -1,5 +1,6 @@
 package com.geno1024.ai.mapoftime.core
 
+import java.time.DayOfWeek
 import java.time.Instant
 import java.time.ZoneId
 
@@ -38,3 +39,84 @@ fun TimeBucket.samples(
     samples: List<TraversalSample>,
     zone: ZoneId = ZoneId.systemDefault(),
 ): List<TraversalSample> = samples.filter { TimeBucket.of(it.startedAt, zone) == this }
+
+/**
+ * Whether the day was a working day.
+ *
+ * Monday morning and Saturday morning are the same road at the same hour and
+ * nothing else about them is alike, so they must not be pooled.
+ */
+enum class DayKind {
+    WEEKDAY,
+    WEEKEND,
+    ;
+
+    companion object {
+        /** Saturday and Sunday are the weekend; public holidays are not tracked. */
+        fun of(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): DayKind {
+            val day = Instant.ofEpochMilli(epochMs).atZone(zone).dayOfWeek
+            return if (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY) WEEKEND else WEEKDAY
+        }
+    }
+}
+
+/**
+ * Rush hour or not.
+ *
+ * Morning and evening are collapsed on purpose: what matters for "is this trip
+ * going to be slow" is that it happened in the crush, not which of the two
+ * crushes it was. Four hours out of twenty-four is already a lot to ask of a
+ * handful of samples.
+ */
+enum class PeakHour {
+    PEAK,
+    OFF_PEAK,
+    ;
+
+    companion object {
+        /** 07:00–08:59 and 17:00–18:59 local time. */
+        val PEAK_HOURS = 7..8 to 17..18
+
+        fun of(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): PeakHour {
+            val hour = Instant.ofEpochMilli(epochMs).atZone(zone).hour
+            return if (hour in PEAK_HOURS.first || hour in PEAK_HOURS.second) PEAK else OFF_PEAK
+        }
+    }
+}
+
+/**
+ * The two axes crossed: four kinds of traversal that are worth telling apart.
+ *
+ * Any finer and the tables would be mostly empty cells that look like findings.
+ */
+data class TrafficContext(val day: DayKind, val peak: PeakHour) {
+    companion object {
+        fun of(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()) = TrafficContext(
+            day = DayKind.of(epochMs, zone),
+            peak = PeakHour.of(epochMs, zone),
+        )
+
+        /** Weekday first, peak first: the order the table is read in. */
+        val ordered: List<TrafficContext> = buildList {
+            for (day in DayKind.entries) {
+                for (peak in PeakHour.entries) add(TrafficContext(day, peak))
+            }
+        }
+    }
+}
+
+/** The traversals that happened in this kind of day and hour. */
+fun TrafficContext.samples(
+    samples: List<TraversalSample>,
+    zone: ZoneId = ZoneId.systemDefault(),
+): List<TraversalSample> = samples.filter { TrafficContext.of(it.startedAt, zone) == this }
+
+/**
+ * Sorts [samples] into the four contexts in one pass, so a page with four
+ * buckets and a few hundred traversals does not convert every timestamp four
+ * times over.
+ */
+fun groupByTrafficContext(
+    samples: List<TraversalSample>,
+    zone: ZoneId = ZoneId.systemDefault(),
+): Map<TrafficContext, List<TraversalSample>> = samples.groupBy { TrafficContext.of(it.startedAt, zone) }
