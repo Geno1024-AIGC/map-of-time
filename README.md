@@ -194,10 +194,10 @@
 | Job | 何时运行 | 做什么 |
 |---|---|---|
 | `verify` | 每次 push、PR、手动触发 | 单元测试 + `lintRelease`，上传 lint 报告 |
-| `release` | 仅 `master` 的 push / 手动触发 | 落盘 keystore、`assembleRelease -Ppack.bump=false`、用 `apksigner` 验证签名、从 APK 里读版本号 |
+| `release` | 仅 `master` 的 push / 手动触发 | 落盘 keystore、`assembleRelease`（上报 build-count 服务）、用 `apksigner` 验证签名、从 APK 里读版本号 |
 | `prerelease` | 同上，且带 `contents: write` | 把 APK 发布到滚动标签 `canary`（`--prerelease`） |
 
-PR 不读任何 secret，因此 fork 的 PR 也能完整跑测试与 lint；CI 不自增 `app/count.pack`，避免产出一个仓库里不存在的 `pack`。
+PR 不读任何 secret，因此 fork 的 PR 也能完整跑测试与 lint；PR 只跑 `verify`、不打包，所以不需要 build-count token。`release` 的打包会向服务上报，`pack` 取自响应。
 
 
 ### 版本号
@@ -205,9 +205,10 @@ PR 不读任何 secret，因此 fork 的 PR 也能完整跑测试与 lint；CI �
 `<major>.<minor>.<env>.<pack>.<sha8>`，详见 `RULES/VERSION.md`：
 
 - `env` = `git rev-list --count HEAD`，本地与 CI 得到同一个值，是**唯一参与排序**的段。
-- `pack` = `app/count.pack`，每次本地打包请求 +1（成败都算），随代码提交；CI 不自增。
+- `pack` = build-count 服务返回的模块总数，本地与 CI 的每次打包请求都 +1（成败都算）；服务不可达时打包构建直接失败。
 - `sha8` = `HEAD` 前 8 位，用于回溯。
 - `versionCode = env`。
+- 本地打包需要 `BUILD_COUNT_TOKEN`；服务地址默认 `http://geno1024.com:18080`，可用 `BUILD_COUNT_URL` 覆盖。CI 从仓库 secret 读取同名 token。
 
 ## 目录
 

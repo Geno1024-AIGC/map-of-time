@@ -7,12 +7,10 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
-// Count this local packaging build before reading the stamp, so the APK
-// carries its own number and the file stays equal to the number of packaging
-// builds that have happened — attempts included, failures included.
-Versioning.bumpOnPackaging(project, projectDir)
-
-val stamp = Versioning.stamp(rootDir, projectDir)
+// A packaging build POSTs to the org's build-count service before the stamp is
+// read, so the APK carries its own number; local and CI share one counter.
+// Attempts count, failures included. Non-packaging tasks do not touch it.
+val stamp = Versioning.stamp(rootDir, project)
 
 android {
     namespace = "com.geno1024.ai.mapoftime"
