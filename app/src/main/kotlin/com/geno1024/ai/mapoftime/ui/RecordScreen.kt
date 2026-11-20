@@ -49,6 +49,9 @@ fun RecordScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     var selectedMode by remember { mutableStateOf(TripMode.WALK) }
     var pendingMode by remember { mutableStateOf<TripMode?>(null) }
     var permissionDenied by remember { mutableStateOf(false) }
+    // The landing screen: its map has no track until a recording starts, so
+    // without this it would open on the whole country.
+    val here = rememberHere()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -219,6 +222,7 @@ fun RecordScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 customTileUrl = settings.customTileUrl,
                 customTilesGcj02 = settings.customTilesGcj02,
                 focus = state.lastFix,
+                here = here,
                 emptyHint = stringResource(R.string.record_map_empty),
             )
         }
