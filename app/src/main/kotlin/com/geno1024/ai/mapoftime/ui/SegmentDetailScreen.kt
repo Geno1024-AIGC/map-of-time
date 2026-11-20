@@ -478,6 +478,7 @@ fun SegmentDetailScreen(
                                 Text(
                                     text = stringResource(
                                         R.string.holiday_calendar_outdated,
+                                        Holidays.coveredYears.first.toString(),
                                         Holidays.coveredYears.last.toString(),
                                     ),
                                     style = MaterialTheme.typography.labelSmall,
