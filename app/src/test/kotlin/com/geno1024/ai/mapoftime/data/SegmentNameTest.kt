@@ -80,6 +80,25 @@ class SegmentNameTest {
     }
 
     @Test
+    fun aTraversalStartsAtTheEndItActuallyStartedFrom() {
+        val named = segment(null, fromName = "north gate", toName = "metro")
+        assertEquals(
+            "north gate" to "metro",
+            traversalEndNames(named, direction = 1, fromFallback = "From", toFallback = "To"),
+        )
+        // Coming back, the trip starts at the segment's to end.
+        assertEquals(
+            "metro" to "north gate",
+            traversalEndNames(named, direction = -1, fromFallback = "From", toFallback = "To"),
+        )
+        // Unnamed ends still say which end of the segment they are.
+        assertEquals(
+            "To" to "From",
+            traversalEndNames(segment(null), direction = -1, fromFallback = "From", toFallback = "To"),
+        )
+    }
+
+    @Test
     fun pointKeysParseOnlyTheKindsWeCanName() {
         assertEquals(PointRef("osm", 123), PointRef.parse("osm:123"))
         assertEquals(PointRef("geo", 7), PointRef.parse("geo:7"))
