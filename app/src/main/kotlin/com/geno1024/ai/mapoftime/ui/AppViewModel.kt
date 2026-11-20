@@ -13,6 +13,7 @@ import com.geno1024.ai.mapoftime.analysis.SegmentSummary
 import com.geno1024.ai.mapoftime.analysis.TripAnalyzer
 import com.geno1024.ai.mapoftime.core.BucketTake
 import com.geno1024.ai.mapoftime.core.DurationStats
+import com.geno1024.ai.mapoftime.core.HolidayCalendar
 import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.Segmenter
 import com.geno1024.ai.mapoftime.core.TrackPoint
@@ -100,6 +101,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 val trips = container.repository.trips()
                 val segments = container.repository.segments()
                 val includePartial = settings.state.value.includePartial
+                val calendar = settings.state.value.holidayCalendar
                 val byMode = TripMode.entries.associateWith {
                     container.repository.samplesByMode(it, includePartial)
                 }
@@ -112,8 +114,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         combined = DurationStats.of(samples),
                         forward = DurationStats.of(forward),
                         backward = DurationStats.of(backward),
-                        forwardTakes = takesByContext(forward),
-                        backwardTakes = takesByContext(backward),
+                        forwardTakes = takesByContext(forward, calendar),
+                        backwardTakes = takesByContext(backward, calendar),
                     )
                 }.sortedWith(compareByDescending<SegmentSummary> { it.sampleCount }.thenBy { it.segment.displayName })
                 Loaded(
@@ -539,8 +541,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
  * Median per part of the week. A context with no traversal is simply absent:
  * [Map.getValue] would throw, and a zero-length bucket is not a statistic.
  */
-private fun takesByContext(samples: List<TraversalSample>): Map<TrafficContext, BucketTake> =
-    groupByTrafficContext(samples).mapValues { (_, bucket) -> BucketTake.of(bucket) }
+private fun takesByContext(
+    samples: List<TraversalSample>,
+    calendar: HolidayCalendar,
+): Map<TrafficContext, BucketTake> =
+    groupByTrafficContext(samples, calendar = calendar).mapValues { (_, bucket) -> BucketTake.of(bucket) }
 
 /** Everything one background refresh loads, handed over in one go. */
 private data class Loaded(

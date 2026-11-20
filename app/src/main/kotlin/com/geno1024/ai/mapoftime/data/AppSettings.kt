@@ -3,11 +3,18 @@ package com.geno1024.ai.mapoftime.data
 import android.content.Context
 import androidx.core.content.edit
 import com.geno1024.ai.mapoftime.core.Basemap
+import com.geno1024.ai.mapoftime.core.HolidayBlock
+import com.geno1024.ai.mapoftime.core.HolidayCalendar
+import com.geno1024.ai.mapoftime.core.formatHolidayBlocks
+import com.geno1024.ai.mapoftime.core.formatHolidayDates
+import com.geno1024.ai.mapoftime.core.parseHolidayBlocks
+import com.geno1024.ai.mapoftime.core.parseHolidayDates
 import com.geno1024.ai.mapoftime.osm.OverpassClient
 import com.geno1024.ai.mapoftime.update.Mirrors
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.time.LocalDate
 
 data class SettingsSnapshot(
     /** Cut legs at OSM intersections when road data is available. */
@@ -30,7 +37,19 @@ data class SettingsSnapshot(
     val lastUpdateCheckAt: Long = 0L,
     /** Preferred APK download proxy; empty means direct GitHub. */
     val updateMirrorPrefix: String = "",
-)
+    /** Days off the user added on top of the shipped calendar. */
+    val customHolidays: List<HolidayBlock> = emptyList(),
+    /** Weekends the user works, e.g. someone else's 调休. */
+    val customWorkdays: Set<LocalDate> = emptySet(),
+) {
+    /**
+     * The calendar every screen reads. Built once per snapshot: a settings
+     * change creates a new one, which is exactly when the buckets must change.
+     */
+    val holidayCalendar: HolidayCalendar by lazy {
+        HolidayCalendar.of(customHolidays, customWorkdays)
+    }
+}
 
 /**
  * Small preference store with an observable snapshot. The UI reads it through
@@ -55,6 +74,8 @@ class AppSettings(context: Context) {
             putBoolean(KEY_PARTIAL, next.includePartial)
             putLong(KEY_LAST_UPDATE_CHECK, next.lastUpdateCheckAt)
             putString(KEY_UPDATE_MIRROR, next.updateMirrorPrefix)
+            putString(KEY_CUSTOM_HOLIDAYS, formatHolidayBlocks(next.customHolidays))
+            putString(KEY_CUSTOM_WORKDAYS, formatHolidayDates(next.customWorkdays))
         }
         _state.value = next
     }
@@ -80,6 +101,13 @@ class AppSettings(context: Context) {
             updateMirrorPrefix = Mirrors.resolve(
                 prefs.getString(KEY_UPDATE_MIRROR, "").orEmpty(),
             ).prefix,
+            // A stored value that no longer parses is dropped rather than
+            // half-applied: the shipped calendar is a better answer than a
+            // calendar with a hole in it.
+            customHolidays = parseHolidayBlocks(prefs.getString(KEY_CUSTOM_HOLIDAYS, "").orEmpty())
+                .orEmpty(),
+            customWorkdays = parseHolidayDates(prefs.getString(KEY_CUSTOM_WORKDAYS, "").orEmpty())
+                .orEmpty(),
         )
     }
 
@@ -95,5 +123,7 @@ class AppSettings(context: Context) {
         const val KEY_PARTIAL = "include_partial"
         const val KEY_LAST_UPDATE_CHECK = "last_update_check"
         const val KEY_UPDATE_MIRROR = "update_mirror_prefix"
+        const val KEY_CUSTOM_HOLIDAYS = "custom_holidays"
+        const val KEY_CUSTOM_WORKDAYS = "custom_workdays"
     }
 }

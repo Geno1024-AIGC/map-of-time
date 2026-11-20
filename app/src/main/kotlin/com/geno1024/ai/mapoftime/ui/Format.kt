@@ -7,13 +7,16 @@ import androidx.compose.ui.res.stringResource
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.core.Confidence
 import com.geno1024.ai.mapoftime.core.DayKind
+import com.geno1024.ai.mapoftime.core.HolidayBlock
 import com.geno1024.ai.mapoftime.core.HolidayPhase
 import com.geno1024.ai.mapoftime.core.PeakHour
 import com.geno1024.ai.mapoftime.core.TimeBucket
 import com.geno1024.ai.mapoftime.core.TripMode
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -51,6 +54,20 @@ private val dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
 
 fun formatDateTime(epochMs: Long): String =
     dateTimeFormatter.format(Instant.ofEpochMilli(epochMs).atZone(ZoneId.systemDefault()))
+
+/**
+ * `2027-02-06 Sat` — a holiday is typed as a date, so the weekday is what the
+ * user actually checks before pressing add.
+ */
+fun formatHolidayDay(date: LocalDate): String =
+    DateTimeFormatter.ofPattern("yyyy-MM-dd EEE", Locale.getDefault()).format(date)
+
+fun formatHolidayBlock(block: HolidayBlock): String =
+    if (block.first == block.last) {
+        formatHolidayDay(block.first)
+    } else {
+        formatHolidayDay(block.first) + " – " + formatHolidayDay(block.last)
+    }
 
 fun formatDate(epochMs: Long): String =
     DateTimeFormatter.ofPattern("yyyy-MM-dd")

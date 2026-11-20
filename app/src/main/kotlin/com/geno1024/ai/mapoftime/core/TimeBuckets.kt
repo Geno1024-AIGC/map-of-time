@@ -54,11 +54,14 @@ enum class DayKind {
     ;
 
     companion object {
-        fun of(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): DayKind =
-            ofByDate(Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate())
+        fun of(
+            epochMs: Long,
+            zone: ZoneId = ZoneId.systemDefault(),
+            calendar: HolidayCalendar = Holidays.builtIn,
+        ): DayKind = ofByDate(Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate(), calendar)
 
-        fun ofByDate(date: LocalDate): DayKind =
-            if (Holidays.isWorkday(date)) WEEKDAY else WEEKEND
+        fun ofByDate(date: LocalDate, calendar: HolidayCalendar = Holidays.builtIn): DayKind =
+            if (calendar.isWorkday(date)) WEEKDAY else WEEKEND
     }
 }
 
@@ -93,8 +96,12 @@ enum class PeakHour {
  */
 data class TrafficContext(val day: DayKind, val peak: PeakHour) {
     companion object {
-        fun of(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()) = TrafficContext(
-            day = DayKind.of(epochMs, zone),
+        fun of(
+            epochMs: Long,
+            zone: ZoneId = ZoneId.systemDefault(),
+            calendar: HolidayCalendar = Holidays.builtIn,
+        ) = TrafficContext(
+            day = DayKind.of(epochMs, zone, calendar),
             peak = PeakHour.of(epochMs, zone),
         )
 
@@ -111,7 +118,9 @@ data class TrafficContext(val day: DayKind, val peak: PeakHour) {
 fun TrafficContext.samples(
     samples: List<TraversalSample>,
     zone: ZoneId = ZoneId.systemDefault(),
-): List<TraversalSample> = samples.filter { TrafficContext.of(it.startedAt, zone) == this }
+    calendar: HolidayCalendar = Holidays.builtIn,
+): List<TraversalSample> =
+    samples.filter { TrafficContext.of(it.startedAt, zone, calendar) == this }
 
 /**
  * The bucket's typical time when it holds enough samples to have one.
@@ -129,4 +138,6 @@ fun Map<TrafficContext, BucketTake>.takeAt(context: TrafficContext): BucketTake?
 fun groupByTrafficContext(
     samples: List<TraversalSample>,
     zone: ZoneId = ZoneId.systemDefault(),
-): Map<TrafficContext, List<TraversalSample>> = samples.groupBy { TrafficContext.of(it.startedAt, zone) }
+    calendar: HolidayCalendar = Holidays.builtIn,
+): Map<TrafficContext, List<TraversalSample>> =
+    samples.groupBy { TrafficContext.of(it.startedAt, zone, calendar) }
