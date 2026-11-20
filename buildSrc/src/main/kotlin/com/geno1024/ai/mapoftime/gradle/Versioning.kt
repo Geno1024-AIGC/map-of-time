@@ -2,6 +2,7 @@ package com.geno1024.ai.mapoftime.gradle
 
 import org.gradle.api.Project
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URI
 
@@ -48,17 +49,17 @@ object Versioning {
     /** JVM: names that only ever appear with a suffix. */
     private val JVM_PACKAGING_PREFIXES = listOf("shadowJar", "dist", "publish")
 
-    /** Packaging builds: POST before the stamp is built, then use the returned total. */
+    /** Packaging builds: replay what is owed, POST this one, use the returned total. */
     fun stamp(root: File, project: Project): Stamp = Stamp(
         env = env(root),
-        pack = packOf(project),
+        pack = packOf(root, project),
         sha8 = sha8(root),
     )
 
     /** Read-only stamp for `printVersionName`: GET the current total, never increment. */
     fun current(root: File, project: Project): Stamp = Stamp(
         env = env(root),
-        pack = fetch(project),
+        pack = currentPack(root, project),
         sha8 = sha8(root),
     )
 
@@ -72,7 +73,7 @@ object Versioning {
         git(root, "rev-parse", "--short=8", "HEAD") ?: NO_HEAD
 
     /**
-     * Decides whether this invocation is a packaging build and, if so, POSTs
+     * Decides whether this invocation is a packaging build and, if so, counts it
      * before the stamp is constructed.
      *
      * The count is taken at configuration time, which is why it records
@@ -81,68 +82,145 @@ object Versioning {
      * tasks (`tasks`, `help`, …) and `--dry-run` stay out and stamp `pack = 0`.
      * `-Ppack.bump=false` skips the service and uses `-Ppack.value` (default 0).
      */
-    private fun packOf(project: Project): String {
+    private fun packOf(root: File, project: Project): String {
         val params = project.gradle.startParameter
         val forced = params.projectProperties["pack.bump"]?.toBoolean()
         if (forced == false) return params.projectProperties["pack.value"] ?: "0"
         if (params.isDryRun) return "0"
         if (params.taskNames.none { requestsPackaging(project, it) }) return "0"
-        return report(project)
+        return report(root, project)
     }
 
-    /** POST one packaging attempt; the body is the new module total. */
-    private fun report(project: Project): String {
-        val url = "${base()}/projects/${segment(project.rootProject.name)}" +
-            "/modules/${segment(moduleName(project))}/builds"
+    /**
+     * Replays builds counted while the service was unreachable, then POSTs this
+     * one. One POST is one build, and the log is updated after each success, so
+     * a flush that dies halfway neither double counts nor loses anything.
+     */
+    private fun report(root: File, project: Project): String {
+        val state = CountState(root, project.rootProject.name, moduleName(project))
+        var known = state.known
+        var pending = state.pending
+
+        while (pending > 0) {
+            val total = post(project) ?: return defer(project, state, known, pending)
+            known = total
+            pending -= 1
+            state.write(known, pending)
+        }
+
+        val total = post(project)
+        if (total != null) {
+            state.write(total, 0)
+            return total
+        }
+        return defer(project, state, known, 0)
+    }
+
+    /**
+     * Network-level failure: count locally and stamp a provisional number. A CI
+     * runner's disk dies with the job, so there is nothing to replay later and
+     * the build fails instead of pretending.
+     */
+    private fun defer(project: Project, state: CountState, known: String, pending: Int): String {
+        check(System.getenv("GITHUB_ACTIONS") != "true") {
+            "build-count service unreachable, and a CI runner cannot replay the count later; " +
+                "fix the service or pass -Ppack.bump=false"
+        }
+        val next = pending + 1
+        state.write(known, next)
+        project.logger.warn(
+            "build-count service unreachable: counted locally as ${known.toLong() + next} " +
+                "($next pending), will replay on the next reachable build",
+        )
+        return (known.toLong() + next).toString()
+    }
+
+    /** Read-only total: the service when reachable, otherwise "known + pending". */
+    private fun currentPack(root: File, project: Project): String {
+        fetch(project)?.let { return it }
+        val state = CountState(root, project.rootProject.name, moduleName(project))
+        return (state.known.toLong() + state.pending).toString()
+    }
+
+    /**
+     * POSTs one build and returns the new total; `null` means the request never
+     * left (safe to count locally). An HTTP error, or a request whose response
+     * was lost, fails loudly instead of slipping into the offline path.
+     */
+    private fun post(project: Project): String? {
         val token = System.getenv("BUILD_COUNT_TOKEN")
             ?: error("BUILD_COUNT_TOKEN is required to count a packaging build")
+        val connection = (URI("${url(project)}/builds").toURL().openConnection() as HttpURLConnection)
+            .apply {
+                requestMethod = "POST"
+                doOutput = true
+                connectTimeout = 10_000
+                readTimeout = 10_000
+                setRequestProperty("Authorization", "Bearer $token")
+            }
 
-        val connection = (URI(url).toURL().openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            connectTimeout = 10_000
-            readTimeout = 10_000
-            setRequestProperty("Authorization", "Bearer $token")
-        }
         try {
             connection.outputStream.close()
-        } catch (e: Exception) {
-            throw IllegalStateException("build-count service unreachable: $url", e)
+        } catch (_: IOException) {
+            return null
         }
 
-        val code = connection.responseCode
+        val code = try {
+            connection.responseCode
+        } catch (e: IOException) {
+            throw IllegalStateException(lostResponse(project), e)
+        }
         if (code != HttpURLConnection.HTTP_CREATED) {
             val body = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
             error("build-count service returned HTTP $code: $body")
         }
-        val pack = connection.inputStream.bufferedReader().use { it.readText() }.trim()
+        val pack = try {
+            connection.inputStream.bufferedReader().use { it.readText() }.trim()
+        } catch (e: IOException) {
+            throw IllegalStateException(lostResponse(project), e)
+        }
         require(pack.matches(Regex("\\d+"))) {
             "build-count service returned a non-numeric pack: $pack"
         }
         return pack
     }
 
-    /** GET the current module total for display; never increments. */
-    private fun fetch(project: Project): String {
-        val url = "${base()}/projects/${segment(project.rootProject.name)}" +
-            "/modules/${segment(moduleName(project))}"
-        val connection = (URI(url).toURL().openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 10_000
-            readTimeout = 10_000
+    /** The request went out, so the server may or may not have counted it. Do not guess. */
+    private fun lostResponse(project: Project) =
+        "build-count POST was sent but no response came back; the count may or may not have been " +
+            "recorded. Check GET ${url(project)} before rebuilding."
+
+    /** GETs the current total; `null` when the service cannot be reached. */
+    private fun fetch(project: Project): String? {
+        val connection = (URI(url(project)).toURL().openConnection() as HttpURLConnection)
+            .apply {
+                requestMethod = "GET"
+                connectTimeout = 10_000
+                readTimeout = 10_000
+            }
+
+        val code = try {
+            connection.responseCode
+        } catch (_: IOException) {
+            return null
         }
-        val code = connection.responseCode
         if (code != HttpURLConnection.HTTP_OK) {
             val body = connection.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
             error("build-count service returned HTTP $code: $body")
         }
-        val json = connection.inputStream.bufferedReader().use { it.readText() }
+        val json = try {
+            connection.inputStream.bufferedReader().use { it.readText() }
+        } catch (_: IOException) {
+            return null
+        }
         return Regex("\"total\"\\s*:\\s*(\\d+)").find(json)?.groupValues?.get(1)
             ?: error("build-count service returned no total: $json")
     }
 
-    private fun base(): String =
-        System.getenv("BUILD_COUNT_URL")?.takeIf { it.isNotBlank() } ?: DEFAULT_URL
+    private fun url(project: Project): String =
+        "${System.getenv("BUILD_COUNT_URL")?.takeIf { it.isNotBlank() } ?: DEFAULT_URL}" +
+            "/projects/${segment(project.rootProject.name)}" +
+            "/modules/${segment(moduleName(project))}"
 
     /** `project` is the root name; `module` is the Gradle path with `:` as `.`. */
     private fun moduleName(project: Project): String =
@@ -190,5 +268,33 @@ object Versioning {
         if (process.waitFor() == 0 && out.isNotEmpty()) out else null
     } catch (_: Exception) {
         null
+    }
+}
+
+/**
+ * The pending log, `<root>/.gradle/build-count/<project>/<module>.state`, holding
+ * `<known service total> <pending count>`. It is not a second source of truth:
+ * losing it only means those builds were never reported, and `pack` never sorts,
+ * so no version number becomes wrong because of it.
+ */
+private class CountState(root: File, project: String, module: String) {
+    private val file = File(File(root, ".gradle/build-count/$project"), "$module.state")
+
+    val known: String
+    val pending: Int
+
+    init {
+        val fields = if (file.isFile) {
+            file.readText().trim().split(' ').filter { it.isNotEmpty() }
+        } else {
+            emptyList()
+        }
+        known = fields.getOrNull(0)?.takeIf { it.matches(Regex("\\d+")) } ?: "0"
+        pending = fields.getOrNull(1)?.toIntOrNull() ?: 0
+    }
+
+    fun write(known: String, pending: Int) {
+        file.parentFile.mkdirs()
+        file.writeText("$known $pending\n")
     }
 }
