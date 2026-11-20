@@ -80,12 +80,28 @@ object Versioning {
      * *requests* and not successes: a build that fails to compile, cannot sign
      * or is interrupted after configuration already has its number. Query-only
      * tasks (`tasks`, `help`, …) and `--dry-run` stay out and stamp `pack = 0`.
-     * `-Ppack.bump=false` skips the service and uses `-Ppack.value` (default 0).
+     *
+     * `-Ppack.bump=false` is a CI-only escape hatch for the case where the
+     * service is down and a run still has to ship. A local build never needs
+     * it: the offline path counts the build and replays it later, so skipping
+     * there would silently leave a number out of a shared counter with no
+     * record that it ever existed.
      */
     private fun packOf(root: File, project: Project): String {
         val params = project.gradle.startParameter
         val forced = params.projectProperties["pack.bump"]?.toBoolean()
-        if (forced == false) return params.projectProperties["pack.value"] ?: "0"
+        if (forced == false) {
+            check(System.getenv("GITHUB_ACTIONS") == "true") {
+                "-Ppack.bump=false is a CI escape hatch; a local packaging build must count. " +
+                    "Without a token the build fails; with one but no network it counts " +
+                    "locally and replays when the service is back."
+            }
+            project.logger.warn(
+                "packaging build NOT counted (-Ppack.bump=false): the stamp claims pack=" +
+                    (params.projectProperties["pack.value"] ?: "0") + " but the service was not asked",
+            )
+            return params.projectProperties["pack.value"] ?: "0"
+        }
         if (params.isDryRun) return "0"
         if (params.taskNames.none { requestsPackaging(project, it) }) return "0"
         return report(root, project)
