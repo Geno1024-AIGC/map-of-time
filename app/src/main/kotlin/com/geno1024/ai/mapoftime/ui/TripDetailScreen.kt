@@ -23,6 +23,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,7 +48,9 @@ import com.geno1024.ai.mapoftime.core.Polyline
 import com.geno1024.ai.mapoftime.core.TrackPoint
 import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.MatchKind
+import com.geno1024.ai.mapoftime.data.Segment
 import com.geno1024.ai.mapoftime.data.Trip
+import com.geno1024.ai.mapoftime.data.traversalEndNames
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
 import com.geno1024.ai.mapoftime.ui.map.TrackMap
 import kotlinx.coroutines.launch
@@ -85,8 +88,8 @@ fun TripDetailScreen(
     var message by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableStateOf(0) }
     var selectedLegId by remember(tripId) { mutableStateOf<Long?>(null) }
-    var renamingSegment by remember { mutableStateOf<Long?>(null) }
-    var renamingInitial by remember { mutableStateOf("") }
+    var selectedSegment by remember(tripId) { mutableStateOf<Segment?>(null) }
+    var editingSegment by remember { mutableStateOf(false) }
 
     LaunchedEffect(tripId, reload) {
         val tripValue = viewModel.trip(tripId)
@@ -112,6 +115,11 @@ fun TripDetailScreen(
     val selectedTrack = remember(selectedLeg) {
         selectedLeg?.let { Polyline.decode(it.polyline) }?.takeIf { it.size >= 2 }
     }
+    // Naming the ends needs the segment, not just the leg: the names belong to
+    // the two points, and the leg only says which way this trip went.
+    LaunchedEffect(selectedLeg, reload) {
+        selectedSegment = selectedLeg?.segmentId?.let { viewModel.segment(it) }
+    }
     val selectedIdentity = remember(selectedLeg, identities) {
         selectedLeg?.let { leg ->
             when {
@@ -121,7 +129,27 @@ fun TripDetailScreen(
             }
         }
     }
-    val markers = remember(tracks, markPositions, selectedTrack) {
+    val fromLabel = stringResource(R.string.segment_from)
+    val toLabel = stringResource(R.string.segment_to)
+    // The two ends of the selected leg, labelled with the segment's own
+    // orientation so "from" and "to" mean the same thing here and in the
+    // naming dialog. A partial leg stops at a junction inside the segment, so
+    // its own ends are not the segment's ends and get no label.
+    val endMarkers = remember(selectedLeg, selectedSegment, selectedTrack, fromLabel, toLabel) {
+        val leg = selectedLeg
+        val segment = selectedSegment
+        val track = selectedTrack
+        if (leg == null || segment == null || track == null || leg.partial) {
+            emptyList()
+        } else {
+            val (startLabel, endLabel) = traversalEndNames(segment, leg.direction, fromLabel, toLabel)
+            listOf(
+                MapMarker(track.first(), emphasized = false, label = startLabel),
+                MapMarker(track.last(), emphasized = true, label = endLabel),
+            )
+        }
+    }
+    val markers = remember(tracks, markPositions, endMarkers) {
         val endpoints = tracks.flatMap { track ->
             listOf(
                 MapMarker(track.first(), emphasized = false),
@@ -130,18 +158,7 @@ fun TripDetailScreen(
         }
         // Manually split points are worth seeing after the fact: they are the
         // only boundaries that do not come from the algorithm.
-        endpoints +
-            markPositions.map { MapMarker(it, emphasized = false) } +
-            selectedTrack.orEmpty().let { track ->
-                if (track.isEmpty()) {
-                    emptyList()
-                } else {
-                    listOf(
-                        MapMarker(track.first(), emphasized = false),
-                        MapMarker(track.last(), emphasized = true),
-                    )
-                }
-            }
+        endpoints + markPositions.map { MapMarker(it, emphasized = false) } + endMarkers
     }
 
     if (confirmDelete) {
@@ -208,15 +225,17 @@ fun TripDetailScreen(
         )
     }
 
-    renamingSegment?.let { id ->
-        SegmentNameDialog(
-            initial = renamingInitial,
-            osmName = null,
-            onDismiss = { renamingSegment = null },
-            onSave = { name ->
-                renamingSegment = null
+    val editing = selectedSegment
+    if (editingSegment && editing != null) {
+        LegEditDialog(
+            segment = editing,
+            onDismiss = { editingSegment = false },
+            onSave = { name, fromName, toName ->
+                editingSegment = false
                 scope.launch {
-                    viewModel.renameSegment(id, name)
+                    viewModel.renameSegment(editing.id, name)
+                    editing.fromPoint?.let { viewModel.renamePoint(it, fromName) }
+                    editing.toPoint?.let { viewModel.renamePoint(it, toName) }
                     reload += 1
                 }
             },
@@ -254,11 +273,10 @@ fun TripDetailScreen(
                     leg = leg,
                     identity = selectedIdentity,
                     onClear = { selectedLegId = null },
-                    onRename = leg.segmentId?.let { id ->
-                        {
-                            renamingInitial = leg.label.orEmpty()
-                            renamingSegment = id
-                        }
+                    onEdit = if (selectedSegment != null) {
+                        { editingSegment = true }
+                    } else {
+                        null
                     },
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
@@ -502,7 +520,7 @@ private fun LegOverlay(
     leg: Leg,
     identity: MatchKind?,
     onClear: () -> Unit,
-    onRename: (() -> Unit)?,
+    onEdit: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Surface(
@@ -560,9 +578,9 @@ private fun LegOverlay(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (onRename != null) {
+            if (onEdit != null) {
                 TextButton(
-                    onClick = onRename,
+                    onClick = onEdit,
                     contentPadding = PaddingValues(horizontal = 8.dp),
                 ) {
                     Text("✎")
@@ -627,4 +645,86 @@ private fun LegRow(
             MatchBadge(identity)
         }
     }
+}
+
+/**
+ * Everything that names the selected leg's segment: its own label and the two
+ * points it runs between. Naming a point here is the same act as on the
+ * segment screen — every segment through that point picks the name up.
+ */
+@Composable
+private fun LegEditDialog(
+    segment: Segment,
+    onDismiss: () -> Unit,
+    onSave: (name: String, fromName: String, toName: String) -> Unit,
+) {
+    var name by remember(segment.id) { mutableStateOf(segment.userName.orEmpty()) }
+    var fromName by remember(segment.id) { mutableStateOf(segment.fromName.orEmpty()) }
+    var toName by remember(segment.id) { mutableStateOf(segment.toName.orEmpty()) }
+    val fromPoint = segment.fromPoint
+    val toPoint = segment.toPoint
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.leg_edit_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                NameField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = stringResource(R.string.segment_name),
+                    hint = stringResource(R.string.segment_name_hint),
+                )
+                if (fromPoint != null) {
+                    NameField(
+                        value = fromName,
+                        onValueChange = { fromName = it },
+                        label = stringResource(R.string.segment_from),
+                        hint = stringResource(R.string.point_name_hint),
+                    )
+                }
+                if (toPoint != null) {
+                    NameField(
+                        value = toName,
+                        onValueChange = { toName = it },
+                        label = stringResource(R.string.segment_to),
+                        hint = stringResource(R.string.point_name_hint),
+                    )
+                }
+                Text(
+                    text = stringResource(
+                        if (fromPoint == null || toPoint == null) {
+                            R.string.leg_edit_no_ends
+                        } else {
+                            R.string.leg_edit_hint
+                        },
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(name, fromName, toName) }) {
+                Text(stringResource(R.string.action_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        },
+    )
+}
+
+@Composable
+private fun NameField(value: String, onValueChange: (String) -> Unit, label: String, hint: String) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        placeholder = { Text(hint) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }

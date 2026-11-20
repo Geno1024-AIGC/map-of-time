@@ -102,6 +102,22 @@ fun pointPairName(from: String?, to: String?): String? =
 fun directionalName(from: String?, to: String?): String? =
     if (from != null && to != null) "$from → $to" else null
 
+/**
+ * The names to label the two ends of one traversal with, in the order the trip
+ * went: a backward traversal starts at the segment's `to` end. Unnamed ends
+ * fall back to the caller's generic "from"/"to" wording.
+ */
+fun traversalEndNames(
+    segment: Segment,
+    direction: Int,
+    fromFallback: String,
+    toFallback: String,
+): Pair<String, String> = if (direction >= 0) {
+    (segment.fromName ?: fromFallback) to (segment.toName ?: toFallback)
+} else {
+    (segment.toName ?: toFallback) to (segment.fromName ?: fromFallback)
+}
+
 /** A repeatable piece of road, keyed by its two endpoints. */
 data class Segment(
     val id: Long,
