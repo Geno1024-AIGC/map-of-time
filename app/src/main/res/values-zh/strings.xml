@@ -175,6 +175,13 @@
     <string name="day_weekend">休息日</string>
     <string name="peak_peak">高峰</string>
     <string name="peak_off">非高峰</string>
+    <string name="segment_by_holiday">节假日前后</string>
+    <string name="segment_by_holiday_hint">节前和节末的车流与平常不同，所以单列，不混进上面那张表。</string>
+    <string name="holiday_none">平常</string>
+    <string name="holiday_eve">节前</string>
+    <string name="holiday_during">假期中</string>
+    <string name="holiday_last">节末</string>
+    <string name="holiday_calendar_outdated">节假日表只到 %1$s 年，之后的日期按普通日子算。</string>
     <string name="bucket_morning">早上 · 6–10</string>
     <string name="bucket_day">白天 · 10–16</string>
     <string name="bucket_evening">傍晚 · 16–20</string>

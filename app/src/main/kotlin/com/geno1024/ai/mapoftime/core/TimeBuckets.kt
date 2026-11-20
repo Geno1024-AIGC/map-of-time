@@ -1,7 +1,7 @@
 package com.geno1024.ai.mapoftime.core
 
-import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 
 /**
@@ -44,7 +44,9 @@ fun TimeBucket.samples(
  * Whether the day was a working day.
  *
  * Monday morning and Saturday morning are the same road at the same hour and
- * nothing else about them is alike, so they must not be pooled.
+ * nothing else about them is alike, so they must not be pooled. "Working" is
+ * read from [Holidays], not from the day of the week: 调休 turns some Saturdays
+ * into workdays, and a public holiday is not a weekend either.
  */
 enum class DayKind {
     WEEKDAY,
@@ -52,11 +54,11 @@ enum class DayKind {
     ;
 
     companion object {
-        /** Saturday and Sunday are the weekend; public holidays are not tracked. */
-        fun of(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): DayKind {
-            val day = Instant.ofEpochMilli(epochMs).atZone(zone).dayOfWeek
-            return if (day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY) WEEKEND else WEEKDAY
-        }
+        fun of(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): DayKind =
+            ofByDate(Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate())
+
+        fun ofByDate(date: LocalDate): DayKind =
+            if (Holidays.isWorkday(date)) WEEKDAY else WEEKEND
     }
 }
 

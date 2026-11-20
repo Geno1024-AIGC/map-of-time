@@ -7,6 +7,7 @@ import androidx.compose.ui.res.stringResource
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.core.Confidence
 import com.geno1024.ai.mapoftime.core.DayKind
+import com.geno1024.ai.mapoftime.core.HolidayPhase
 import com.geno1024.ai.mapoftime.core.PeakHour
 import com.geno1024.ai.mapoftime.core.TimeBucket
 import com.geno1024.ai.mapoftime.core.TripMode
@@ -110,6 +111,16 @@ fun peakLabel(peak: PeakHour): String = stringResource(
     when (peak) {
         PeakHour.PEAK -> R.string.peak_peak
         PeakHour.OFF_PEAK -> R.string.peak_off
+    },
+)
+
+@Composable
+fun holidayPhaseLabel(phase: HolidayPhase): String = stringResource(
+    when (phase) {
+        HolidayPhase.NONE -> R.string.holiday_none
+        HolidayPhase.EVE -> R.string.holiday_eve
+        HolidayPhase.DURING -> R.string.holiday_during
+        HolidayPhase.LAST -> R.string.holiday_last
     },
 )
 
