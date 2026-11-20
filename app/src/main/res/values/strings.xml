@@ -37,6 +37,8 @@
     <string name="place_body">All of them take this name. A corner that shows up later inside the junction joins on its own.</string>
     <string name="place_clear_hint">Leave it empty to dissolve the junction; the points go back to their own names or the road they sit on.</string>
     <string name="place_only_point">Name just this point</string>
+    <string name="place_overridden">%1$d points already have their own names</string>
+    <string name="place_overridden_hint">Their own name wins over the junction\'s. Turn this on to let the junction name cover them.</string>
     <string name="place_name_action">Name junction</string>
     <string name="place_member_count">%1$d points share this name</string>
     <string name="segment_inside_junction">inside %1$s</string>

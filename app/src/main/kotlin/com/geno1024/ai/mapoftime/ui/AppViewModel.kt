@@ -60,6 +60,10 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         private set
     var places by mutableStateOf<List<Place>>(emptyList())
         private set
+
+    /** Names the user gave a single point; these outrank a junction's name. */
+    var pointNames by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
     var loading by mutableStateOf(false)
         private set
     var note by mutableStateOf<String?>(null)
@@ -105,11 +109,17 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         backward = DurationStats.of(samples.filter { it.direction < 0 }),
                     )
                 }.sortedWith(compareByDescending<SegmentSummary> { it.sampleCount }.thenBy { it.segment.displayName })
-                Triple(trips, summaries, container.repository.places())
+                Loaded(
+                    trips = trips,
+                    summaries = summaries,
+                    places = container.repository.places(),
+                    pointNames = container.repository.pointNames(),
+                )
             }
-            trips = loaded.first
-            summaries = loaded.second
-            places = loaded.third
+            trips = loaded.trips
+            summaries = loaded.summaries
+            places = loaded.places
+            pointNames = loaded.pointNames
             loading = false
         }
     }
@@ -182,11 +192,15 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         place.points.any { it.key == ref.key }
     }
 
+    fun placeName(id: Long?): String? = id?.let { wanted ->
+        places.firstOrNull { it.id == wanted }?.name
+    }
+
     /**
      * Names a whole junction in one go. A blank [name] dissolves it and the
      * points fall back to their own names or to the road they sit on.
      */
-    suspend fun namePlace(draft: PlaceDraft, name: String?) {
+    suspend fun namePlace(draft: PlaceDraft, name: String?, clearMemberNames: Boolean = false) {
         withContext(container.dbDispatcher) {
             container.repository.upsertPlace(
                 id = draft.existingPlaceId,
@@ -194,10 +208,15 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 members = draft.refs,
                 center = draft.center,
                 radiusM = draft.adoptRadius(),
+                clearMemberNames = clearMemberNames,
             )
         }
         refresh()
     }
+
+    /** How many points of [draft] were named one by one before junctions had names. */
+    fun overriddenMembers(draft: PlaceDraft): Int =
+        draft.refs.count { pointNames.containsKey(it.key) }
 
     suspend fun samples(segmentId: Long): List<TraversalSample> = withContext(container.dbDispatcher) {
         container.repository.samples(segmentId, settings.state.value.includePartial)
@@ -508,3 +527,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         const val AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
     }
 }
+
+/** Everything one background refresh loads, handed over in one go. */
+private data class Loaded(
+    val trips: List<Trip>,
+    val summaries: List<SegmentSummary>,
+    val places: List<Place>,
+    val pointNames: Map<String, String>,
+)

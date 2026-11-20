@@ -37,6 +37,8 @@
     <string name="place_body">这些点都会用这个名字；以后路口里新出现的点会自动加入，不用再命名一次。</string>
     <string name="place_clear_hint">留空则解散这个路口，各点退回到自己的名字或所在道路。</string>
     <string name="place_only_point">只命名这一个点</string>
+    <string name="place_overridden">其中 %1$d 个点已有自己的名字</string>
+    <string name="place_overridden_hint">单点名字优先于路口名。打开这个开关，让路口名接管它们。</string>
     <string name="place_name_action">命名路口</string>
     <string name="place_member_count">这个路口共 %1$d 个点</string>
     <string name="segment_inside_junction">%1$s 路口内</string>
