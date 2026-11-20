@@ -308,7 +308,13 @@ fun ThinDivider(modifier: Modifier = Modifier) {
  * the crossing next door.
  */
 @Composable
-fun PlacePreviewRow(draft: PlaceDraft, onName: () -> Unit, onCancel: () -> Unit) {
+fun PlacePreviewRow(
+    draft: PlaceDraft,
+    onName: () -> Unit,
+    onCancel: () -> Unit,
+    /** Offered while a bigger reach is still available: big junctions are real. */
+    onWider: (() -> Unit)? = null,
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
@@ -320,6 +326,11 @@ fun PlacePreviewRow(draft: PlaceDraft, onName: () -> Unit, onCancel: () -> Unit)
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (onWider != null) {
+            TextButton(onClick = onWider) {
+                Text(stringResource(R.string.place_preview_wider))
+            }
         }
         TextButton(onClick = onName) {
             Text(stringResource(R.string.place_preview_name))

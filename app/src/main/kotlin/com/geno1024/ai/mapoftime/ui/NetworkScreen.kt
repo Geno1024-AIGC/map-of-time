@@ -38,6 +38,7 @@ import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
 import com.geno1024.ai.mapoftime.core.DurationStats
 import com.geno1024.ai.mapoftime.core.Geo
+import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.PointRef
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
@@ -62,6 +63,11 @@ fun NetworkScreen(
     // The proposal being looked at: the map draws it before anything is saved,
     // because the mistake worth catching is a junction that ate its neighbour.
     var preview by remember { mutableStateOf<PlaceDraft?>(null) }
+    // Where the tapped point is, and how far the preview currently reaches.
+    // A 300 m interchange needs more than the default 150 m, but the default
+    // has to stay tight or every dense crossing eats the next one.
+    var previewAt by remember { mutableStateOf<LatLon?>(null) }
+    var previewReach by remember { mutableStateOf(PlaceDrafts.SPAN_M) }
     var namingPlace by remember { mutableStateOf<PlaceDraft?>(null) }
     val scope = rememberCoroutineScope()
     // Drawn as a dot always; used by the camera only when there is no network
@@ -108,9 +114,11 @@ fun NetworkScreen(
     }
     // A proposal is ~100 m inside a city-wide network: without this the ring
     // would be a few pixels on a 250 dp map.
+    // Leave room around the circle: judging whether it swallowed the next
+    // crossing needs to see that crossing too, not just the claim.
     val focusBounds = remember(preview) {
         preview?.let { draft ->
-            Geo.bounds(listOf(draft.center))?.expanded(draft.adoptRadius() + 25.0)
+            Geo.bounds(listOf(draft.center))?.expanded(draft.adoptRadius() + 60.0)
         }
     }
     val selectNode = remember(graph) {
@@ -189,10 +197,17 @@ fun NetworkScreen(
             // The review step: the ring is on the map, the numbers are here,
             // and nothing has been written yet.
             preview?.let { draft ->
+                val wider = PlaceDrafts.REACH_STEPS_M.firstOrNull { it > previewReach }
                 PlacePreviewRow(
                     draft = draft,
                     onName = { namingPlace = draft },
                     onCancel = { preview = null },
+                    onWider = wider?.let { reach ->
+                        {
+                            previewReach = reach
+                            preview = viewModel.placeDraft(draft.seed, previewAt, reach)
+                        }
+                    },
                 )
             }
             Spacer(Modifier.height(6.dp))
@@ -235,7 +250,9 @@ fun NetworkScreen(
                             if (ref != null) {
                                 // Show the proposal on the map first; naming it
                                 // is the next tap, once the circle looks right.
-                                preview = viewModel.placeDraft(ref, selected.at)
+                                previewAt = selected.at
+                                previewReach = PlaceDrafts.SPAN_M
+                                preview = viewModel.placeDraft(ref, selected.at, previewReach)
                             }
                         },
                     )
