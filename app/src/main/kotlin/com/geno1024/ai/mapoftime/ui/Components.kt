@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.geno1024.ai.mapoftime.R
+import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.core.Confidence
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.MatchKind
@@ -296,6 +297,37 @@ fun ThinDivider(modifier: Modifier = Modifier) {
         modifier = modifier.padding(vertical = 8.dp),
         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
     )
+}
+
+/**
+ * The review step between tapping "name this junction" and naming it.
+ *
+ * The circle is on the map; this is the caption: how many points, how wide,
+ * and the fact that nothing has been written yet. Worth the extra tap — the
+ * one mistake that cannot be fixed by renaming is a junction that swallowed
+ * the crossing next door.
+ */
+@Composable
+fun PlacePreviewRow(draft: PlaceDraft, onName: () -> Unit, onCancel: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.place_summary, draft.count, formatDistance(draft.spanM)),
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Text(
+                text = stringResource(R.string.place_preview_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = onName) {
+            Text(stringResource(R.string.place_preview_name))
+        }
+        TextButton(onClick = onCancel) {
+            Text(stringResource(R.string.action_cancel))
+        }
+    }
 }
 
 /**

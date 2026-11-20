@@ -35,10 +35,13 @@ import com.geno1024.ai.mapoftime.analysis.NetworkGraphs
 import com.geno1024.ai.mapoftime.analysis.NetworkLink
 import com.geno1024.ai.mapoftime.analysis.NetworkNode
 import com.geno1024.ai.mapoftime.analysis.PlaceDraft
+import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
 import com.geno1024.ai.mapoftime.core.DurationStats
+import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.PointRef
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
+import com.geno1024.ai.mapoftime.ui.map.MapRing
 import com.geno1024.ai.mapoftime.ui.map.TrackMap
 import kotlinx.coroutines.launch
 
@@ -56,6 +59,9 @@ fun NetworkScreen(
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
     var modeFilter by remember { mutableStateOf<TripMode?>(null) }
     var selectedKey by remember { mutableStateOf<String?>(null) }
+    // The proposal being looked at: the map draws it before anything is saved,
+    // because the mistake worth catching is a junction that ate its neighbour.
+    var preview by remember { mutableStateOf<PlaceDraft?>(null) }
     var namingPlace by remember { mutableStateOf<PlaceDraft?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -73,19 +79,42 @@ fun NetworkScreen(
     val tracks = remember(graph) {
         graph.segments.map { listOf(it.segment.from, it.segment.to) }
     }
-    val markers = remember(graph, selectedKey) {
+    val previewKeys = remember(preview) {
+        preview?.refs?.mapTo(HashSet()) { it.key } ?: emptySet<String>()
+    }
+    val markers = remember(graph, selectedKey, previewKeys) {
         graph.nodes.map { node ->
             MapMarker(
                 at = node.at,
-                emphasized = node.key == selectedKey,
+                emphasized = node.key == selectedKey || node.key in previewKeys,
                 // Only names: a wall of node ids would hide the map. The
                 // selected node still needs one even when it is unnamed.
                 label = if (node.key == selectedKey) node.name ?: node.key else node.name,
             )
         }
     }
+    // Every junction already named gets a faint ring, so "what is one junction
+    // and what is still loose" is visible at a glance; the proposal is bright.
+    val rings = remember(viewModel.places, preview) {
+        buildList {
+            for (place in viewModel.places) {
+                add(MapRing(place.at, place.radiusM.coerceAtLeast(PlaceDrafts.MIN_ADOPT_M)))
+            }
+            preview?.let { add(MapRing(it.center, it.adoptRadius(), active = true)) }
+        }
+    }
+    // A proposal is ~100 m inside a city-wide network: without this the ring
+    // would be a few pixels on a 250 dp map.
+    val focusBounds = remember(preview) {
+        preview?.let { draft ->
+            Geo.bounds(listOf(draft.center))?.expanded(draft.adoptRadius() + 25.0)
+        }
+    }
     val selectNode = remember(graph) {
-        { index: Int -> selectedKey = graph.nodes.getOrNull(index)?.key }
+        { index: Int ->
+            selectedKey = graph.nodes.getOrNull(index)?.key
+            preview = null
+        }
     }
 
     namingPlace?.let { draft ->
@@ -95,15 +124,20 @@ fun NetworkScreen(
             spanM = draft.spanM,
             named = draft.existingPlaceId != null,
             overriddenCount = viewModel.overriddenMembers(draft),
-            onDismiss = { namingPlace = null },
+            onDismiss = {
+                namingPlace = null
+                preview = null
+            },
             onSave = { name, takeOverNames ->
                 namingPlace = null
+                preview = null
                 scope.launch {
                     viewModel.namePlace(draft, name, clearMemberNames = takeOverNames)
                 }
             },
             onSavePointOnly = { name ->
                 namingPlace = null
+                preview = null
                 scope.launch { viewModel.renamePoint(draft.seed, name) }
             },
         )
@@ -144,6 +178,17 @@ fun NetworkScreen(
                     customTilesGcj02 = settings.customTilesGcj02,
                     onMarkerTap = selectNode,
                     emptyHint = stringResource(R.string.network_empty_title),
+                    rings = rings,
+                    focusBounds = focusBounds,
+                )
+            }
+            // The review step: the ring is on the map, the numbers are here,
+            // and nothing has been written yet.
+            preview?.let { draft ->
+                PlacePreviewRow(
+                    draft = draft,
+                    onName = { namingPlace = draft },
+                    onCancel = { preview = null },
                 )
             }
             Spacer(Modifier.height(6.dp))
@@ -183,7 +228,11 @@ fun NetworkScreen(
                         onOpenSegment = onOpenSegment,
                         onNamePlace = {
                             val ref = PointRef.parse(selected.key)
-                            if (ref != null) namingPlace = viewModel.placeDraft(ref, selected.at)
+                            if (ref != null) {
+                                // Show the proposal on the map first; naming it
+                                // is the next tap, once the circle looks right.
+                                preview = viewModel.placeDraft(ref, selected.at)
+                            }
                         },
                     )
                 }

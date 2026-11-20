@@ -23,6 +23,14 @@ object MapCamera {
     fun latAt(y: Double, world: Double): Double = Geo.mercatorLat(y / world)
 
     /**
+     * Metres covered by one world pixel at [lat]. Used to draw something that
+     * has a real size — a junction's radius — at the right scale, which is
+     * what keeps a dashed circle meaningful when the user pinches the map.
+     */
+    fun metersPerPixel(lat: Double, world: Double): Double =
+        EARTH_CIRCUMFERENCE_M * kotlin.math.cos(Math.toRadians(lat)) / world
+
+    /**
      * Drags the map by [dx] / [dy] screen pixels.
      *
      * A drag must travel exactly as far as the finger. Anything that adds an
@@ -66,3 +74,6 @@ object MapCamera {
         )
     }
 }
+
+/** Equatorial circumference: the width of the world at zoom 0, in metres. */
+private const val EARTH_CIRCUMFERENCE_M = 40_075_016.686

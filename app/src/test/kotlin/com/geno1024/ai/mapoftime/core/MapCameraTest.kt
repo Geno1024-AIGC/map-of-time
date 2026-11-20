@@ -79,4 +79,21 @@ class MapCameraTest {
         assertEquals(focusX, screenX(point, zoomed, zoom + 1.0, width), 1e-6)
         assertEquals(focusY, screenY(point, zoomed, zoom + 1.0, height), 1e-6)
     }
+
+    @Test
+    fun aWorldPixelIsAHundredAndFiftyKilometresAtTheEquator() {
+        // One tile of the world at zoom 0: 156 543 m * 256 px ≈ 40 075 km.
+        val metres = MapCamera.metersPerPixel(0.0, MapCamera.TILE_PX)
+        assertEquals(156_543.0, metres, 1.0)
+    }
+
+    @Test
+    fun aJunctionStaysTheSameSizeOnTheGroundWhenZooming() {
+        // The ring is drawn in pixels but means metres: at twice the zoom the
+        // same radius must take twice the pixels.
+        val world = MapCamera.worldSize(18.0)
+        val close = MapCamera.metersPerPixel(31.2, world)
+        val further = MapCamera.metersPerPixel(31.2, world * 2.0)
+        assertEquals(close / 2.0, further, 1e-9)
+    }
 }
