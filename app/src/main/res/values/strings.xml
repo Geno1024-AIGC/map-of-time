@@ -50,6 +50,8 @@
     <string name="nav_segments">Segments</string>
     <string name="nav_settings">Settings</string>
 
+    <string name="map_lock_camera">Lock view</string>
+    <string name="map_unlock_camera">Unlock view</string>
     <string name="network_title">Network</string>
     <string name="network_summary">%1$d junctions · %2$d segments</string>
     <string name="network_summary_parts">%1$d junctions · %2$d segments · %3$d unconnected clusters</string>

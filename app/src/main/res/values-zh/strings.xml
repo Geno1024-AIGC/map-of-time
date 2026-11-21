@@ -50,6 +50,8 @@
     <string name="nav_segments">路段</string>
     <string name="nav_settings">设置</string>
 
+    <string name="map_lock_camera">锁定镜头</string>
+    <string name="map_unlock_camera">解除锁定</string>
     <string name="network_title">路网</string>
     <string name="network_summary">%1$d 个节点 · %2$d 段</string>
     <string name="network_summary_parts">%1$d 个节点 · %2$d 段 · %3$d 个互不相连的片区</string>
