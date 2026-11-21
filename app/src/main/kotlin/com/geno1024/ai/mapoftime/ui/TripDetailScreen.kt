@@ -336,15 +336,16 @@ fun TripDetailScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // The picker sits right under the map: tap a dot, read its time,
-            // then save. The mark uses the fix's timestamp, so the segmenter
-            // sees it exactly like one pressed while recording.
-            if (splitting && points.isNotEmpty()) {
+            // The picker sits right under the map: drag the arrow or tap a dot,
+            // either moves the same selected fix. The mark uses its timestamp,
+            // so the segmenter sees it exactly like one pressed while recording.
+            if (splitting && points.size >= 2) {
                 item {
                     SectionCard(
                         title = stringResource(R.string.trip_split),
                         subtitle = stringResource(R.string.trip_split_hint),
                     ) {
+                        PointScrubber(points, splitIndex, onIndexChange = { splitIndex = it })
                         val selected = splitIndex
                         if (selected == null) {
                             Text(
@@ -411,34 +412,7 @@ fun TripDetailScreen(
                         subtitle = stringResource(R.string.trip_trim_hint),
                     ) {
                         val cut = cutIndex ?: points.lastIndex
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = formatClock(points.first().t),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                text = formatClock(points[cut].t),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                            Spacer(Modifier.weight(1f))
-                            Text(
-                                text = formatClock(points.last().t),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Slider(
-                            value = cut.toFloat(),
-                            valueRange = 0f..points.lastIndex.toFloat(),
-                            onValueChange = { value ->
-                                cutIndex = value.toInt().coerceIn(0, points.lastIndex)
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                        PointScrubber(points, cutIndex, onIndexChange = { cutIndex = it })
                         if (cutIndex == null) {
                             Text(
                                 text = stringResource(R.string.trip_trim_pick),
@@ -758,6 +732,48 @@ fun TripDetailScreen(
             }
         }
     }
+}
+
+/**
+ * Clock row plus the draggable arrow, shared by trimming and post-hoc splits.
+ * The value is a fix index rather than an epoch millisecond: timestamps are
+ * ~1.7e12 and lose precision as a Float, while dense tail fixes are much
+ * easier to pick apart by index.
+ */
+@Composable
+private fun PointScrubber(
+    points: List<TrackPoint>,
+    index: Int?,
+    onIndexChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shown = index ?: points.lastIndex
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            text = formatClock(points.first().t),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = formatClock(points[shown].t),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.error,
+        )
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = formatClock(points.last().t),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    Slider(
+        value = shown.toFloat(),
+        valueRange = 0f..points.lastIndex.toFloat(),
+        onValueChange = { value -> onIndexChange(value.toInt().coerceIn(0, points.lastIndex)) },
+        modifier = modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
