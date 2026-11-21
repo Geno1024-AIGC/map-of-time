@@ -20,6 +20,7 @@ import com.geno1024.ai.mapoftime.data.pointPairName
 import com.geno1024.ai.mapoftime.osm.JunctionSplitter
 import com.geno1024.ai.mapoftime.osm.MatchedPiece
 import com.geno1024.ai.mapoftime.osm.OsmSignal
+import com.geno1024.ai.mapoftime.osm.RoadAccess
 import com.geno1024.ai.mapoftime.osm.RoadGraph
 
 /** Why a trip did or did not get OSM junctions, so the UI can say it out loud. */
@@ -130,6 +131,7 @@ class TripAnalyzer(
                 graph = graph,
                 snapMeters = config.junctionSnapMeters.toDouble(),
                 minPieceMeters = trip.mode.profile.minLegForSplitMeters,
+                traveler = RoadAccess.of(trip.mode),
             )
             for (piece in pieces) {
                 val analyzed = toLeg(piece, segmentation.points, speeds, trip.mode.id, graph, signals, pointNames, now) ?: continue

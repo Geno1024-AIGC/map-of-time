@@ -46,6 +46,29 @@ object OsmFixture {
         }
         return RoadGraph(ways)
     }
+
+    /**
+     * A road 1-2-3-4 with a zebra footway 10-2-11 across it. At node 2 a walker
+     * sees four arms (the road both ways and the footway both ways) but a car
+     * only sees the two road arms, so it is not a vehicle junction.
+     */
+    fun zebraGraph(): RoadGraph {
+        val at = { lat: Double, lon: Double -> LatLon(lat, lon) }
+        return RoadGraph(
+            listOf(
+                OsmWay(
+                    1, "residential", "Main Road", null, false,
+                    listOf(1L, 2L, 3L, 4L),
+                    listOf(at(0.0, 0.0), at(0.0, 0.001), at(0.0, 0.002), at(0.0, 0.003)),
+                ),
+                OsmWay(
+                    2, "footway", "Zebra", null, false,
+                    listOf(10L, 2L, 11L),
+                    listOf(at(0.001, 0.001), at(0.0, 0.001), at(-0.001, 0.001)),
+                ),
+            ),
+        )
+    }
 }
 
 class RoadGraphTest {
@@ -94,6 +117,17 @@ class RoadGraphTest {
     fun duplicateWaysAreCollapsed() {
         val way = OsmWay(7, "residential", "Dup", null, false, listOf(1, 2), listOf(LatLon(0.0, 0.0), LatLon(0.0, 0.001)))
         assertEquals(1, RoadGraph(listOf(way, way)).ways.size)
+    }
+
+    @Test
+    fun aZebraIsAWalkJunctionButNotAVehicleJunction() {
+        val zebra = OsmFixture.zebraGraph()
+        // Four walk arms at node 2: road in both directions and footway in both.
+        assertNotNull(zebra.nearestJunction(LatLon(0.0, 0.001), 20.0, Traveler.WALK))
+        assertTrue(zebra.junctions.any { it.id == 2L })
+        // A car only sees the two road arms — degree 2 is not a junction.
+        assertNull(zebra.nearestJunction(LatLon(0.0, 0.001), 20.0, Traveler.VEHICLE))
+        assertTrue(zebra.vehicleJunctions.none { it.id == 2L })
     }
 }
 
@@ -170,5 +204,27 @@ class JunctionSplitterTest {
         assertEquals(track.size - 1, pieces.last().slice.to - 1)
         pieces.zipWithNext().forEach { (a, b) -> assertEquals(a.slice.to - 1, b.slice.from) }
         assertNotEquals(0, pieces.size)
+    }
+
+    @Test
+    fun aVehicleDrivingOverAZebraIsNotCutThere() {
+        val zebra = OsmFixture.zebraGraph()
+        val track = TrackBuilder(LatLon(0.0, 0.0005), 0L).straight(200.0, bearingDegrees = 90.0).build()
+        val walk = JunctionSplitter.split(track, TrackSlice(0, track.size), zebra, traveler = Traveler.WALK)
+        assertEquals(2, walk.size)
+        assertEquals(2L, walk[0].end.junctionId)
+        val drive = JunctionSplitter.split(track, TrackSlice(0, track.size), zebra, traveler = Traveler.VEHICLE)
+        assertEquals(1, drive.size)
+        assertNull(drive[0].start.junctionId)
+        assertNull(drive[0].end.junctionId)
+    }
+
+    @Test
+    fun aVehicleIsStillCutAtARealJunction() {
+        val track = TrackBuilder(LatLon(0.001, 0.0004), 0L).straight(250.0, bearingDegrees = 90.0).build()
+        val pieces = JunctionSplitter.split(track, TrackSlice(0, track.size), graph, traveler = Traveler.VEHICLE)
+        assertEquals(3, pieces.size)
+        assertEquals(101L, pieces[0].end.junctionId)
+        assertEquals(102L, pieces[1].end.junctionId)
     }
 }

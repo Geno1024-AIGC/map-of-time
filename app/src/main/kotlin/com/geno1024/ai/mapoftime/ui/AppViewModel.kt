@@ -233,7 +233,12 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
      * being previewed, [context] supplies the centre before anything is saved.
      * Null for a point that belongs to no junction — there is no "side" to name.
      */
-    fun pointDetail(key: String, at: LatLon, context: PlaceDraft? = null): PointDetail? {
+    fun pointDetail(
+        key: String,
+        at: LatLon,
+        context: PlaceDraft? = null,
+        mode: TripMode? = null,
+    ): PointDetail? {
         val ref = PointRef.parse(key) ?: return null
         val place = placeOf(ref)
         // A point of a brand-new junction has no saved place yet — that is
@@ -245,6 +250,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         val placeName = context?.existingPlaceId?.let(::placeName) ?: place?.name
         val touching = summaries.map { it.segment }
             .filter { it.fromKey == key || it.toKey == key }
+            // A caption describes one traveller's roads: a car must not inherit
+            // the footway name just because a zebra shares the same point.
+            .filter { mode == null || it.mode == mode }
         return PointDetails.of(at, centre, placeName, touching)
     }
 
