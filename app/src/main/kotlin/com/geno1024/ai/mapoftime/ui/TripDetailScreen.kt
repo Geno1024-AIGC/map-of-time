@@ -86,6 +86,7 @@ fun TripDetailScreen(
     var points by remember(tripId) { mutableStateOf<List<TrackPoint>>(emptyList()) }
     var identities by remember(tripId) { mutableStateOf<Map<Long, MatchKind>>(emptyMap()) }
     var markPositions by remember(tripId) { mutableStateOf<List<com.geno1024.ai.mapoftime.core.LatLon>>(emptyList()) }
+    var markTimes by remember(tripId) { mutableStateOf<List<Long>>(emptyList()) }
     var analyzing by remember { mutableStateOf(false) }
     var changingMode by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -102,6 +103,7 @@ fun TripDetailScreen(
     var splitting by remember(tripId) { mutableStateOf(false) }
     var splitIndex by remember(tripId) { mutableStateOf<Int?>(null) }
     var splittingBusy by remember { mutableStateOf(false) }
+    var markBusy by remember { mutableStateOf(false) }
 
     LaunchedEffect(tripId, reload) {
         val tripValue = viewModel.trip(tripId)
@@ -110,6 +112,7 @@ fun TripDetailScreen(
         legs = legsValue
         points = viewModel.points(tripId)
         markPositions = viewModel.markPositions(tripId)
+        markTimes = viewModel.markTimes(tripId)
         identities = viewModel.identities(legsValue.mapNotNull { it.segmentId })
         // Re-analysis replaces every leg, so an old selection would point at
         // an id that no longer exists.
@@ -513,12 +516,51 @@ fun TripDetailScreen(
                             stringResource(R.string.trip_duration) to formatDuration(value.durationMs),
                             stringResource(R.string.trip_points) to value.pointCount.toString(),
                         )
-                        if (markPositions.isNotEmpty()) {
+                        if (markTimes.isNotEmpty()) {
                             Spacer(Modifier.height(8.dp))
-                            KeyValueRow(
-                                stringResource(R.string.trip_marks),
-                                markPositions.size.toString(),
+                            Text(
+                                text = stringResource(R.string.trip_marks),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            Text(
+                                text = stringResource(R.string.trip_marks_hint),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            markTimes.forEach { t ->
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = formatDateTime(t),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    TextButton(
+                                        onClick = {
+                                            if (markBusy) return@TextButton
+                                            markBusy = true
+                                            scope.launch {
+                                                val result = viewModel.removeSplitAt(tripId, t)
+                                                markBusy = false
+                                                message = result?.let {
+                                                    String.format(
+                                                        Locale.getDefault(),
+                                                        analysisDoneFormat,
+                                                        it.legCount,
+                                                        it.osmLegs,
+                                                        osmStatus.getValue(it.osmOutcome),
+                                                    )
+                                                } ?: noPointsText
+                                                reload += 1
+                                            }
+                                        },
+                                        enabled = !markBusy,
+                                        contentPadding = PaddingValues(horizontal = 8.dp),
+                                    ) {
+                                        Text(stringResource(R.string.trip_mark_remove))
+                                    }
+                                }
+                            }
                         }
 
                         Spacer(Modifier.height(10.dp))

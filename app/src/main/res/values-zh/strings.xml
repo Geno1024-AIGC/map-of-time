@@ -99,6 +99,8 @@
     <string name="trip_duration">时长</string>
     <string name="trip_points">定位点</string>
     <string name="trip_marks">手动切段</string>
+    <string name="trip_marks_hint">移除后这一程会按算法重新切分。</string>
+    <string name="trip_mark_remove">移除</string>
     <string name="trip_mode">出行方式</string>
     <string name="trip_note">备注</string>
     <string name="trip_note_add">添加</string>

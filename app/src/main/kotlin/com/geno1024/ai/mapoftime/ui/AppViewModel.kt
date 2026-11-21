@@ -176,6 +176,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    /** Timestamps of the manual splits, so they can be removed individually. */
+    suspend fun markTimes(tripId: Long): List<Long> = withContext(container.dbDispatcher) {
+        container.repository.marks(tripId)
+    }
+
     suspend fun segment(id: Long): Segment? = withContext(container.dbDispatcher) {
         container.repository.segment(id)
     }
@@ -378,6 +383,12 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 container.repository.addMark(tripId, t)
             }
         }
+        return analyze(tripId)
+    }
+
+    /** Removes one manual split and re-runs the analysis without it. */
+    suspend fun removeSplitAt(tripId: Long, t: Long): TripAnalyzer.Result? {
+        withContext(container.dbDispatcher) { container.repository.deleteMark(tripId, t) }
         return analyze(tripId)
     }
 

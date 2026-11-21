@@ -288,6 +288,11 @@ class MapRepository(private val helper: MapDb) {
         db.rawQuery("SELECT t FROM marks WHERE trip_id = ? ORDER BY t", arrayOf(tripId.toString()))
             .use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.getLong(0)) } }
 
+    /** Removes one manual split; the next analysis cuts this trip without it. */
+    fun deleteMark(tripId: Long, t: Long) {
+        db.delete("marks", "trip_id = ? AND t = ?", arrayOf(tripId.toString(), t.toString()))
+    }
+
     fun lastPointTime(tripId: Long): Long? =
         db.rawQuery("SELECT MAX(t) FROM points WHERE trip_id = ?", arrayOf(tripId.toString()))
             .use { cursor -> if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null }
