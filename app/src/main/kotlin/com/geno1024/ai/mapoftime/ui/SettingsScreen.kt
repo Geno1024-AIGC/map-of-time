@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
@@ -52,6 +54,7 @@ import com.geno1024.ai.mapoftime.core.HolidayBlock
 import com.geno1024.ai.mapoftime.core.Holidays
 import com.geno1024.ai.mapoftime.core.parseHolidayBlock
 import com.geno1024.ai.mapoftime.core.parseHolidayDates
+import com.geno1024.ai.mapoftime.data.DangerCounts
 import com.geno1024.ai.mapoftime.update.Mirrors
 import com.geno1024.ai.mapoftime.update.UpdateError
 import com.geno1024.ai.mapoftime.update.UpdateState
@@ -60,6 +63,32 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalDate
+
+/** The four irreversible actions in the Danger Zone, each with its own confirm. */
+private enum class DangerAction {
+    POINT_NAMES, PLACES, TRIPS, ALL;
+
+    fun title(): Int = when (this) {
+        POINT_NAMES -> R.string.settings_danger_point_names
+        PLACES -> R.string.settings_danger_places
+        TRIPS -> R.string.settings_danger_trips
+        ALL -> R.string.settings_danger_all
+    }
+
+    fun confirm(): Int = when (this) {
+        POINT_NAMES -> R.string.settings_danger_point_names_confirm
+        PLACES -> R.string.settings_danger_places_confirm
+        TRIPS -> R.string.settings_danger_trips_confirm
+        ALL -> R.string.settings_danger_all_confirm
+    }
+
+    fun count(counts: DangerCounts): Int = when (this) {
+        POINT_NAMES -> counts.pointNames
+        PLACES -> counts.places
+        TRIPS -> counts.trips
+        ALL -> 0
+    }
+}
 
 @Composable
 fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
@@ -71,6 +100,9 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     var cacheMessage by remember { mutableStateOf<String?>(null) }
     var exportMessage by remember { mutableStateOf<String?>(null) }
     var importMessage by remember { mutableStateOf<String?>(null) }
+    var dangerCounts by remember { mutableStateOf(DangerCounts()) }
+    var dangerMessage by remember { mutableStateOf<String?>(null) }
+    var confirmDanger by remember { mutableStateOf<DangerAction?>(null) }
     // Hoisted: reading resources through LocalContext inside a click handler is
     // not configuration-aware and would survive a locale change with stale text.
     val clearedText = stringResource(R.string.settings_cleared)
@@ -78,6 +110,10 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     val exportTitle = stringResource(R.string.settings_export)
     val importErrorText = stringResource(R.string.settings_import_error)
     val importDoneFormat = stringResource(R.string.settings_import_done)
+    val dangerPointDoneFormat = stringResource(R.string.settings_danger_point_names_done)
+    val dangerPlacesDoneFormat = stringResource(R.string.settings_danger_places_done)
+    val dangerTripsDoneFormat = stringResource(R.string.settings_danger_trips_done)
+    val dangerAllDoneText = stringResource(R.string.settings_danger_all_done)
 
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -113,6 +149,15 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
 
     LaunchedEffect(Unit) {
         tileCount = viewModel.cachedTileCount()
+    }
+
+    // Counts come from the database, not from the cached lists: a dialog must
+    // never quote a number that a deletion on another screen has invalidated.
+    LaunchedEffect(Unit) {
+        dangerCounts = viewModel.dangerCounts()
+    }
+    val reloadDangerCounts = {
+        scope.launch { dangerCounts = viewModel.dangerCounts() }
     }
 
     Column(modifier.fillMaxSize()) {
@@ -365,8 +410,8 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 }
             }
 
-            // Last on purpose: updating is the rarest thing done here, and it
-            // is the only card with a network call of its own.
+            // The only card with a network call of its own. The Danger Zone
+            // follows it so the destructive actions stay at the very bottom.
             UpdateCard(
                 viewModel = viewModel,
                 currentVersion = rememberVersionName(),
@@ -375,7 +420,110 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                     viewModel.settings.update { it.copy(updateMirrorPrefix = prefix) }
                 },
             )
+
+            SectionCard(
+                title = stringResource(R.string.settings_danger_zone),
+                subtitle = stringResource(R.string.settings_danger_zone_desc),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.settings_danger_warning),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    DangerButton(
+                        text = "${stringResource(DangerAction.POINT_NAMES.title())} (${dangerCounts.pointNames})",
+                        onClick = { confirmDanger = DangerAction.POINT_NAMES },
+                    )
+                    DangerButton(
+                        text = "${stringResource(DangerAction.PLACES.title())} (${dangerCounts.places})",
+                        onClick = { confirmDanger = DangerAction.PLACES },
+                    )
+                    DangerButton(
+                        text = "${stringResource(DangerAction.TRIPS.title())} (${dangerCounts.trips})",
+                        onClick = { confirmDanger = DangerAction.TRIPS },
+                    )
+                    DangerButton(
+                        text = stringResource(DangerAction.ALL.title()),
+                        onClick = { confirmDanger = DangerAction.ALL },
+                    )
+                    dangerMessage?.let { text ->
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
+
+        confirmDanger?.let { action ->
+            AlertDialog(
+                onDismissRequest = { confirmDanger = null },
+                title = { Text(stringResource(action.title())) },
+                text = {
+                    Text(
+                        if (action == DangerAction.ALL) {
+                            stringResource(action.confirm())
+                        } else {
+                            stringResource(action.confirm(), action.count(dangerCounts))
+                        },
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmDanger = null
+                            when (action) {
+                                DangerAction.POINT_NAMES -> viewModel.clearPointNames { removed ->
+                                    dangerMessage = String.format(dangerPointDoneFormat, removed)
+                                    reloadDangerCounts()
+                                }
+                                DangerAction.PLACES -> viewModel.clearPlaces { removed ->
+                                    dangerMessage = String.format(dangerPlacesDoneFormat, removed)
+                                    reloadDangerCounts()
+                                }
+                                DangerAction.TRIPS -> viewModel.clearTrips { removed ->
+                                    dangerMessage = String.format(dangerTripsDoneFormat, removed)
+                                    reloadDangerCounts()
+                                }
+                                DangerAction.ALL -> viewModel.clearAllData {
+                                    dangerMessage = dangerAllDoneText
+                                    reloadDangerCounts()
+                                    tileCount = 0
+                                    cacheMessage = clearedText
+                                }
+                            }
+                        },
+                    ) {
+                        Text(
+                            text = stringResource(R.string.action_delete),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmDanger = null }) {
+                        Text(stringResource(R.string.action_cancel))
+                    }
+                },
+            )
+        }
+    }
+}
+
+/** One destructive action. Error colours make the bottom card unmistakable. */
+@Composable
+private fun DangerButton(text: String, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = ButtonDefaults.outlinedButtonColors(
+            contentColor = MaterialTheme.colorScheme.error,
+        ),
+    ) {
+        Text(text)
     }
 }
 

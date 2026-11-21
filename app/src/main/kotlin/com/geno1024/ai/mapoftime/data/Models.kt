@@ -92,6 +92,16 @@ data class PointRef(val kind: String, val nodeId: Long) {
 data class NamedPoint(val ref: PointRef, val name: String)
 
 /**
+ * What the settings' Danger Zone would remove, read fresh before each confirm
+ * so the dialog never quotes a count from a stale list.
+ */
+data class DangerCounts(
+    val pointNames: Int = 0,
+    val places: Int = 0,
+    val trips: Int = 0,
+)
+
+/**
  * One junction as the user thinks of it: a name plus every point that belongs
  * to it. A wide crossing is a dozen OSM nodes — an entry and an exit per lane,
  * a refuge at each corner — and further turning movements keep discovering
