@@ -270,6 +270,7 @@
     <string name="update_badge">Update available</string>
     <string name="settings_danger_zone">Danger Zone</string>
     <string name="settings_danger_zone_desc">Nothing here can be undone. Export a backup first if you might want it back.</string>
+    <string name="settings_danger_toggle">Expand or collapse danger zone</string>
     <string name="settings_danger_warning">Irreversible — there is no undo for these.</string>
     <string name="settings_danger_point_names">Delete all point names</string>
     <string name="settings_danger_places">Delete all junction names</string>
