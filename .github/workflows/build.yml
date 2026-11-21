@@ -217,23 +217,42 @@ jobs:
 
           # Recreate the rolling tag at the exact commit that produced this APK.
           # Deleting first also drops the previous run's differently-named APK,
-          # so the release never lists two installable files.
+          # so the release never lists two installable files. A draft can leave
+          # the tag behind, so clear the ref explicitly as well.
           gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          git push origin --delete "refs/tags/$TAG" 2>/dev/null || true
+          git tag -d "$TAG" 2>/dev/null || true
+
+          # Create the tag before the release. Asking `gh release create` to
+          # create it with --target intermittently produces a draft with an
+          # untagged URL, which the anonymous update API cannot read at all.
+          git tag "$TAG" "$FULL_SHA"
+          git push --force origin "refs/tags/$TAG"
           gh release create "$TAG" "$artifact" \
             --title "Map of Time $VERSION_NAME canary" \
             --notes "$notes" \
-            --prerelease \
-            --target "$FULL_SHA"
+            --prerelease
 
-          # GitHub occasionally leaves the recreated release as a draft with
-          # an untagged URL. Drafts are invisible to the anonymous API the app
-          # uses, so force it public and prove the tag resolves before we say
-          # the build shipped.
-          gh release edit "$TAG" --draft=false --prerelease
+          # Even with the tag in place GitHub can briefly expose an unpublished
+          # release, so publish again and wait until the anonymous endpoint the
+          # app actually uses returns this build as a non-draft release.
           expected="Map of Time $VERSION_NAME canary"
-          published="$(gh api "repos/$GH_REPO/releases/tags/$TAG" --jq .name)"
-          if [ "$published" != "$expected" ]; then
-            echo "::error::canary release is not readable at tag $TAG: got '$published', expected '$expected'"
+          ok=0
+          name=""
+          draft=""
+          for attempt in 1 2 3 4 5 6; do
+            gh release edit "$TAG" --draft=false --prerelease >/dev/null 2>&1 || true
+            info="$(gh api "repos/$GH_REPO/releases/tags/$TAG" \
+              --jq '"\(.name)\t\(.draft)"' 2>/dev/null || true)"
+            IFS=$'\t' read -r name draft <<< "$info"
+            if [ "$name" = "$expected" ] && [ "$draft" = "false" ]; then
+              ok=1
+              break
+            fi
+            sleep 5
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "::error::canary release is not readable at tag $TAG: got name='$name', draft='$draft', expected '$expected'"
             exit 1
           fi
 
