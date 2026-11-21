@@ -131,6 +131,8 @@
     <string name="trip_split_pick">还没选切点——在轨迹上点一个点。</string>
     <string name="trip_split_summary">切点时间：%1$s</string>
     <string name="trip_split_confirm">添加并重算</string>
+    <string name="trip_scrub_previous">上一个点</string>
+    <string name="trip_scrub_next">下一个点</string>
     <string name="trips_select">选择</string>
     <string name="trips_select_all">全选</string>
     <string name="trips_select_none">取消全选</string>

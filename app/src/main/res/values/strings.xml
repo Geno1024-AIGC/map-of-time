@@ -131,6 +131,8 @@
     <string name="trip_split_pick">No cut point selected yet — tap a dot on the track.</string>
     <string name="trip_split_summary">Cut at: %1$s</string>
     <string name="trip_split_confirm">Add &amp; re-analyse</string>
+    <string name="trip_scrub_previous">Previous fix</string>
+    <string name="trip_scrub_next">Next fix</string>
     <string name="trips_select">Select</string>
     <string name="trips_select_all">Select all</string>
     <string name="trips_select_none">Clear</string>

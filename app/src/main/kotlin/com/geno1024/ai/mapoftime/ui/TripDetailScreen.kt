@@ -40,12 +40,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.analysis.OsmOutcome
+import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.Polyline
 import com.geno1024.ai.mapoftime.core.TrackPoint
 import com.geno1024.ai.mapoftime.data.Leg
@@ -768,12 +771,87 @@ private fun PointScrubber(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-    Slider(
-        value = shown.toFloat(),
-        valueRange = 0f..points.lastIndex.toFloat(),
-        onValueChange = { value -> onIndexChange(value.toInt().coerceIn(0, points.lastIndex)) },
-        modifier = modifier.fillMaxWidth(),
-    )
+    val previousLabel = stringResource(R.string.trip_scrub_previous)
+    val nextLabel = stringResource(R.string.trip_scrub_next)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        TextButton(
+            onClick = { onIndexChange(stepScrubIndex(points, shown, -1)) },
+            enabled = shown > 0,
+            contentPadding = PaddingValues(horizontal = 8.dp),
+            modifier = Modifier.semantics { contentDescription = previousLabel },
+        ) {
+            Text("←")
+        }
+        Slider(
+            value = shown.toFloat(),
+            valueRange = 0f..points.lastIndex.toFloat(),
+            onValueChange = { value -> onIndexChange(value.toInt().coerceIn(0, points.lastIndex)) },
+            modifier = modifier.weight(1f),
+        )
+        TextButton(
+            onClick = { onIndexChange(stepScrubIndex(points, shown, +1)) },
+            enabled = shown < points.lastIndex,
+            contentPadding = PaddingValues(horizontal = 8.dp),
+            modifier = Modifier.semantics { contentDescription = nextLabel },
+        ) {
+            Text("→")
+        }
+    }
+}
+
+/** Below this average speed the fixes are a standstill, not travel. */
+private const val STATIONARY_SPEED_MPS = 0.35
+
+/** Fixes on either side used to decide whether a point is standing still. */
+private const val STATIONARY_WINDOW = 2
+
+/** One tap never skips more than this many fixes, even in a very long stop. */
+private const val MAX_SCRUB_STEP = 100
+
+/**
+ * A phone lying still still jitters a metre or two between fixes. Comparing
+ * fixes a couple of steps apart cancels that noise: over a window a standstill
+ * goes nowhere, while even slow travel keeps moving away. The window looks
+ * back the way we came ([direction]) so the first moving fix after a stop is
+ * not mistaken for part of it.
+ */
+private fun isStationary(points: List<TrackPoint>, index: Int, direction: Int): Boolean {
+    val last = points.lastIndex
+    var first: Int
+    var end: Int
+    if (direction > 0) {
+        first = (index - STATIONARY_WINDOW).coerceAtLeast(0)
+        end = index
+        if (end == first && first < last) end = (index + STATIONARY_WINDOW).coerceAtMost(last)
+    } else {
+        first = index
+        end = (index + STATIONARY_WINDOW).coerceAtMost(last)
+        if (end == first && first > 0) first = (index - STATIONARY_WINDOW).coerceAtLeast(0)
+    }
+    if (end <= first) return false
+    val seconds = (points[end].t - points[first].t) / 1000.0
+    if (seconds <= 0.0) return false
+    val distance = Geo.distanceMeters(points[first].at, points[end].at)
+    return distance / seconds <= STATIONARY_SPEED_MPS && distance <= 6.0
+}
+
+/**
+ * Where an arrow tap lands. Moving through ordinary fixes is one step at a
+ * time; once the fixes around [from] stop moving, one tap crosses the whole
+ * standstill instead of stepping through a pile of GPS noise.
+ */
+internal fun stepScrubIndex(points: List<TrackPoint>, from: Int, direction: Int): Int {
+    val last = points.lastIndex
+    if (last <= 0) return 0
+    var step = 1
+    if (isStationary(points, from, direction)) {
+        while (step < MAX_SCRUB_STEP) {
+            val next = from + direction * step
+            if (next !in 0..last || !isStationary(points, next, direction)) break
+            step++
+        }
+    }
+    return (from + direction * step).coerceIn(0, last)
 }
 
 @Composable
