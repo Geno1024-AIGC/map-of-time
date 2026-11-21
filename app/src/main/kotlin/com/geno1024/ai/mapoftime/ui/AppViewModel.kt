@@ -505,15 +505,12 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             update = try {
                 val release = updateChecker.latest()
                 settings.update { it.copy(lastUpdateCheckAt = System.currentTimeMillis()) }
-                when {
-                    release == null -> UpdateState.NoRelease
-                    else -> when (val newer = isNewerThanInstalled(release)) {
-                        // A stamp we cannot read is an error, never "up to date":
-                        // silently treating it as old would hide every release.
-                        null -> UpdateState.Failed(UpdateError.VERSION)
-                        true -> UpdateState.Available(release)
-                        false -> UpdateState.UpToDate(release)
-                    }
+                when (val newer = isNewerThanInstalled(release)) {
+                    // A stamp we cannot read is an error, never "up to date":
+                    // silently treating it as old would hide every release.
+                    null -> UpdateState.Failed(UpdateError.VERSION)
+                    true -> UpdateState.Available(release)
+                    false -> UpdateState.UpToDate(release)
                 }
             } catch (e: UpdateException) {
                 UpdateState.Failed(e.error)

@@ -260,7 +260,6 @@
     <string name="update_current">Installed build</string>
     <string name="update_check">Check for updates</string>
     <string name="update_checking">Checking for updates…</string>
-    <string name="update_no_release">No build has been published yet.</string>
     <string name="update_up_to_date">You are on the newest build.</string>
     <string name="update_available">Version %1$s is ready to install.</string>
     <string name="update_notes">What changed</string>
@@ -274,6 +273,7 @@
     <string name="update_needs_permission">Allow this app to install apps, then tap Install again.</string>
     <string name="update_failed_network">Could not reach GitHub.</string>
     <string name="update_failed_rate_limit">GitHub is limiting update checks. Try again later.</string>
+    <string name="update_failed_unpublished">The canary release is not readable yet. It may be unpublished or being rebuilt; try again shortly.</string>
     <string name="update_failed_unreadable">The release lists no usable APK.</string>
     <string name="update_failed_version">The installed version could not be read.</string>
     <string name="update_failed_download">All download sources failed.</string>

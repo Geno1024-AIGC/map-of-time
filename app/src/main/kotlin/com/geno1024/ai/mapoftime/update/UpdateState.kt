@@ -12,9 +12,6 @@ sealed interface UpdateState {
 
     data object Checking : UpdateState
 
-    /** The release tag does not exist, e.g. while CI is recreating it. */
-    data object NoRelease : UpdateState
-
     /** [release] is the published build; null when nothing is published yet. */
     data class UpToDate(val release: ReleaseInfo?) : UpdateState
 

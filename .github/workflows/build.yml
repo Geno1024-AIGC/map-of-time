@@ -225,6 +225,16 @@ jobs:
             --prerelease \
             --target "$FULL_SHA"
 
-          # The tag now exists, so the release is reachable straight from the
-          # repository page as "latest pre-release".
+          # GitHub occasionally leaves the recreated release as a draft with
+          # an untagged URL. Drafts are invisible to the anonymous API the app
+          # uses, so force it public and prove the tag resolves before we say
+          # the build shipped.
+          gh release edit "$TAG" --draft=false --prerelease
+          expected="Map of Time $VERSION_NAME canary"
+          published="$(gh api "repos/$GH_REPO/releases/tags/$TAG" --jq .name)"
+          if [ "$published" != "$expected" ]; then
+            echo "::error::canary release is not readable at tag $TAG: got '$published', expected '$expected'"
+            exit 1
+          fi
+
           echo "Published https://github.com/$GH_REPO/releases/tag/$TAG"

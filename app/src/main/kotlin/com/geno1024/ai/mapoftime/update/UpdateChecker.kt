@@ -10,6 +10,8 @@ import java.net.URL
 enum class UpdateError {
     NETWORK,
     RATE_LIMIT,
+    /** The release exists but is not published, so the API hides it from us. */
+    UNPUBLISHED,
     UNREADABLE,
     /** The installed version name could not be parsed, so nothing can be compared. */
     VERSION,
@@ -27,16 +29,16 @@ class UpdateException(
  *
  * One request, no credentials: the unauthenticated GitHub API allows 60 calls
  * per hour per address, and the app checks at most every few hours. A missing
- * release (404) is a normal state during the seconds when CI recreates the
- * tag, so it is reported as `null` rather than as a failure.
+ * release is reported as `null` so the caller can tell the user why nothing
+ * was found instead of silently saying "no update".
  */
 class UpdateChecker(
     private val endpoint: String = RELEASE_URL,
     private val userAgent: String = USER_AGENT,
 ) {
-    suspend fun latest(): ReleaseInfo? = withContext(Dispatchers.IO) { fetch() }
+    suspend fun latest(): ReleaseInfo = withContext(Dispatchers.IO) { fetch() }
 
-    private fun fetch(): ReleaseInfo? {
+    private fun fetch(): ReleaseInfo {
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 15_000
@@ -52,7 +54,12 @@ class UpdateChecker(
                     ReleaseInfo.parse(body) ?: throw UpdateException(UpdateError.UNREADABLE)
                 }
 
-                HttpURLConnection.HTTP_NOT_FOUND -> null
+                // An anonymous API call cannot see drafts. Since CI recreates
+                // this release on every build, a 404 usually means the publish
+                // step left it as a draft; surface that instead of pretending
+                // no build has ever been released.
+                HttpURLConnection.HTTP_NOT_FOUND ->
+                    throw UpdateException(UpdateError.UNPUBLISHED)
 
                 // Both codes mean the anonymous quota is gone; it refills hourly.
                 403, 429 -> throw UpdateException(UpdateError.RATE_LIMIT)

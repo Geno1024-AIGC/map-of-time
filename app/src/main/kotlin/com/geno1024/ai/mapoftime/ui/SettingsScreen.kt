@@ -612,8 +612,6 @@ private fun UpdateCard(
                 }
             }
 
-            UpdateState.NoRelease -> UpdateHint(stringResource(R.string.update_no_release))
-
             is UpdateState.UpToDate -> UpdateHint(stringResource(R.string.update_up_to_date))
 
             is UpdateState.Available -> {
@@ -702,6 +700,7 @@ private fun UpdateCard(
                         when (state.error) {
                             UpdateError.NETWORK -> R.string.update_failed_network
                             UpdateError.RATE_LIMIT -> R.string.update_failed_rate_limit
+                            UpdateError.UNPUBLISHED -> R.string.update_failed_unpublished
                             UpdateError.UNREADABLE -> R.string.update_failed_unreadable
                             UpdateError.VERSION -> R.string.update_failed_version
                             UpdateError.DOWNLOAD -> R.string.update_failed_download
