@@ -292,6 +292,36 @@ class MapRepository(private val helper: MapDb) {
         db.rawQuery("SELECT MAX(t) FROM points WHERE trip_id = ?", arrayOf(tripId.toString()))
             .use { cursor -> if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getLong(0) else null }
 
+    /**
+     * Drops the tail of a recording: keeps the first [keepCount] fixes by seq
+     * and removes the rest, together with any manual marks that fell inside the
+     * removed stretch. The analyzer rebuilds legs, distance and the trip's end
+     * time from what remains, so callers must run it afterwards.
+     */
+    fun trimTripTail(tripId: Long, keepCount: Int): Int {
+        if (keepCount < 1) return 0
+        // First point to remove; none means the cut was past the last fix.
+        val cutSeq = db.rawQuery(
+            "SELECT seq FROM points WHERE trip_id = ? ORDER BY seq LIMIT 1 OFFSET ?",
+            arrayOf(tripId.toString(), keepCount.toString()),
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else return 0 }
+        val keepLastT = db.rawQuery(
+            "SELECT t FROM points WHERE trip_id = ? ORDER BY seq LIMIT 1 OFFSET ?",
+            arrayOf(tripId.toString(), (keepCount - 1).toString()),
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else return 0 }
+
+        var removed = 0
+        db.transaction {
+            removed = db.delete(
+                "points",
+                "trip_id = ? AND seq >= ?",
+                arrayOf(tripId.toString(), cutSeq.toString()),
+            )
+            db.delete("marks", "trip_id = ? AND t > ?", arrayOf(tripId.toString(), keepLastT.toString()))
+        }
+        return removed
+    }
+
     // ----------------------------------------------------------- legs
 
     fun replaceLegs(tripId: Long, legs: List<PendingLeg>) {

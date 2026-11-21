@@ -365,6 +365,17 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         return done
     }
 
+    /**
+     * Removes the tail of a recording (fixes after the user's chosen cutoff)
+     * and rebuilds legs, distance and end time from what remains.
+     */
+    suspend fun trimTripTail(tripId: Long, keepCount: Int): TripAnalyzer.Result? {
+        withContext(container.dbDispatcher) {
+            container.repository.trimTripTail(tripId, keepCount)
+        }
+        return analyze(tripId)
+    }
+
     /** Changes the mode and re-runs the analysis with that mode's thresholds. */
     suspend fun setTripMode(tripId: Long, mode: TripMode): TripAnalyzer.Result? {
         // Changing the mode without re-cutting would leave legs pointing at

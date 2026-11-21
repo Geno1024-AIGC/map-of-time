@@ -90,6 +90,9 @@ fun TripDetailScreen(
     var selectedLegId by remember(tripId) { mutableStateOf<Long?>(null) }
     var selectedSegment by remember(tripId) { mutableStateOf<Segment?>(null) }
     var editingSegment by remember { mutableStateOf(false) }
+    var trimming by remember(tripId) { mutableStateOf(false) }
+    var cutIndex by remember(tripId) { mutableStateOf<Int?>(null) }
+    var trimmingBusy by remember { mutableStateOf(false) }
 
     LaunchedEffect(tripId, reload) {
         val tripValue = viewModel.trip(tripId)
@@ -159,6 +162,18 @@ fun TripDetailScreen(
         // Manually split points are worth seeing after the fact: they are the
         // only boundaries that do not come from the algorithm.
         endpoints + markPositions.map { MapMarker(it, emphasized = false) } + endMarkers
+    }
+    // While trimming, every raw fix is tappable so the tap index maps straight
+    // back to `points`. The normal view keeps the lighter endpoint/mark set.
+    val trimMarkers = remember(points, cutIndex) {
+        points.mapIndexed { index, point -> MapMarker(point.at, emphasized = index == cutIndex) }
+    }
+    // Everything up to and including the cut stays highlighted; the discarded
+    // tail is still drawn as context so the choice can be judged in place.
+    val cutPath = remember(points, cutIndex) {
+        cutIndex?.let { index ->
+            points.take(index + 1).map { it.at }.takeIf { it.size >= 2 }
+        }
     }
 
     if (confirmDelete) {
@@ -261,27 +276,102 @@ fun TripDetailScreen(
             TrackMap(
                 tracks = tracks,
                 modifier = Modifier.fillMaxSize(),
-                markers = markers,
+                markers = if (trimming) trimMarkers else markers,
                 tilesEnabled = settings.mapTiles,
                 basemap = settings.basemap,
                 customTileUrl = settings.customTileUrl,
                 customTilesGcj02 = settings.customTilesGcj02,
-                highlight = selectedTrack,
+                highlight = cutPath ?: selectedTrack,
+                onMarkerTap = if (trimming) { index -> cutIndex = index } else null,
             )
-            selectedLeg?.let { leg ->
-                LegOverlay(
-                    leg = leg,
-                    identity = selectedIdentity,
-                    onClear = { selectedLegId = null },
-                    onEdit = if (selectedSegment != null) {
-                        { editingSegment = true }
-                    } else {
-                        null
-                    },
+            if (trimming) {
+                Surface(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(8.dp),
-                )
+                        .padding(8.dp)
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                    shadowElevation = 3.dp,
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text(
+                            text = stringResource(R.string.trip_trim_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        val cut = cutIndex
+                        if (cut == null) {
+                            Text(
+                                text = stringResource(R.string.trip_trim_pick),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            val keep = cut + 1
+                            Text(
+                                text = stringResource(
+                                    R.string.trip_trim_summary,
+                                    keep,
+                                    points.size - keep,
+                                    formatDateTime(points[cut].t),
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { trimming = false; cutIndex = null },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(stringResource(R.string.action_cancel))
+                            }
+                            Button(
+                                onClick = {
+                                    cutIndex?.let { index ->
+                                        trimmingBusy = true
+                                        scope.launch {
+                                            val result = viewModel.trimTripTail(tripId, index + 1)
+                                            trimmingBusy = false
+                                            trimming = false
+                                            cutIndex = null
+                                            message = result?.let {
+                                                String.format(
+                                                    Locale.getDefault(),
+                                                    analysisDoneFormat,
+                                                    it.legCount,
+                                                    it.osmLegs,
+                                                    osmStatus.getValue(it.osmOutcome),
+                                                )
+                                            } ?: noPointsText
+                                            reload += 1
+                                        }
+                                    }
+                                },
+                                enabled = cut != null && cut >= 1 && !trimmingBusy,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(stringResource(R.string.trip_trim_confirm))
+                            }
+                        }
+                    }
+                }
+            } else {
+                selectedLeg?.let { leg ->
+                    LegOverlay(
+                        leg = leg,
+                        identity = selectedIdentity,
+                        onClear = { selectedLegId = null },
+                        onEdit = if (selectedSegment != null) {
+                            { editingSegment = true }
+                        } else {
+                            null
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(8.dp),
+                    )
+                }
             }
         }
         Spacer(Modifier.height(12.dp))
@@ -459,6 +549,27 @@ fun TripDetailScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 4.dp),
                     )
+                }
+            }
+
+            // Trimming only makes sense for a recording with raw fixes; an
+            // imported trip has legs but nothing to cut, and cutting a live
+            // recording would race the service still writing points.
+            if (points.size >= 2 &&
+                trip?.status != com.geno1024.ai.mapoftime.data.TripStatus.RECORDING
+            ) {
+                item {
+                    OutlinedButton(
+                        onClick = {
+                            trimming = true
+                            cutIndex = null
+                            selectedLegId = null
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.trip_trim))
+                    }
+                    Spacer(Modifier.height(12.dp))
                 }
             }
 
