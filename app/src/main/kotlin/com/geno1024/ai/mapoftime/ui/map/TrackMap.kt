@@ -61,7 +61,13 @@ import kotlin.math.roundToInt
  * One dot on the map. [label] is drawn next to it — a segment's two ends look
  * identical otherwise, and "which one am I naming" is exactly the question.
  */
-data class MapMarker(val at: LatLon, val emphasized: Boolean = false, val label: String? = null)
+data class MapMarker(
+    val at: LatLon,
+    val emphasized: Boolean = false,
+    val label: String? = null,
+    /** Dimmed dots read as discarded context, e.g. the tail being trimmed. */
+    val alpha: Float = 1f,
+)
 
 /**
  * A dashed circle on the map, measured in metres: the ground a junction claims.
@@ -473,14 +479,21 @@ fun TrackMap(
             for (marker in displayMarkers) {
                 val p = project(marker.at)
                 val radius = if (marker.emphasized) 6.dp.toPx() else 4.dp.toPx()
-                drawCircle(color = Color.Black.copy(alpha = 0.5f), radius = radius + 2.dp.toPx(), center = p)
                 drawCircle(
-                    color = if (marker.emphasized) colors.secondary else colors.primary,
+                    color = Color.Black.copy(alpha = 0.5f * marker.alpha),
+                    radius = radius + 1.dp.toPx(),
+                    center = p,
+                )
+                drawCircle(
+                    color = (if (marker.emphasized) colors.secondary else colors.primary)
+                        .copy(alpha = marker.alpha),
                     radius = radius,
                     center = p,
                 )
-                marker.label?.let { label ->
-                    drawMarkerLabel(label, p, radius, 4.dp.toPx(), 11.dp.toPx())
+                if (marker.alpha > 0.5f) {
+                    marker.label?.let { label ->
+                        drawMarkerLabel(label, p, radius, 4.dp.toPx(), 11.dp.toPx())
+                    }
                 }
             }
 

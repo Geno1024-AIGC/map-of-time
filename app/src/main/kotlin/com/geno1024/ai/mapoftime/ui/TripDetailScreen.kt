@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -24,6 +25,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -64,6 +66,7 @@ fun TripDetailScreen(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
     val analysisDoneFormat = stringResource(R.string.trip_analysis_done)
     val noPointsText = stringResource(R.string.trip_no_points)
@@ -164,9 +167,16 @@ fun TripDetailScreen(
         endpoints + markPositions.map { MapMarker(it, emphasized = false) } + endMarkers
     }
     // While trimming, every raw fix is tappable so the tap index maps straight
-    // back to `points`. The normal view keeps the lighter endpoint/mark set.
+    // back to `points`. Fixes after the cut fade out: they are about to go.
     val trimMarkers = remember(points, cutIndex) {
-        points.mapIndexed { index, point -> MapMarker(point.at, emphasized = index == cutIndex) }
+        val cut = cutIndex
+        points.mapIndexed { index, point ->
+            MapMarker(
+                at = point.at,
+                emphasized = index == cut,
+                alpha = if (cut != null && index > cut) 0.25f else 1f,
+            )
+        }
     }
     // Everything up to and including the cut stays highlighted; the discarded
     // tail is still drawn as context so the choice can be judged in place.
@@ -284,35 +294,82 @@ fun TripDetailScreen(
                 highlight = cutPath ?: selectedTrack,
                 onMarkerTap = if (trimming) { index -> cutIndex = index } else null,
             )
-            if (trimming) {
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(8.dp)
-                        .fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                    shadowElevation = 3.dp,
-                ) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text(
-                            text = stringResource(R.string.trip_trim_hint),
-                            style = MaterialTheme.typography.bodySmall,
+            if (!trimming) {
+                selectedLeg?.let { leg ->
+                    LegOverlay(
+                        leg = leg,
+                        identity = selectedIdentity,
+                        onClear = { selectedLegId = null },
+                        onEdit = if (selectedSegment != null) {
+                            { editingSegment = true }
+                        } else {
+                            null
+                        },
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(8.dp),
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // The scrubber sits right under the map so both views of the same
+            // cut stay on screen: drag the arrow or tap a dot, either updates
+            // the other. Points after the cut fade on the map.
+            if (trimming && points.size >= 2) {
+                item {
+                    SectionCard(
+                        title = stringResource(R.string.trip_trim),
+                        subtitle = stringResource(R.string.trip_trim_hint),
+                    ) {
+                        val cut = cutIndex ?: points.lastIndex
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = formatClock(points.first().t),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                text = formatClock(points[cut].t),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                text = formatClock(points.last().t),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Slider(
+                            value = cut.toFloat(),
+                            valueRange = 0f..points.lastIndex.toFloat(),
+                            onValueChange = { value ->
+                                cutIndex = value.toInt().coerceIn(0, points.lastIndex)
+                            },
+                            modifier = Modifier.fillMaxWidth(),
                         )
-                        val cut = cutIndex
-                        if (cut == null) {
+                        if (cutIndex == null) {
                             Text(
                                 text = stringResource(R.string.trip_trim_pick),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         } else {
-                            val keep = cut + 1
                             Text(
                                 text = stringResource(
                                     R.string.trip_trim_summary,
-                                    keep,
-                                    points.size - keep,
+                                    cut + 1,
+                                    points.size - cut - 1,
                                     formatDateTime(points[cut].t),
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
@@ -348,7 +405,8 @@ fun TripDetailScreen(
                                         }
                                     }
                                 },
-                                enabled = cut != null && cut >= 1 && !trimmingBusy,
+                                enabled = cutIndex != null && cut >= 1 &&
+                                    cut < points.lastIndex && !trimmingBusy,
                                 modifier = Modifier.weight(1f),
                             ) {
                                 Text(stringResource(R.string.trip_trim_confirm))
@@ -356,31 +414,8 @@ fun TripDetailScreen(
                         }
                     }
                 }
-            } else {
-                selectedLeg?.let { leg ->
-                    LegOverlay(
-                        leg = leg,
-                        identity = selectedIdentity,
-                        onClear = { selectedLegId = null },
-                        onEdit = if (selectedSegment != null) {
-                            { editingSegment = true }
-                        } else {
-                            null
-                        },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(8.dp),
-                    )
-                }
             }
-        }
-        Spacer(Modifier.height(12.dp))
 
-        LazyColumn(
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
             item {
                 SectionCard {
                     val value = trip
@@ -564,6 +599,9 @@ fun TripDetailScreen(
                             trimming = true
                             cutIndex = null
                             selectedLegId = null
+                            // The scrubber is the first item; make sure it is
+                            // in view even if the leg list was scrolled down.
+                            scope.launch { listState.animateScrollToItem(0) }
                         },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
