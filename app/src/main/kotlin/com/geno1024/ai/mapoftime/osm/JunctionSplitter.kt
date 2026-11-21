@@ -42,6 +42,7 @@ object JunctionSplitter {
         graph: RoadGraph?,
         snapMeters: Double = DEFAULT_SNAP_METERS,
         minPieceMeters: Double = 8.0,
+        traveler: Traveler = Traveler.WALK,
     ): List<MatchedPiece> {
         if (leg.size < 2) return emptyList()
         if (graph == null) {
@@ -56,15 +57,15 @@ object JunctionSplitter {
         }
 
         val boundaries = mutableListOf<Boundary>()
-        boundaries += Boundary(leg.from, points[leg.from].at, junctionNear(points[leg.from].at, graph, snapMeters))
-        for (index in hits(points, leg, graph, crossingMeters(snapMeters))) {
-            val junction = graph.nearestJunction(points[index].at, snapMeters) ?: continue
+        boundaries += Boundary(leg.from, points[leg.from].at, junctionNear(points[leg.from].at, graph, snapMeters, traveler))
+        for (index in hits(points, leg, graph, crossingMeters(snapMeters), traveler)) {
+            val junction = graph.nearestJunction(points[index].at, snapMeters, traveler) ?: continue
             val previous = boundaries.last()
             if (previous.junction?.id == junction.id) continue
             if (Geo.distanceMeters(previous.at, points[index].at) < MIN_SPACING_METERS) continue
             boundaries += Boundary(index, points[index].at, junction)
         }
-        boundaries += Boundary(leg.to - 1, points[leg.to - 1].at, junctionNear(points[leg.to - 1].at, graph, snapMeters))
+        boundaries += Boundary(leg.to - 1, points[leg.to - 1].at, junctionNear(points[leg.to - 1].at, graph, snapMeters, traveler))
 
         val pieces = mutableListOf<MatchedPiece>()
         for (i in 0 until boundaries.size - 1) {
@@ -84,16 +85,18 @@ object JunctionSplitter {
     }
 
     /** Indices where the trace comes closest to an intersection. */
-    private fun hits(        points: List<TrackPoint>,
+    private fun hits(
+        points: List<TrackPoint>,
         leg: TrackSlice,
         graph: RoadGraph,
         snapMeters: Double,
+        traveler: Traveler,
     ): List<Int> {
         val distance = arrayOfNulls<Double>(leg.size)
         val junction = arrayOfNulls<OsmJunction>(leg.size)
         for (offset in 0 until leg.size) {
             val index = leg.from + offset
-            val candidate = graph.nearestJunction(points[index].at, snapMeters)
+            val candidate = graph.nearestJunction(points[index].at, snapMeters, traveler)
             if (candidate != null) {
                 distance[offset] = Geo.distanceMeters(points[index].at, candidate.at)
                 junction[offset] = candidate
@@ -132,8 +135,12 @@ object JunctionSplitter {
         return true
     }
 
-    private fun junctionNear(point: LatLon, graph: RoadGraph, snapMeters: Double): OsmJunction? =
-        graph.nearestJunction(point, snapMeters)
+    private fun junctionNear(
+        point: LatLon,
+        graph: RoadGraph,
+        snapMeters: Double,
+        traveler: Traveler,
+    ): OsmJunction? = graph.nearestJunction(point, snapMeters, traveler)
 
     /**
      * A leg may be *snapped* to a crossing 30 m away (a wide junction, a

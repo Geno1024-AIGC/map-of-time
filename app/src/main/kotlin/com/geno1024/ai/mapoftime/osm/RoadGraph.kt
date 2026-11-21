@@ -41,11 +41,19 @@ class RoadGraph(ways: List<OsmWay>) {
     val ways: List<OsmWay> = ways.distinctBy { it.id }
 
     private val coordinates = HashMap<Long, LatLon>()
-    private val neighbours = HashMap<Long, MutableSet<Long>>()
+    private val walkNeighbours = HashMap<Long, MutableSet<Long>>()
+    private val vehicleNeighbours = HashMap<Long, MutableSet<Long>>()
     private val junctionIndex = GridIndex<OsmJunction>(150.0)
+    private val vehicleJunctionIndex = GridIndex<OsmJunction>(150.0)
     private val segmentIndex = GridIndex<LabeledSegment>(80.0)
 
+    /** Junctions on the full network: a pedestrian can cross roads and use footways. */
     val junctions: List<OsmJunction>
+    /**
+     * Junctions a car or bike sees. Footway-only arms are absent, so a zebra
+     * mid-block is not one of these — driving over it must not cut a segment.
+     */
+    val vehicleJunctions: List<OsmJunction>
 
     init {
         for (way in this.ways) {
@@ -53,24 +61,46 @@ class RoadGraph(ways: List<OsmWay>) {
             for (i in 0 until count) {
                 coordinates.putIfAbsent(way.nodeIds[i], way.points[i])
             }
+            val driveable = RoadAccess.vehicleWay(way.highway)
             for (i in 1 until count) {
-                neighbours.getOrPut(way.nodeIds[i - 1]) { HashSet() } += way.nodeIds[i]
-                neighbours.getOrPut(way.nodeIds[i]) { HashSet() } += way.nodeIds[i - 1]
+                val a = way.nodeIds[i - 1]
+                val b = way.nodeIds[i]
+                addArm(walkNeighbours, a, b)
+                if (driveable) addArm(vehicleNeighbours, a, b)
             }
             for (i in 1 until count) {
                 segmentIndex.addSegment(way.points[i - 1], way.points[i], LabeledSegment(way.points[i - 1], way.points[i], way.label))
             }
         }
 
-        junctions = neighbours
-            .filter { it.value.size >= 3 }
-            .mapNotNull { (id, around) -> coordinates[id]?.let { OsmJunction(id, it, around.size) } }
+        junctions = junctionsOf(walkNeighbours)
+        vehicleJunctions = junctionsOf(vehicleNeighbours)
         junctions.forEach { junctionIndex.add(it.at, it) }
+        vehicleJunctions.forEach { vehicleJunctionIndex.add(it.at, it) }
     }
 
-    /** Closest intersection within [maxMeters], or `null` when the trace is off the mapped road. */
-    fun nearestJunction(point: LatLon, maxMeters: Double = 30.0): OsmJunction? =
-        junctionIndex.nearest(point, maxMeters) { Geo.distanceMeters(point, it.at) }
+    private fun addArm(adjacency: HashMap<Long, MutableSet<Long>>, a: Long, b: Long) {
+        adjacency.getOrPut(a) { HashSet() } += b
+        adjacency.getOrPut(b) { HashSet() } += a
+    }
+
+    private fun junctionsOf(adjacency: Map<Long, Set<Long>>): List<OsmJunction> =
+        adjacency.filter { it.value.size >= 3 }
+            .mapNotNull { (id, around) -> coordinates[id]?.let { OsmJunction(id, it, around.size) } }
+
+    /**
+     * Closest intersection within [maxMeters] for this traveller, or `null`
+     * when the trace is off the mapped road. Defaults to the full network so
+     * callers that have not thought about modes keep their old behaviour.
+     */
+    fun nearestJunction(
+        point: LatLon,
+        maxMeters: Double = 30.0,
+        traveler: Traveler = Traveler.WALK,
+    ): OsmJunction? {
+        val index = if (traveler == Traveler.VEHICLE) vehicleJunctionIndex else junctionIndex
+        return index.nearest(point, maxMeters) { Geo.distanceMeters(point, it.at) }
+    }
 
     /** Most frequent road label around [points], by point count. */
     fun dominantLabel(points: List<LatLon>, maxMeters: Double = 35.0): RoadLabel? {

@@ -107,7 +107,7 @@ fun NetworkScreen(
             // far node in another junction has no business being described by
             // this preview's centre.
             val caption = if (preview != null && node.key in previewKeys) {
-                viewModel.pointDetail(node.key, node.at, preview)?.label
+                viewModel.pointDetail(node.key, node.at, preview, modeFilter)?.label
             } else {
                 null
             }
@@ -277,7 +277,7 @@ fun NetworkScreen(
                     NodeCard(
                         node = selected,
                         graph = graph,
-                        detail = viewModel.pointDetail(selected.key, selected.at)?.label,
+                        detail = viewModel.pointDetail(selected.key, selected.at, mode = modeFilter)?.label,
                         onOpenSegment = onOpenSegment,
                         onNamePlace = {
                             val ref = PointRef.parse(selected.key)
