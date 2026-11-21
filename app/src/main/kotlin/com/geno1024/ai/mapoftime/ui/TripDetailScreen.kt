@@ -96,6 +96,9 @@ fun TripDetailScreen(
     var trimming by remember(tripId) { mutableStateOf(false) }
     var cutIndex by remember(tripId) { mutableStateOf<Int?>(null) }
     var trimmingBusy by remember { mutableStateOf(false) }
+    var splitting by remember(tripId) { mutableStateOf(false) }
+    var splitIndex by remember(tripId) { mutableStateOf<Int?>(null) }
+    var splittingBusy by remember { mutableStateOf(false) }
 
     LaunchedEffect(tripId, reload) {
         val tripValue = viewModel.trip(tripId)
@@ -177,6 +180,11 @@ fun TripDetailScreen(
                 alpha = if (cut != null && index > cut) 0.25f else 1f,
             )
         }
+    }
+    // Post-hoc splitting uses the same raw dots as trimming, without fading
+    // anything: the user is picking a cut, not deciding what to throw away.
+    val splitMarkers = remember(points, splitIndex) {
+        points.mapIndexed { index, point -> MapMarker(point.at, emphasized = index == splitIndex) }
     }
     // Everything up to and including the cut stays highlighted; the discarded
     // tail is still drawn as context so the choice can be judged in place.
@@ -286,15 +294,23 @@ fun TripDetailScreen(
             TrackMap(
                 tracks = tracks,
                 modifier = Modifier.fillMaxSize(),
-                markers = if (trimming) trimMarkers else markers,
+                markers = when {
+                    trimming -> trimMarkers
+                    splitting -> splitMarkers
+                    else -> markers
+                },
                 tilesEnabled = settings.mapTiles,
                 basemap = settings.basemap,
                 customTileUrl = settings.customTileUrl,
                 customTilesGcj02 = settings.customTilesGcj02,
                 highlight = cutPath ?: selectedTrack,
-                onMarkerTap = if (trimming) { index -> cutIndex = index } else null,
+                onMarkerTap = when {
+                    trimming -> { index -> cutIndex = index }
+                    splitting -> { index -> splitIndex = index }
+                    else -> null
+                },
             )
-            if (!trimming) {
+            if (!trimming && !splitting) {
                 selectedLeg?.let { leg ->
                     LegOverlay(
                         leg = leg,
@@ -320,6 +336,71 @@ fun TripDetailScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // The picker sits right under the map: tap a dot, read its time,
+            // then save. The mark uses the fix's timestamp, so the segmenter
+            // sees it exactly like one pressed while recording.
+            if (splitting && points.isNotEmpty()) {
+                item {
+                    SectionCard(
+                        title = stringResource(R.string.trip_split),
+                        subtitle = stringResource(R.string.trip_split_hint),
+                    ) {
+                        val selected = splitIndex
+                        if (selected == null) {
+                            Text(
+                                text = stringResource(R.string.trip_split_pick),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else {
+                            Text(
+                                text = stringResource(
+                                    R.string.trip_split_summary,
+                                    formatDateTime(points[selected].t),
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(
+                                onClick = { splitting = false; splitIndex = null },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(stringResource(R.string.action_cancel))
+                            }
+                            Button(
+                                onClick = {
+                                    splitIndex?.let { index ->
+                                        splittingBusy = true
+                                        scope.launch {
+                                            val result = viewModel.splitTripAt(tripId, points[index].t)
+                                            splittingBusy = false
+                                            splitting = false
+                                            splitIndex = null
+                                            message = result?.let {
+                                                String.format(
+                                                    Locale.getDefault(),
+                                                    analysisDoneFormat,
+                                                    it.legCount,
+                                                    it.osmLegs,
+                                                    osmStatus.getValue(it.osmOutcome),
+                                                )
+                                            } ?: noPointsText
+                                            reload += 1
+                                        }
+                                    }
+                                },
+                                enabled = splitIndex != null && !splittingBusy,
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text(stringResource(R.string.trip_split_confirm))
+                            }
+                        }
+                    }
+                }
+            }
+
             // The scrubber sits right under the map so both views of the same
             // cut stay on screen: drag the arrow or tap a dot, either updates
             // the other. Points after the cut fade on the map.
@@ -594,18 +675,33 @@ fun TripDetailScreen(
                 trip?.status != com.geno1024.ai.mapoftime.data.TripStatus.RECORDING
             ) {
                 item {
-                    OutlinedButton(
-                        onClick = {
-                            trimming = true
-                            cutIndex = null
-                            selectedLegId = null
-                            // The scrubber is the first item; make sure it is
-                            // in view even if the leg list was scrolled down.
-                            scope.launch { listState.animateScrollToItem(0) }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(stringResource(R.string.trip_trim))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                trimming = true
+                                splitting = false
+                                cutIndex = null
+                                selectedLegId = null
+                                // The picker is the first item; make sure it is
+                                // in view even if the leg list was scrolled down.
+                                scope.launch { listState.animateScrollToItem(0) }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(stringResource(R.string.trip_trim))
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                splitting = true
+                                trimming = false
+                                splitIndex = null
+                                selectedLegId = null
+                                scope.launch { listState.animateScrollToItem(0) }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(stringResource(R.string.trip_split))
+                        }
                     }
                     Spacer(Modifier.height(12.dp))
                 }

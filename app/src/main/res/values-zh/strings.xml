@@ -126,6 +126,11 @@
     <string name="trip_trim_pick">还没选截断点——在轨迹上点一个点。</string>
     <string name="trip_trim_summary">保留 %1$d 个点，删除 %2$d 个。新结束时间：%3$s</string>
     <string name="trip_trim_confirm">修剪</string>
+    <string name="trip_split">补切点</string>
+    <string name="trip_split_hint">点轨迹上的定位点插入手动切点，保存后立即重算这一程。</string>
+    <string name="trip_split_pick">还没选切点——在轨迹上点一个点。</string>
+    <string name="trip_split_summary">切点时间：%1$s</string>
+    <string name="trip_split_confirm">添加并重算</string>
     <string name="trips_select">选择</string>
     <string name="trips_select_all">全选</string>
     <string name="trips_select_none">取消全选</string>
