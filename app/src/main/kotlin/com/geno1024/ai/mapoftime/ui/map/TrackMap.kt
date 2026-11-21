@@ -170,7 +170,11 @@ fun TrackMap(
             }
         }
     }
-    val bounds = displayFocusBounds ?: remember(cameraPoints) { Geo.bounds(cameraPoints) }
+    // Keep this remember unconditional. A conditional `remember` shifts slot
+    // positions when `focusBounds` toggles (exactly what naming a point does),
+    // which can silently recreate the camera state declared below.
+    val trackBounds = remember(cameraPoints) { Geo.bounds(cameraPoints) }
+    val bounds = displayFocusBounds ?: trackBounds
     val tileTemplate = basemap.tileTemplate ?: customTileUrl
     val storeKey = basemap.id + "|" + tileTemplate
     val store = remember(storeKey) {
@@ -183,10 +187,18 @@ fun TrackMap(
     }
 
     var size by remember { mutableStateOf(Size.Zero) }
-    var center by remember(bounds) {
+    // These state objects must survive recompositions. The transform handler
+    // below is a `pointerInput(Unit)` whose coroutine is never restarted, so it
+    // keeps writing to whichever objects it captured on first composition. If
+    // `remember(bounds)` recreated them when `bounds` changed, a drag would
+    // update orphaned objects while the canvas reads the new ones — the map
+    // would look frozen. The LaunchedEffect below already refits the camera
+    // whenever bounds/size change, so a stable object is also the right
+    // behaviour, not just a workaround.
+    var center by remember {
         mutableStateOf(bounds?.center ?: displayFocus ?: displayHere ?: LatLon(39.9042, 116.4074))
     }
-    var zoom by remember(bounds) { mutableStateOf(15f) }
+    var zoom by remember { mutableStateOf(15f) }
     var userMoved by remember { mutableStateOf(false) }
 
     // Screen position of a marker right now, using the same fractional-zoom
