@@ -903,6 +903,78 @@ class MapRepository(private val helper: MapDb) {
             }
         }
 
+    // --------------------------------------------------------- danger zone
+
+    /** Fresh counts for the Danger Zone dialogs; never read from a cached list. */
+    fun dangerCounts(): DangerCounts = DangerCounts(
+        pointNames = count("point_names"),
+        places = count("places"),
+        trips = count("trips"),
+    )
+
+    /** Table names here are fixed literals owned by this class, never user input. */
+    private fun count(table: String): Int =
+        db.rawQuery("SELECT COUNT(*) FROM $table", null).use { cursor ->
+            if (cursor.moveToFirst()) cursor.getInt(0) else 0
+        }
+
+    /**
+     * Forgets every single-point name. Junction names are a separate category
+     * and stay. Cached leg labels are rewritten in the same transaction, just
+     * as clearing one name through [renamePoint] does.
+     */
+    fun clearPointNames(): Int {
+        val keys = pointNames().keys
+        if (keys.isEmpty()) return 0
+        db.transaction {
+            db.delete("point_names", null, null)
+            relabelSegmentsTouching(keys)
+        }
+        return keys.size
+    }
+
+    /** Dissolves every named junction; single-point names are left alone. */
+    fun clearPlaces(): Int {
+        val removed = count("places")
+        if (removed == 0) return 0
+        val keys = db.rawQuery("SELECT kind, node_id FROM place_points", null).use { cursor ->
+            buildList { while (cursor.moveToNext()) add(PointRef(cursor.getString(0), cursor.getLong(1))) }
+        }
+        db.transaction {
+            // place_points goes with it through ON DELETE CASCADE.
+            db.delete("places", null, null)
+            relabelSegmentsTouching(keys.map { it.key })
+        }
+        return removed
+    }
+
+    /** Deletes every recorded trip; raw fixes, marks and legs go with them. */
+    fun clearTrips(): Int {
+        val removed = count("trips")
+        if (removed == 0) return 0
+        db.transaction {
+            db.delete("trips", null, null)
+            deleteOrphanSegments()
+        }
+        return removed
+    }
+
+    /**
+     * Nothing derived from travelling survives: trips and their samples, both
+     * kinds of names, local endpoint clusters and the segments built from them.
+     * The OSM cache is cleared by the caller. Preferences are deliberately
+     * kept — resetting the map is not a reset of how the app is configured.
+     */
+    fun clearAllData() {
+        db.transaction {
+            db.delete("places", null, null)
+            db.delete("point_names", null, null)
+            db.delete("trips", null, null)
+            db.delete("geo_nodes", null, null)
+            db.delete("segments", null, null)
+        }
+    }
+
     // ------------------------------------------------------------ mapping
 
     private fun Cursor.toTrip() = Trip(

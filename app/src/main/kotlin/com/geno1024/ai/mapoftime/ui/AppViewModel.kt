@@ -26,6 +26,7 @@ import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.core.groupByTrafficContext
 import com.geno1024.ai.mapoftime.core.trafficDayOf
+import com.geno1024.ai.mapoftime.data.DangerCounts
 import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.MatchKind
 import com.geno1024.ai.mapoftime.data.EXPORT_FORMAT
@@ -394,6 +395,49 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun clearOsmCache(onDone: () -> Unit) {
         viewModelScope.launch {
             withContext(container.dbDispatcher) { container.osm.clear() }
+            onDone()
+        }
+    }
+
+    // ---- Danger Zone -------------------------------------------------------
+
+    /** Read on the DB lane so a dialog never quotes a count from a stale list. */
+    suspend fun dangerCounts(): DangerCounts = withContext(container.dbDispatcher) {
+        container.repository.dangerCounts()
+    }
+
+    /** Each action writes on the single DB lane, then reloads the whole screen. */
+    fun clearPointNames(onDone: (Int) -> Unit) {
+        viewModelScope.launch {
+            val removed = withContext(container.dbDispatcher) { container.repository.clearPointNames() }
+            refresh()
+            onDone(removed)
+        }
+    }
+
+    fun clearPlaces(onDone: (Int) -> Unit) {
+        viewModelScope.launch {
+            val removed = withContext(container.dbDispatcher) { container.repository.clearPlaces() }
+            refresh()
+            onDone(removed)
+        }
+    }
+
+    fun clearTrips(onDone: (Int) -> Unit) {
+        viewModelScope.launch {
+            val removed = withContext(container.dbDispatcher) { container.repository.clearTrips() }
+            refresh()
+            onDone(removed)
+        }
+    }
+
+    fun clearAllData(onDone: () -> Unit) {
+        viewModelScope.launch {
+            withContext(container.dbDispatcher) {
+                container.repository.clearAllData()
+                container.osm.clear()
+            }
+            refresh()
             onDone()
         }
     }
