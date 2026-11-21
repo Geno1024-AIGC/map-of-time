@@ -3,6 +3,8 @@ package com.geno1024.ai.mapoftime.ui
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -25,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -103,6 +107,8 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     var dangerCounts by remember { mutableStateOf(DangerCounts()) }
     var dangerMessage by remember { mutableStateOf<String?>(null) }
     var confirmDanger by remember { mutableStateOf<DangerAction?>(null) }
+    // Destructive actions stay out of the way until the user asks for them.
+    var dangerExpanded by remember { mutableStateOf(false) }
     // Hoisted: reading resources through LocalContext inside a click handler is
     // not configuration-aware and would survive a locale change with stale text.
     val clearedText = stringResource(R.string.settings_cleared)
@@ -421,38 +427,81 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 },
             )
 
-            SectionCard(
-                title = stringResource(R.string.settings_danger_zone),
-                subtitle = stringResource(R.string.settings_danger_zone_desc),
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = stringResource(R.string.settings_danger_warning),
-                        style = MaterialTheme.typography.bodySmall,
+            // Red on red on purpose: this is the one card the user should
+            // notice but not trigger by accident, hence collapsed by default.
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        width = 1.dp,
                         color = MaterialTheme.colorScheme.error,
-                    )
-                    DangerButton(
-                        text = "${stringResource(DangerAction.POINT_NAMES.title())} (${dangerCounts.pointNames})",
-                        onClick = { confirmDanger = DangerAction.POINT_NAMES },
-                    )
-                    DangerButton(
-                        text = "${stringResource(DangerAction.PLACES.title())} (${dangerCounts.places})",
-                        onClick = { confirmDanger = DangerAction.PLACES },
-                    )
-                    DangerButton(
-                        text = "${stringResource(DangerAction.TRIPS.title())} (${dangerCounts.trips})",
-                        onClick = { confirmDanger = DangerAction.TRIPS },
-                    )
-                    DangerButton(
-                        text = stringResource(DangerAction.ALL.title()),
-                        onClick = { confirmDanger = DangerAction.ALL },
-                    )
-                    dangerMessage?.let { text ->
+                        shape = RoundedCornerShape(20.dp),
+                    ),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(
+                                onClickLabel = stringResource(R.string.settings_danger_toggle),
+                                onClick = { dangerExpanded = !dangerExpanded },
+                            ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.settings_danger_zone),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                            Text(
+                                text = stringResource(R.string.settings_danger_zone_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                        }
+                        Spacer(Modifier.size(8.dp))
                         Text(
-                            text = text,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = if (dangerExpanded) "▴" else "▾",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
                         )
+                    }
+                    if (dangerExpanded) {
+                        Spacer(Modifier.height(12.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = stringResource(R.string.settings_danger_warning),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                            )
+                            DangerButton(
+                                text = "${stringResource(DangerAction.POINT_NAMES.title())} (${dangerCounts.pointNames})",
+                                onClick = { confirmDanger = DangerAction.POINT_NAMES },
+                            )
+                            DangerButton(
+                                text = "${stringResource(DangerAction.PLACES.title())} (${dangerCounts.places})",
+                                onClick = { confirmDanger = DangerAction.PLACES },
+                            )
+                            DangerButton(
+                                text = "${stringResource(DangerAction.TRIPS.title())} (${dangerCounts.trips})",
+                                onClick = { confirmDanger = DangerAction.TRIPS },
+                            )
+                            DangerButton(
+                                text = stringResource(DangerAction.ALL.title()),
+                                onClick = { confirmDanger = DangerAction.ALL },
+                            )
+                            dangerMessage?.let { text ->
+                                Text(
+                                    text = text,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                            }
+                        }
                     }
                 }
             }

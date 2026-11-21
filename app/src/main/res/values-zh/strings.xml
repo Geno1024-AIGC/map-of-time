@@ -270,6 +270,7 @@
     <string name="update_badge">有可用更新</string>
     <string name="settings_danger_zone">危险区</string>
     <string name="settings_danger_zone_desc">这里的操作都无法撤销。想留底请先导出。</string>
+    <string name="settings_danger_toggle">展开或收起危险区</string>
     <string name="settings_danger_warning">不可撤销——下面这些删除没有「撤销」。</string>
     <string name="settings_danger_point_names">删除全部单点名字</string>
     <string name="settings_danger_places">删除全部路口名字</string>
