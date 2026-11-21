@@ -119,6 +119,11 @@
     <string name="trip_delete_confirm">删除这个行程及其所有样本？</string>
     <string name="trip_analysis_done">分段 %1$d · OSM %2$d · %3$s</string>
     <string name="trip_no_points">这个行程没有原始定位点，无法重新分析；导入的行程会保持原有分段。</string>
+    <string name="trip_trim">修剪废点</string>
+    <string name="trip_trim_hint">点选你真正到达的最后一个点，之后的点会全部删除。</string>
+    <string name="trip_trim_pick">还没选截断点——在轨迹上点一个点。</string>
+    <string name="trip_trim_summary">保留 %1$d 个点，删除 %2$d 个。新结束时间：%3$s</string>
+    <string name="trip_trim_confirm">修剪</string>
     <string name="trips_select">选择</string>
     <string name="trips_select_all">全选</string>
     <string name="trips_select_none">取消全选</string>

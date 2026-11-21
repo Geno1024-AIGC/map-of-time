@@ -119,6 +119,11 @@
     <string name="trip_delete_confirm">Delete this trip and all of its samples?</string>
     <string name="trip_analysis_done">Legs: %1$d · OSM: %2$d · %3$s</string>
     <string name="trip_no_points">This trip has no raw fixes left, so it cannot be re-analysed. Imported trips keep their legs as they are.</string>
+    <string name="trip_trim">Trim waste points</string>
+    <string name="trip_trim_hint">Tap the last point you actually reached. Everything after it is deleted.</string>
+    <string name="trip_trim_pick">No cutoff selected yet — tap a dot on the track.</string>
+    <string name="trip_trim_summary">Keep %1$d points, delete %2$d. New end time: %3$s</string>
+    <string name="trip_trim_confirm">Trim</string>
     <string name="trips_select">Select</string>
     <string name="trips_select_all">Select all</string>
     <string name="trips_select_none">Clear</string>
