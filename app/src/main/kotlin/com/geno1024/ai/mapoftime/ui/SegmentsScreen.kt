@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,9 +51,17 @@ fun SegmentsScreen(
     onOpenSegment: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var modeFilter by remember { mutableStateOf<TripMode?>(null) }
-    var sort by remember { mutableStateOf(SegmentSort.SAMPLES) }
-    var query by remember { mutableStateOf("") }
+    // What the user is looking at travels with the scroll offset: opening a
+    // segment and pressing Back restores the same filtered, sorted list at the
+    // same row. Without these, the restored offset would land in a list that
+    // had quietly reverted to the default order.
+    var modeFilter by rememberSaveable(stateSaver = nullableEnumNameSaver(TripMode.entries.toTypedArray())) {
+        mutableStateOf<TripMode?>(null)
+    }
+    var sort by rememberSaveable(stateSaver = enumNameSaver(SegmentSort.entries.toTypedArray())) {
+        mutableStateOf(SegmentSort.SAMPLES)
+    }
+    var query by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 

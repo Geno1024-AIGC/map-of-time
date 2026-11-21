@@ -26,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,8 +50,10 @@ fun TripsScreen(
     LaunchedEffect(Unit) { viewModel.refresh() }
 
     val scope = rememberCoroutineScope()
-    var selecting by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf(emptySet<Long>()) }
+    // Selection is part of where the user left off, so it survives a trip
+    // detail round-trip. Analysis progress is transient and stays local.
+    var selecting by rememberSaveable { mutableStateOf(false) }
+    var selected by rememberSaveable(stateSaver = longSetSaver) { mutableStateOf(emptySet<Long>()) }
     var running by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0 to 0) }
 
