@@ -126,6 +126,11 @@
     <string name="trip_trim_pick">No cutoff selected yet — tap a dot on the track.</string>
     <string name="trip_trim_summary">Keep %1$d points, delete %2$d. New end time: %3$s</string>
     <string name="trip_trim_confirm">Trim</string>
+    <string name="trip_split">Add cut point</string>
+    <string name="trip_split_hint">Tap a fix on the track to insert a manual split. Saving re-analyses this trip.</string>
+    <string name="trip_split_pick">No cut point selected yet — tap a dot on the track.</string>
+    <string name="trip_split_summary">Cut at: %1$s</string>
+    <string name="trip_split_confirm">Add &amp; re-analyse</string>
     <string name="trips_select">Select</string>
     <string name="trips_select_all">Select all</string>
     <string name="trips_select_none">Clear</string>

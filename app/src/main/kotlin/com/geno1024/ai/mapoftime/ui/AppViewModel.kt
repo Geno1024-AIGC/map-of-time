@@ -52,6 +52,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -363,6 +364,21 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
         refresh()
         return done
+    }
+
+    /**
+     * Adds a manual split to a recording that has already finished. The mark is
+     * the same shape the recorder writes during a trip, so the segmenter cuts
+     * at this timestamp on the next analysis. Repeated taps on the same fix are
+     * ignored: two marks a second apart would mean the same cut twice.
+     */
+    suspend fun splitTripAt(tripId: Long, t: Long): TripAnalyzer.Result? {
+        withContext(container.dbDispatcher) {
+            if (container.repository.marks(tripId).none { abs(it - t) < 1_000L }) {
+                container.repository.addMark(tripId, t)
+            }
+        }
+        return analyze(tripId)
     }
 
     /**
