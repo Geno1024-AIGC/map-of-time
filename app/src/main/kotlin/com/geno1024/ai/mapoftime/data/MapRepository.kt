@@ -470,22 +470,34 @@ class MapRepository(private val helper: MapDb) {
      * and export, so they are rewritten in the same transaction — otherwise the
      * trip list would keep showing the old name until the next analysis.
      */
-    fun renameSegment(id: Long, name: String?) {
+    fun renameSegment(id: Long, name: String?) = renameSegments(listOf(id), name)
+
+    /**
+     * The same name for a whole run of segments — one road that the junction
+     * cutter split into many keys. All writes and the leg relabels share one
+     * transaction, so a trip list can never show half a road renamed.
+     */
+    fun renameSegments(ids: Collection<Long>, name: String?) {
+        if (ids.isEmpty()) return
         val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
         db.transaction {
-            db.update(
-                "segments",
-                ContentValues().apply { put("user_name", trimmed) },
-                "id = ?",
-                arrayOf(id.toString()),
-            )
-            val segment = segment(id) ?: return@transaction
-            db.update(
-                "legs",
-                ContentValues().apply { put("label", segment.preferredLabel) },
-                "segment_id = ?",
-                arrayOf(id.toString()),
-            )
+            for (id in ids) {
+                db.update(
+                    "segments",
+                    ContentValues().apply { put("user_name", trimmed) },
+                    "id = ?",
+                    arrayOf(id.toString()),
+                )
+            }
+            for (id in ids) {
+                val segment = segment(id) ?: continue
+                db.update(
+                    "legs",
+                    ContentValues().apply { put("label", segment.preferredLabel) },
+                    "segment_id = ?",
+                    arrayOf(id.toString()),
+                )
+            }
         }
     }
 

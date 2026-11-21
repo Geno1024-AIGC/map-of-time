@@ -85,4 +85,34 @@ class PointDetailsTest {
     fun aPointWithNothingToSayHasNoCaption() {
         assertNull(PointDetails.of(centre, centre).label)
     }
+
+    @Test
+    fun aRoadTheUserNamedCountsEvenWithoutOsm() {
+        val detail = PointDetails.of(
+            at(0.0, 100.0),
+            centre,
+            touching = listOf(userRoad("新城路"), userRoad("工业东二路")),
+        )
+        assertEquals("北侧 · 新城路 × 工业东二路", detail.label)
+    }
+
+    @Test
+    fun aUserNameBeatsTheOsmName() {
+        val detail = PointDetails.of(centre, centre, touching = listOf(road("OSM").copy(userName = "用户命名的路")))
+        assertEquals(listOf("用户命名的路"), detail.roads)
+    }
+
+    @Test
+    fun aFourWayCrossingListsEveryRoad() {
+        val detail = PointDetails.of(
+            centre,
+            centre,
+            touching = listOf(
+                userRoad("人民路"), userRoad("建国路"), userRoad("解放路"), userRoad("中山路"),
+            ),
+        )
+        assertEquals("人民路 × 建国路 × 解放路 × 中山路", detail.label)
+    }
+
+    private fun userRoad(name: String): Segment = road(null).copy(name = null, userName = name)
 }

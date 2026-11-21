@@ -310,7 +310,9 @@ private fun NodeCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = node.name ?: stringResource(R.string.network_node_unnamed),
+                    // An unnamed crossing is not "unnamed": the roads through
+                    // it say what it is, once those roads have been named.
+                    text = node.name ?: detail ?: stringResource(R.string.network_node_unnamed),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -319,7 +321,7 @@ private fun NodeCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                if (detail != null) {
+                if (detail != null && node.name != null) {
                     Text(
                         text = detail,
                         style = MaterialTheme.typography.labelSmall,

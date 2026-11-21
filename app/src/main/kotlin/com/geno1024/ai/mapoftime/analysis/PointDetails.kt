@@ -19,8 +19,9 @@ import kotlin.math.hypot
  * derive two facts from data we already have:
  *
  * - where the point sits in the junction (north side, south-east corner…), and
- * - which OSM-named roads actually meet there, as told by the segments that
- *   touch it.
+ * - which roads actually meet there, as told by the segments that touch it.
+ *   A road the user named is just as real as an OSM name, and offline it is
+ *   the only one there is.
  *
  * Neither is stored, so re-analysis cannot make it stale. The junction name is
  * still the name; this is only the caption that tells dots apart.
@@ -28,7 +29,7 @@ import kotlin.math.hypot
 data class PointDetail(
     /** The point's side of the junction, e.g. `北侧`; null near the middle. */
     val bearing: String?,
-    /** Distinct OSM road names of the pieces meeting here, at most three. */
+    /** Distinct road names of the pieces meeting here, in a stable order. */
     val roads: List<String>,
 ) {
     /** `北侧 · 人民路 × 建国路`, or null when there is nothing to say. */
@@ -36,12 +37,7 @@ data class PointDetail(
         .joinToString(" · ")
         .takeIf { it.isNotBlank() }
 
-    private val roadText: String? get() = when (roads.size) {
-        0 -> null
-        1 -> roads[0]
-        2 -> "${roads[0]} × ${roads[1]}"
-        else -> "${roads[0]} × ${roads[1]} +${roads.size - 2}"
-    }
+    private val roadText: String? get() = roads.joinToString(" × ").takeIf { it.isNotBlank() }
 }
 
 object PointDetails {
@@ -62,11 +58,15 @@ object PointDetails {
         touching: List<Segment> = emptyList(),
     ): PointDetail = PointDetail(
         bearing = bearing(point, centre),
-        roads = touching.mapNotNull { it.name?.trim()?.takeIf(String::isNotBlank) }
+        roads = touching.mapNotNull(::roadName)
             .filter { it != placeName }
-            .distinct()
-            .take(3),
+            .distinct(),
     )
+
+    /** The user's road name wins; OSM is the fallback when there is none. */
+    private fun roadName(segment: Segment): String? =
+        segment.userName?.trim()?.takeIf(String::isNotBlank)
+            ?: segment.name?.trim()?.takeIf(String::isNotBlank)
 
     private fun bearing(point: LatLon, centre: LatLon): String? {
         val north = (point.lat - centre.lat) * METERS_PER_DEGREE

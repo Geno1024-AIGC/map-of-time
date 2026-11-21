@@ -189,8 +189,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
      * Names a segment (or clears the name when [name] is blank) and rewrites the
      * labels of its legs, so every screen shows the new name immediately.
      */
-    suspend fun renameSegment(segmentId: Long, name: String?) {
-        withContext(container.dbDispatcher) { container.repository.renameSegment(segmentId, name) }
+    suspend fun renameSegment(segmentId: Long, name: String?) = renameSegments(listOf(segmentId), name)
+
+    /** Names a whole stretch of road in one action. */
+    suspend fun renameSegments(segmentIds: List<Long>, name: String?) {
+        withContext(container.dbDispatcher) { container.repository.renameSegments(segmentIds, name) }
         refresh()
     }
 
@@ -238,7 +241,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
      * The auto-derived caption for one point of a wide junction: which side of
      * the junction it is on and which roads meet there. While a new junction is
      * being previewed, [context] supplies the centre before anything is saved.
-     * Null for a point that belongs to no junction — there is no "side" to name.
+     * A point with no saved junction still gets a caption when the roads
+     * meeting there are named: that is how an unnamed crossing is identified.
      */
     fun pointDetail(
         key: String,
@@ -248,12 +252,10 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     ): PointDetail? {
         val ref = PointRef.parse(key) ?: return null
         val place = placeOf(ref)
-        // A point of a brand-new junction has no saved place yet — that is
-        // exactly when the preview context has to stand in for it. Only with
-        // no context at all is "no place" a reason to give up: there is no
-        // junction whose side this point could be on.
-        if (context == null && place == null) return null
-        val centre = context?.center ?: place!!.at
+        // With no junction there is no "side" to name, but the roads through
+        // the point still say what it is. Using the point as its own centre
+        // drops the bearing and leaves just the crossing caption.
+        val centre = context?.center ?: place?.at ?: at
         val placeName = context?.existingPlaceId?.let(::placeName) ?: place?.name
         val touching = summaries.map { it.segment }
             .filter { it.fromKey == key || it.toKey == key }
