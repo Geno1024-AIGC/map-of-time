@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,8 +59,12 @@ fun NetworkScreen(
     modifier: Modifier = Modifier,
 ) {
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
-    var modeFilter by remember { mutableStateOf<TripMode?>(null) }
-    var selectedKey by remember { mutableStateOf<String?>(null) }
+    // The picked junction and the mode filter are the list's context; restore
+    // them along with its scroll offset. The review preview below is transient.
+    var modeFilter by rememberSaveable(stateSaver = nullableEnumNameSaver(TripMode.entries.toTypedArray())) {
+        mutableStateOf<TripMode?>(null)
+    }
+    var selectedKey by rememberSaveable { mutableStateOf<String?>(null) }
     // The proposal being looked at: the map draws it before anything is saved,
     // because the mistake worth catching is a junction that ate its neighbour.
     var preview by remember { mutableStateOf<PlaceDraft?>(null) }
