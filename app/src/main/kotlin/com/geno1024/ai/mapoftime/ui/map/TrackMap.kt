@@ -5,11 +5,15 @@ import android.graphics.BitmapFactory
 import android.util.LruCache
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -34,6 +39,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -43,6 +49,7 @@ import com.geno1024.ai.mapoftime.core.Gcj
 import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.MapCamera
+import com.geno1024.ai.mapoftime.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -206,6 +213,9 @@ fun TrackMap(
     }
     var zoom by remember { mutableStateOf(15f) }
     var userMoved by remember { mutableStateOf(false) }
+    // Local to this map: a new screen still opens fitted to its own data, but
+    // once pinned, neither new data nor a live fix steals the user's view.
+    var cameraLocked by remember { mutableStateOf(false) }
 
     // Screen position of a marker right now, using the same fractional-zoom
     // world the canvas draws with. Only read from the tap handler.
@@ -217,7 +227,8 @@ fun TrackMap(
         )
     }
 
-    LaunchedEffect(bounds, size) {
+    LaunchedEffect(bounds, size, cameraLocked) {
+        if (cameraLocked) return@LaunchedEffect
         if (bounds != null && size.width > 1f && size.height > 1f) {
             center = bounds.center
             zoom = fitZoom(bounds, size)
@@ -228,8 +239,8 @@ fun TrackMap(
     // Before a trip has any track, follow the live fix — but never fight a
     // pan or pinch the user did on purpose. With no live fix the device
     // position is the fallback: a map that opens on Beijing opens wrong.
-    LaunchedEffect(displayFocus, displayHere, bounds) {
-        if (bounds != null || userMoved) return@LaunchedEffect
+    LaunchedEffect(displayFocus, displayHere, bounds, cameraLocked) {
+        if (cameraLocked || bounds != null || userMoved) return@LaunchedEffect
         val target = displayFocus ?: displayHere ?: return@LaunchedEffect
         center = target
         if (zoom < 16f) zoom = 16f
@@ -534,6 +545,29 @@ fun TrackMap(
                     },
                 )
             }
+        }
+
+        // The tap is consumed by this chip, so the map's marker hit test does
+        // not also fire. Locking stops automatic refits only — dragging and
+        // pinching still work, so the pinned view can be adjusted in place.
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(8.dp)
+                .clickable { cameraLocked = !cameraLocked }
+                .background(
+                    color = if (cameraLocked) colors.primary else colors.surface.copy(alpha = 0.82f),
+                    shape = RoundedCornerShape(10.dp),
+                )
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+        ) {
+            Text(
+                text = stringResource(
+                    if (cameraLocked) R.string.map_unlock_camera else R.string.map_lock_camera,
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (cameraLocked) colors.onPrimary else colors.onSurface,
+            )
         }
     }
 }
