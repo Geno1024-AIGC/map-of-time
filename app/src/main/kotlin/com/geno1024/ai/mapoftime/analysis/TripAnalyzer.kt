@@ -278,8 +278,9 @@ class TripAnalyzer(
                 distanceM = meters,
                 segmentId = segmentId,
                 direction = direction,
-                // A name the user gave outranks everything; then the names of
-                // the two ends, then whatever OSM calls the way.
+                // A segment is named by its two atomic ends, then by whatever
+                // OSM calls the way. A road name on the segment is inference
+                // input for the points and does not override this label.
                 label = existing?.preferredLabel
                     ?: pointPairName(pointNames[fromKey], pointNames[toKey])
                     ?: piece.label,

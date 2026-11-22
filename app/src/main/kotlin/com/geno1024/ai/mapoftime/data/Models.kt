@@ -119,23 +119,31 @@ data class Place(
 )
 
 /**
- * "A × B" when both ends are named. One name alone says nothing useful about
- * the piece between the ends, so it stays null and the next fallback wins.
+ * "A × B" when both ends carry one atomic point name. One name alone says
+ * nothing useful about the piece between the ends, so it stays null and the
+ * next fallback wins.
  *
  * Two identical names are not a pair either: both ends of a short link inside
- * one junction carry the junction's name, and "X × X" describes nothing. That
- * piece falls back to the road it belongs to, or to the name the user gave the
- * segment itself.
+ * one junction carry the junction's name, and "X × X" describes nothing.
+ *
+ * A name that already contains × is a crossing of roads, not a point name.
+ * Joining it with another end used to spell "gate × road × road" — three
+ * parts, mixing a point with a crossing. Such a name belongs on [RoadNames]
+ * as a list of roads, never here, so this returns null and the OSM name wins.
  *
  * The same × a derived crossing caption uses: two named ends, one separator
  * for every combination, so the app spells a pair the same way everywhere.
  */
 fun pointPairName(from: String?, to: String?): String? =
-    if (from != null && to != null && from != to) "$from × $to" else null
+    if (from != null && to != null && from != to &&
+        !RoadNames.isComposite(from) && !RoadNames.isComposite(to)
+    ) "$from × $to" else null
 
-/** The same pair as a direction: "A → B". */
+/** The same pair as a direction: "A → B"; composite road-crossing names are excluded. */
 fun directionalName(from: String?, to: String?): String? =
-    if (from != null && to != null && from != to) "$from → $to" else null
+    if (from != null && to != null && from != to &&
+        !RoadNames.isComposite(from) && !RoadNames.isComposite(to)
+    ) "$from → $to" else null
 
 /**
  * The names to label the two ends of one traversal with, in the order the trip
@@ -186,13 +194,19 @@ data class Segment(
     val toPoint: PointRef? get() = PointRef.parse(toKey)
 
     /**
-     * The name the two endpoint names spell out. Only when both ends are named:
-     * "north gate × metro" is useful, "north gate × ..." is not.
+     * The name the two atomic endpoint names spell out. Only when both ends
+     * are named: "north gate × metro" is useful, "north gate × ..." is not.
      */
     val pointName: String? get() = pointPairName(fromName, toName)
 
-    /** The best name this segment has, or null when nothing is named at all. */
-    val preferredLabel: String? get() = userName ?: pointName ?: name
+    /**
+     * A segment is named by its two ends. [userName] is a road name the user
+     * typed as inference input for the points it touches — it no longer
+     * overrides the point pair, which is what used to produce "gate × road ×
+     * road". When neither end is named the OSM name is the fallback; the road
+     * name stays available to the naming dialogs as inference input.
+     */
+    val preferredLabel: String? get() = pointName ?: name
 
     /** "A → B" for the forward direction (+1), when both ends are named. */
     val forwardName: String? get() = directionalName(fromName, toName)

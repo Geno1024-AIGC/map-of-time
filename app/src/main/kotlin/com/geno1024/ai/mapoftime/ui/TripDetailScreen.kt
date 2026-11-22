@@ -269,13 +269,23 @@ fun TripDetailScreen(
         LegEditDialog(
             segment = editing,
             reuse = viewModel.roadNames,
+            fromCandidates = editing.fromPoint?.let(viewModel::pointRoadCandidates).orEmpty(),
+            toCandidates = editing.toPoint?.let(viewModel::pointRoadCandidates).orEmpty(),
+            initialFromRoads = editing.fromPoint
+                ?.let { viewModel.roadsAt(listOf(it)) }.orEmpty(),
+            initialToRoads = editing.toPoint
+                ?.let { viewModel.roadsAt(listOf(it)) }.orEmpty(),
             onDismiss = { editingSegment = false },
-            onSave = { name, fromName, toName ->
+            onSave = { name, fromName, toName, fromRoads, toRoads ->
                 editingSegment = false
                 scope.launch {
                     viewModel.renameSegment(editing.id, name)
-                    editing.fromPoint?.let { viewModel.renamePoint(it, fromName) }
-                    editing.toPoint?.let { viewModel.renamePoint(it, toName) }
+                    editing.fromPoint?.let {
+                        viewModel.renamePoint(it, fromName, roads = fromRoads)
+                    }
+                    editing.toPoint?.let {
+                        viewModel.renamePoint(it, toName, roads = toRoads)
+                    }
                     reload += 1
                 }
             },
@@ -1038,12 +1048,24 @@ private fun LegRow(
 private fun LegEditDialog(
     segment: Segment,
     reuse: List<String>,
+    fromCandidates: List<String> = emptyList(),
+    toCandidates: List<String> = emptyList(),
+    initialFromRoads: Set<String> = emptySet(),
+    initialToRoads: Set<String> = emptySet(),
     onDismiss: () -> Unit,
-    onSave: (name: String, fromName: String, toName: String) -> Unit,
+    onSave: (
+        name: String,
+        fromName: String,
+        toName: String,
+        fromRoads: Set<String>,
+        toRoads: Set<String>,
+    ) -> Unit,
 ) {
     var name by remember(segment.id) { mutableStateOf(segment.userName.orEmpty()) }
     var fromName by remember(segment.id) { mutableStateOf(segment.fromName.orEmpty()) }
     var toName by remember(segment.id) { mutableStateOf(segment.toName.orEmpty()) }
+    var fromRoads by remember(segment.id) { mutableStateOf(initialFromRoads) }
+    var toRoads by remember(segment.id) { mutableStateOf(initialToRoads) }
     val fromPoint = segment.fromPoint
     val toPoint = segment.toPoint
 
@@ -1066,6 +1088,9 @@ private fun LegEditDialog(
                         label = stringResource(R.string.segment_from),
                         hint = stringResource(R.string.point_name_hint),
                     )
+                    PointRoadsPicker(fromCandidates, fromRoads) { road ->
+                        fromRoads = if (road in fromRoads) fromRoads - road else fromRoads + road
+                    }
                 }
                 if (toPoint != null) {
                     NameField(
@@ -1074,6 +1099,9 @@ private fun LegEditDialog(
                         label = stringResource(R.string.segment_to),
                         hint = stringResource(R.string.point_name_hint),
                     )
+                    PointRoadsPicker(toCandidates, toRoads) { road ->
+                        toRoads = if (road in toRoads) toRoads - road else toRoads + road
+                    }
                 }
                 Text(
                     text = stringResource(
@@ -1089,7 +1117,7 @@ private fun LegEditDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(name, fromName, toName) }) {
+            TextButton(onClick = { onSave(name, fromName, toName, fromRoads, toRoads) }) {
                 Text(stringResource(R.string.action_save))
             }
         },

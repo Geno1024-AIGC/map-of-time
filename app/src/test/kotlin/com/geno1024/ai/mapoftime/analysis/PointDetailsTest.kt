@@ -103,6 +103,21 @@ class PointDetailsTest {
     }
 
     @Test
+    fun explicitRoadsAreAuthoritativeOverDerivedOnes() {
+        // Roads the user confirmed at the point win over whatever the segments
+        // say, and duplicates collapse into one crossing caption.
+        val detail = PointDetails.of(
+            at(0.0, 100.0),
+            centre,
+            placeName = "人民广场",
+            touching = listOf(road("建国路"), road("人民路")),
+            explicitRoads = listOf("科创路", "学府路", "科创路"),
+        )
+        assertEquals(listOf("科创路", "学府路"), detail.roads)
+        assertEquals("北侧 · 科创路 × 学府路", detail.label)
+    }
+
+    @Test
     fun aFourWayCrossingListsEveryRoad() {
         val detail = PointDetails.of(
             centre,

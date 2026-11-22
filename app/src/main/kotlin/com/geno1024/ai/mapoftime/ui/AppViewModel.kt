@@ -75,6 +75,13 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     /** Names the user gave a single point; these outrank a junction's name. */
     var pointNames by mutableStateOf<Map<String, String>>(emptyMap())
         private set
+    /**
+     * Roads the user chose at each point, keyed by `kind:node`. Several roads
+     * describe a crossing and are shown as `road × road`; never typed into a
+     * point name where they would leak into a segment's pair name.
+     */
+    var pointRoads by mutableStateOf<Map<String, List<String>>>(emptyMap())
+        private set
     var loading by mutableStateOf(false)
         private set
     var note by mutableStateOf<String?>(null)
@@ -132,12 +139,14 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     summaries = summaries,
                     places = container.repository.places(),
                     pointNames = container.repository.pointNames(),
+                    pointRoads = container.repository.pointRoads(),
                 )
             }
             trips = loaded.trips
             summaries = loaded.summaries
             places = loaded.places
             pointNames = loaded.pointNames
+            pointRoads = loaded.pointRoads
             loading = false
         }
     }
@@ -207,9 +216,55 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     /**
      * Names one end of a segment. Every segment through that point changes
      * name too, which is the whole point of naming the junction once.
+     *
+     * [roads] is the confirmed road list for the point: null leaves the roads
+     * alone (a plain rename), a list — including an empty one — replaces them.
      */
-    suspend fun renamePoint(ref: PointRef, name: String?) {
-        withContext(container.dbDispatcher) { container.repository.renamePoint(ref, name) }
+    suspend fun renamePoint(
+        ref: PointRef,
+        name: String?,
+        roads: Collection<String>? = null,
+    ) {
+        withContext(container.dbDispatcher) {
+            container.repository.renamePoint(ref, name)
+            if (roads != null) container.repository.setPointRoads(listOf(ref), roads)
+        }
+        refresh()
+    }
+
+    /**
+     * Roads worth offering when [ref] is named: the road names on segments that
+     * actually touch it, plus roads already chosen at other points of the same
+     * junction. These are candidates only — nothing is saved until the user
+     * confirms a selection through [renamePoint] or [namePlace].
+     */
+    fun pointRoadCandidates(ref: PointRef): List<String> = pointRoadCandidatesFor(listOf(ref))
+
+    /** The same inference over every point a junction covers. */
+    fun pointRoadCandidatesFor(refs: Collection<PointRef>): List<String> {
+        val keys = refs.map { it.key }.toSet()
+        val fromSegments = summaries.map { it.segment }
+            .filter { it.fromKey in keys || it.toKey in keys }
+            .mapNotNull { it.userName?.trim()?.takeIf(String::isNotBlank) }
+        val neighbours = refs.flatMap { ref ->
+            val place = placeOf(ref)
+            if (place != null) {
+                place.points.flatMap { pointRoads[it.key].orEmpty() }
+            } else {
+                pointRoads[ref.key].orEmpty()
+            }
+        }
+        val current = refs.flatMap { pointRoads[it.key].orEmpty() }
+        return (fromSegments + neighbours + current).distinct().sorted()
+    }
+
+    /** Roads already chosen at these points, used to seed the selection in a dialog. */
+    fun roadsAt(refs: Collection<PointRef>): Set<String> =
+        refs.flatMap { pointRoads[it.key].orEmpty() }.toSet()
+
+    /** Persists a confirmed road selection for one or more points of a junction. */
+    suspend fun setPointRoads(refs: Collection<PointRef>, roads: Collection<String>) {
+        withContext(container.dbDispatcher) { container.repository.setPointRoads(refs, roads) }
         refresh()
     }
 
@@ -269,14 +324,25 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             // A caption describes one traveller's roads: a car must not inherit
             // the footway name just because a zebra shares the same point.
             .filter { mode == null || it.mode == mode }
-        return PointDetails.of(at, centre, placeName, touching)
+        // Roads the user chose win over anything derived from the segments.
+        val explicitRoads = pointRoads[key].orEmpty() +
+            place?.points.orEmpty().flatMap { pointRoads[it.key].orEmpty() }
+        return PointDetails.of(at, centre, placeName, touching, explicitRoads)
     }
 
     /**
      * Names a whole junction in one go. A blank [name] dissolves it and the
      * points fall back to their own names or to the road they sit on.
+     *
+     * [roads] is the confirmed road list for the crossing: null leaves roads
+     * untouched, a list (even empty) replaces them on every member.
      */
-    suspend fun namePlace(draft: PlaceDraft, name: String?, clearMemberNames: Boolean = false) {
+    suspend fun namePlace(
+        draft: PlaceDraft,
+        name: String?,
+        clearMemberNames: Boolean = false,
+        roads: Collection<String>? = null,
+    ) {
         withContext(container.dbDispatcher) {
             // The name is typed by hand. If a nearby junction already carries
             // it, the user is adding this point to that junction — not asking
@@ -323,6 +389,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 center = center,
                 radiusM = maxOf(radius, draft.radiusM).coerceAtLeast(PlaceDrafts.MIN_ADOPT_M),
                 clearMemberNames = clearMemberNames,
+                roads = roads,
                 absorbIds = absorbIds,
             )
         }
@@ -630,6 +697,23 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
         root.put("points", pointArray)
 
+        // Roads chosen at points travel separately: a crossing is a list of
+        // roads, never a composite string that could leak into a segment name.
+        val pointRoadArray = JSONArray()
+        for ((key, roads) in repository.pointRoads()) {
+            val ref = PointRef.parse(key) ?: continue
+            val roadsArray = JSONArray()
+            roads.forEach(roadsArray::put)
+            pointRoadArray.put(
+                JSONObject().apply {
+                    put("kind", ref.kind)
+                    put("nodeId", ref.nodeId)
+                    put("roads", roadsArray)
+                },
+            )
+        }
+        root.put("pointRoads", pointRoadArray)
+
         // Junctions are names too, and one of them can cover a dozen points.
         // A reader that predates this key ignores it and still gets the rest.
         val placeArray = JSONArray()
@@ -745,4 +829,5 @@ private data class Loaded(
     val summaries: List<SegmentSummary>,
     val places: List<Place>,
     val pointNames: Map<String, String>,
+    val pointRoads: Map<String, List<String>>,
 )

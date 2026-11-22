@@ -145,6 +145,11 @@ class MapRepository(private val helper: MapDb) {
             renamePoint(point.ref, point.name)
             knownPoints[point.ref.key] = point.name
         }
+        // Roads chosen at points travel as structured lists, never as a
+        // composite point name that could leak into a segment's name.
+        for (roads in bundle.pointRoads) {
+            setPointRoads(listOf(roads.ref), roads.roads)
+        }
         // Junctions travel too. A point name restored above still wins over
         // the junction name, exactly as it does locally.
         for (place in bundle.places) {
@@ -524,6 +529,50 @@ class MapRepository(private val helper: MapDb) {
             }
         }
 
+    /** Roads explicitly attached to points, keyed by `kind:node`. */
+    fun pointRoads(): Map<String, List<String>> {
+        val roads = HashMap<String, MutableList<String>>()
+        db.rawQuery("SELECT kind, node_id, road FROM point_roads ORDER BY road", null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val key = "${cursor.getString(0)}:${cursor.getLong(1)}"
+                roads.getOrPut(key) { ArrayList() }.add(cursor.getString(2))
+            }
+        }
+        return roads
+    }
+
+    /**
+     * Replaces the roads chosen for these points. A crossing is a fact about
+     * the point, so every member of a junction gets the same list. No leg
+     * relabel: segment names are point pairs and no longer read road names.
+     */
+    fun setPointRoads(refs: Collection<PointRef>, roads: Collection<String>) {
+        val chosen = roads.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        val distinct = refs.distinctBy { it.key }
+        if (distinct.isEmpty()) return
+        db.transaction {
+            for (ref in distinct) {
+                db.delete(
+                    "point_roads",
+                    "kind = ? AND node_id = ?",
+                    arrayOf(ref.kind, ref.nodeId.toString()),
+                )
+                for (road in chosen) {
+                    db.insertWithOnConflict(
+                        "point_roads",
+                        null,
+                        ContentValues().apply {
+                            put("kind", ref.kind)
+                            put("node_id", ref.nodeId)
+                            put("road", road)
+                        },
+                        SQLiteDatabase.CONFLICT_IGNORE,
+                    )
+                }
+            }
+        }
+    }
+
     /**
      * Names a point, or clears it when [name] is blank. Every segment that ends
      * at this point is relabelled in the same transaction, so the list, the
@@ -532,7 +581,13 @@ class MapRepository(private val helper: MapDb) {
     fun renamePoint(ref: PointRef, name: String?) {
         val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
         db.transaction {
-            if (trimmed == null) {
+            // Typing "A × B" in the point-name field means the user is naming a
+            // crossing. Store it as roads instead: a composite point name would
+            // reappear inside a segment's point-pair name.
+            if (RoadNames.isComposite(trimmed)) {
+                db.delete("point_names", "kind = ? AND node_id = ?", arrayOf(ref.kind, ref.nodeId.toString()))
+                setPointRoads(listOf(ref), RoadNames.split(trimmed))
+            } else if (trimmed == null) {
                 db.delete("point_names", "kind = ? AND node_id = ?", arrayOf(ref.kind, ref.nodeId.toString()))
             } else {
                 db.insertWithOnConflict(
@@ -628,6 +683,8 @@ class MapRepository(private val helper: MapDb) {
         center: LatLon,
         radiusM: Double,
         clearMemberNames: Boolean = false,
+        /** Roads chosen at this junction; a crossing is stored on its points. Null leaves them alone. */
+        roads: Collection<String>? = null,
         /**
          * Same-name rows folded into this junction by the place draft. Their
          * points are already in [members]; deleting the rows (their
@@ -639,9 +696,20 @@ class MapRepository(private val helper: MapDb) {
         var placeId = id
         db.transaction {
             val previous = if (id == null) emptyList() else placePoints(id)
+            // A name spelled "A × B" names two roads, not one junction. Keep
+            // the roads on every point it covered and dissolve the place, just
+            // as the v7 migration does for names typed before this rule.
+            if (RoadNames.isComposite(trimmed)) {
+                if (id != null) db.delete("places", "id = ?", arrayOf(id.toString()))
+                setPointRoads(previous + members, RoadNames.split(trimmed))
+                relabelSegmentsTouching((previous + members).map { it.key })
+                placeId = null
+                return@transaction
+            }
             if (trimmed == null) {
                 if (id != null) db.delete("places", "id = ?", arrayOf(id.toString()))
                 relabelSegmentsTouching(previous.map { it.key })
+                placeId = null
                 return@transaction
             }
             val values = ContentValues().apply {
@@ -685,6 +753,7 @@ class MapRepository(private val helper: MapDb) {
                     SQLiteDatabase.CONFLICT_REPLACE,
                 )
             }
+            if (roads != null) setPointRoads(members, roads)
             relabelSegmentsTouching((previous + members).map { it.key })
         }
         return placeId
@@ -698,6 +767,11 @@ class MapRepository(private val helper: MapDb) {
      */
     fun mergePlace(name: String, center: LatLon, radiusM: Double, members: List<PointRef>): Long? {
         val trimmed = name.trim().takeIf { it.isNotEmpty() } ?: return null
+        // An export from before v7 may still spell a junction as "A × B".
+        if (RoadNames.isComposite(trimmed)) {
+            setPointRoads(members, RoadNames.split(trimmed))
+            return null
+        }
         val (existingId, existingRadius) = db.rawQuery(
             "SELECT id, radius_m FROM places WHERE name = ? LIMIT 1",
             arrayOf(trimmed),
@@ -1004,6 +1078,7 @@ class MapRepository(private val helper: MapDb) {
         db.transaction {
             db.delete("places", null, null)
             db.delete("point_names", null, null)
+            db.delete("point_roads", null, null)
             db.delete("trips", null, null)
             db.delete("geo_nodes", null, null)
             db.delete("segments", null, null)

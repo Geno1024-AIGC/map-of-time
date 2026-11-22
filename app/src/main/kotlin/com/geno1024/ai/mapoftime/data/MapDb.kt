@@ -1,5 +1,6 @@
 package com.geno1024.ai.mapoftime.data
 
+import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
@@ -89,6 +90,19 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
             )
             """.trimIndent(),
         )
+        // Roads a point sits at, chosen by the user. Several roads make a
+        // crossing; the crossing caption is derived from this list, never typed
+        // into the point's own name where it would poison segment names.
+        db.execSQL(
+            """
+            CREATE TABLE point_roads(
+                kind TEXT NOT NULL,
+                node_id INTEGER NOT NULL,
+                road TEXT NOT NULL,
+                PRIMARY KEY(kind, node_id, road)
+            )
+            """.trimIndent(),
+        )
         // A wide crossing is many OSM nodes, one per lane and one per corner
         // refuge, and more of them show up every time a new turning movement
         // brushes another corner. The junction is therefore its own thing: a
@@ -120,10 +134,12 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
             """
             CREATE VIEW point_labels AS
                 SELECT kind, node_id, name FROM point_names
+                 WHERE name NOT LIKE '%×%'
                 UNION ALL
                 SELECT pp.kind, pp.node_id, p.name
                   FROM place_points pp JOIN places p ON p.id = pp.place_id
-                 WHERE NOT EXISTS (
+                 WHERE p.name NOT LIKE '%×%'
+                   AND NOT EXISTS (
                     SELECT 1 FROM point_names pn
                      WHERE pn.kind = pp.kind AND pn.node_id = pp.node_id
                  )
@@ -311,6 +327,116 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
                 """.trimIndent(),
             )
         }
+        // v7 records roads on points. A name typed as "A × B" was always a
+        // crossing, not an atomic point name: split it into roads and drop the
+        // composite label so it can no longer leak into a segment's name.
+        if (oldVersion < 7) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS point_roads(
+                    kind TEXT NOT NULL,
+                    node_id INTEGER NOT NULL,
+                    road TEXT NOT NULL,
+                    PRIMARY KEY(kind, node_id, road)
+                )
+                """.trimIndent(),
+            )
+            val compositePoints = ArrayList<Triple<String, Long, String>>()
+            db.rawQuery(
+                "SELECT kind, node_id, name FROM point_names WHERE name LIKE '%×%'",
+                null,
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    compositePoints += Triple(
+                        cursor.getString(0),
+                        cursor.getLong(1),
+                        cursor.getString(2),
+                    )
+                }
+            }
+            for ((kind, nodeId, name) in compositePoints) {
+                insertPointRoads(db, kind, nodeId, RoadNames.split(name))
+                db.delete(
+                    "point_names",
+                    "kind = ? AND node_id = ?",
+                    arrayOf(kind, nodeId.toString()),
+                )
+            }
+            val compositePlaces = ArrayList<Pair<Long, String>>()
+            db.rawQuery(
+                "SELECT id, name FROM places WHERE name LIKE '%×%'",
+                null,
+            ).use { cursor ->
+                while (cursor.moveToNext()) compositePlaces += cursor.getLong(0) to cursor.getString(1)
+            }
+            for ((placeId, name) in compositePlaces) {
+                val roads = RoadNames.split(name)
+                val members = ArrayList<Pair<String, Long>>()
+                db.rawQuery(
+                    "SELECT kind, node_id FROM place_points WHERE place_id = ?",
+                    arrayOf(placeId.toString()),
+                ).use { cursor ->
+                    while (cursor.moveToNext()) members += cursor.getString(0) to cursor.getLong(1)
+                }
+                for ((kind, nodeId) in members) insertPointRoads(db, kind, nodeId, roads)
+                // The junction itself was named after two roads, which is not a
+                // junction name. Keep its members' roads, dissolve the place.
+                db.delete("places", "id = ?", arrayOf(placeId.toString()))
+            }
+            db.execSQL("DROP VIEW IF EXISTS point_labels")
+            db.execSQL(
+                """
+                CREATE VIEW point_labels AS
+                    SELECT kind, node_id, name FROM point_names
+                     WHERE name NOT LIKE '%×%'
+                    UNION ALL
+                    SELECT pp.kind, pp.node_id, p.name
+                      FROM place_points pp JOIN places p ON p.id = pp.place_id
+                     WHERE p.name NOT LIKE '%×%'
+                       AND NOT EXISTS (
+                         SELECT 1 FROM point_names pn
+                          WHERE pn.kind = pp.kind AND pn.node_id = pp.node_id
+                     )
+                """.trimIndent(),
+            )
+            // Legs carry a copy of the segment label. The rule just changed from
+            // road-name-first to atomic-point-pair-first, so rewrite them once.
+            db.execSQL(
+                """
+                UPDATE legs SET label = COALESCE(
+                    (SELECT pf.name || ' × ' || pt.name
+                       FROM segments s
+                       JOIN point_labels pf
+                         ON pf.kind || ':' || pf.node_id = s.from_key
+                       JOIN point_labels pt
+                         ON pt.kind || ':' || pt.node_id = s.to_key
+                      WHERE s.id = legs.segment_id AND pf.name <> pt.name),
+                    (SELECT name FROM segments WHERE id = legs.segment_id),
+                    (SELECT key FROM segments WHERE id = legs.segment_id)
+                )
+                """.trimIndent(),
+            )
+        }
+    }
+
+    private fun insertPointRoads(
+        db: SQLiteDatabase,
+        kind: String,
+        nodeId: Long,
+        roads: Collection<String>,
+    ) {
+        for (road in roads) {
+            db.insertWithOnConflict(
+                "point_roads",
+                null,
+                ContentValues().apply {
+                    put("kind", kind)
+                    put("node_id", nodeId)
+                    put("road", road)
+                },
+                SQLiteDatabase.CONFLICT_IGNORE,
+            )
+        }
     }
 
     /**
@@ -342,6 +468,6 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
 
     companion object {
         const val NAME = "map-of-time.db"
-        const val VERSION = 6
+        const val VERSION = 7
     }
 }

@@ -32,11 +32,27 @@ class SegmentNameTest {
     )
 
     @Test
-    fun aNameTheUserTypedWinsOverEverything() {
+    fun aRoadNameOnTheSegmentDoesNotOverrideThePointPair() {
+        // A road name typed on the segment is inference input for the points it
+        // touches. The segment itself is always named by its two atomic ends.
         assertEquals(
-            "My short cut",
+            "A × B",
             segment("Main Street", userName = "My short cut", fromName = "A", toName = "B").displayName,
         )
+    }
+
+    @Test
+    fun aCompositeRoadNameCannotLeakIntoASegmentName() {
+        // "科创路 × 学府路" is a crossing of roads, not a point name. Joining it
+        // with the other end used to spell "gate × road × road" — three parts.
+        val leaked = segment(
+            null,
+            fromName = "万科翡丽山5号门",
+            toName = "科创路 × 学府路",
+        )
+        assertNull(leaked.pointName)
+        assertNull(leaked.forwardName)
+        assertEquals("geo:1-2", leaked.displayName)
     }
 
     @Test
@@ -63,7 +79,7 @@ class SegmentNameTest {
     fun twoEndsWithTheSameJunctionNameAreNotAPair() {
         // Both ends of a link inside one junction carry the junction's name.
         // "X × X" describes nothing, so the road's own name takes over.
-        val inside = segment("Jianguo Road", fromName = "Renmin × Jianguo", toName = "Renmin × Jianguo")
+        val inside = segment("Jianguo Road", fromName = "Renmin Gate", toName = "Renmin Gate")
         assertNull(inside.pointName)
         assertNull(inside.forwardName)
         assertEquals("Jianguo Road", inside.displayName)

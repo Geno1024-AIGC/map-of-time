@@ -207,24 +207,31 @@ fun SegmentDetailScreen(
             spanM = draft.spanM,
             named = draft.existingPlaceId != null,
             overriddenCount = viewModel.overriddenMembers(draft),
+            roadCandidates = viewModel.pointRoadCandidatesFor(draft.refs),
+            initialRoads = viewModel.roadsAt(draft.refs),
             onDismiss = {
                 namingPlace = null
                 preview = null
             },
-            onSave = { name, takeOverNames ->
+            onSave = { name, takeOverNames, roads ->
                 namingPlace = null
                 preview = null
                 scope.launch {
-                    viewModel.namePlace(draft, name, clearMemberNames = takeOverNames)
+                    viewModel.namePlace(
+                        draft,
+                        name,
+                        clearMemberNames = takeOverNames,
+                        roads = roads,
+                    )
                     segment = viewModel.segment(segmentId)
                     legs = viewModel.legsForSegment(segmentId)
                 }
             },
-            onSavePointOnly = { name ->
+            onSavePointOnly = { name, roads ->
                 namingPlace = null
                 preview = null
                 scope.launch {
-                    viewModel.renamePoint(draft.seed, name)
+                    viewModel.renamePoint(draft.seed, name, roads = roads)
                     segment = viewModel.segment(segmentId)
                     legs = viewModel.legsForSegment(segmentId)
                 }

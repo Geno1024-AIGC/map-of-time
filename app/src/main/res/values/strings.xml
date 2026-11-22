@@ -43,6 +43,8 @@
     <string name="place_preview_hint">The dashed circle is the ground this junction claims. Nothing is saved until you name it. If it is a big interchange, tap Wider.</string>
     <string name="place_overridden">%1$d points already have their own names</string>
     <string name="place_overridden_hint">Their own name wins over the junction\'s. Turn this on to let the junction name cover them.</string>
+    <string name="point_roads_hint">Roads at this point (suggested from nearby segments — tap to confirm)</string>
+    <string name="point_roads_none">No road names to suggest yet. Type a road name on a segment first.</string>
     <string name="place_name_action">Name junction</string>
     <string name="place_member_count">%1$d points share this name</string>
     <string name="segment_inside_junction">inside %1$s</string>
@@ -176,11 +178,11 @@
     <string name="segment_signal_waited_in">Stopped at a light</string>
     <string name="segment_signal_when_stopped">When at a light</string>
     <string name="segment_distance">Length</string>
-    <string name="segment_name">Name</string>
-    <string name="segment_name_add">Name it</string>
-    <string name="segment_name_hint">e.g. the alley behind the mall</string>
+    <string name="segment_name">Road name</string>
+    <string name="segment_name_add">Add road name</string>
+    <string name="segment_name_hint">e.g. Xinhua Road</string>
     <string name="segment_name_use">Use “%1$s”</string>
-    <string name="segment_name_clear_hint">Save it empty to fall back to the OSM name.</string>
+    <string name="segment_name_clear_hint">Save empty to drop this name from point-naming suggestions. The segment is displayed by its two ends.</string>
     <string name="segment_name_reuse">Used before</string>
     <string name="segment_from">From</string>
     <string name="segment_to">To</string>

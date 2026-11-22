@@ -1,6 +1,7 @@
 package com.geno1024.ai.mapoftime.analysis
 
 import com.geno1024.ai.mapoftime.core.LatLon
+import com.geno1024.ai.mapoftime.data.RoadNames
 import com.geno1024.ai.mapoftime.data.Segment
 import kotlin.math.PI
 import kotlin.math.atan2
@@ -37,7 +38,7 @@ data class PointDetail(
         .joinToString(" · ")
         .takeIf { it.isNotBlank() }
 
-    private val roadText: String? get() = roads.joinToString(" × ").takeIf { it.isNotBlank() }
+    private val roadText: String? get() = RoadNames.join(roads)
 }
 
 object PointDetails {
@@ -49,19 +50,29 @@ object PointDetails {
     /**
      * [centre] is the junction's centre — a saved place's, or the preview
      * draft's when the place does not exist yet. [placeName] is dropped from
-     * the road list: it names the junction, not a road running through it.
+     * the derived road list: it names the junction, not a road through it.
+     *
+     * [explicitRoads] are roads the user chose at this point. When present they
+     * are authoritative — several roads make the crossing the user described —
+     * and [touching] is only the fallback for a point not named yet.
      */
     fun of(
         point: LatLon,
         centre: LatLon,
         placeName: String? = null,
         touching: List<Segment> = emptyList(),
-    ): PointDetail = PointDetail(
-        bearing = bearing(point, centre),
-        roads = touching.mapNotNull(::roadName)
-            .filter { it != placeName }
-            .distinct(),
-    )
+        explicitRoads: Collection<String> = emptyList(),
+    ): PointDetail {
+        val chosen = explicitRoads.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        return PointDetail(
+            bearing = bearing(point, centre),
+            roads = if (chosen.isNotEmpty()) {
+                chosen
+            } else {
+                touching.mapNotNull(::roadName).filter { it != placeName }.distinct()
+            },
+        )
+    }
 
     /** The user's road name wins; OSM is the fallback when there is none. */
     private fun roadName(segment: Segment): String? =

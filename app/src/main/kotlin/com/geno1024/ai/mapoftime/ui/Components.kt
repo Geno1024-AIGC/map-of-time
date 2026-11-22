@@ -342,6 +342,44 @@ fun PlacePreviewRow(
 }
 
 /**
+ * Road names suggested for a point, chosen by the user before saving.
+ *
+ * Several roads meeting at one point make a crossing; the app spells that as
+ * `road × road` from this list. The chips are inference from nearby segments
+ * and points — nothing is written until the surrounding dialog is confirmed.
+ */
+@Composable
+fun PointRoadsPicker(
+    candidates: List<String>,
+    selected: Set<String>,
+    onToggle: (String) -> Unit,
+) {
+    Text(
+        text = stringResource(R.string.point_roads_hint),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val all = (candidates + selected.toList()).distinct()
+    if (all.isEmpty()) {
+        Text(
+            text = stringResource(R.string.point_roads_none),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    } else {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            all.forEach { road ->
+                FilterChip(
+                    selected = road in selected,
+                    onClick = { onToggle(road) },
+                    label = { Text(road) },
+                )
+            }
+        }
+    }
+}
+
+/**
  * Asks for a name for a junction, and says how many points it will cover.
  *
  * The point count is the whole reason this dialog exists: a wide crossing is a
@@ -357,11 +395,16 @@ fun PlaceNameDialog(
     named: Boolean,
     /** Members that already carry a name of their own and would outrank it. */
     overriddenCount: Int,
+    /** Roads inferred for this crossing; the user confirms before saving. */
+    roadCandidates: List<String> = emptyList(),
+    /** Roads already chosen, so reopening the dialog does not lose them. */
+    initialRoads: Set<String> = emptySet(),
     onDismiss: () -> Unit,
-    onSave: (String, Boolean) -> Unit,
-    onSavePointOnly: (String) -> Unit,
+    onSave: (String, Boolean, Set<String>) -> Unit,
+    onSavePointOnly: (String, Set<String>) -> Unit,
 ) {
     var text by remember(initial) { mutableStateOf(initial) }
+    var roads by remember(initialRoads) { mutableStateOf(initialRoads) }
     var takeOverNames by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -410,6 +453,10 @@ fun PlaceNameDialog(
                         Switch(checked = takeOverNames, onCheckedChange = { takeOverNames = it })
                     }
                 }
+                Spacer(Modifier.height(10.dp))
+                PointRoadsPicker(roadCandidates, roads) { road ->
+                    roads = if (road in roads) roads - road else roads + road
+                }
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.place_clear_hint),
@@ -417,14 +464,14 @@ fun PlaceNameDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (pointCount > 1) {
-                    TextButton(onClick = { onSavePointOnly(text) }) {
+                    TextButton(onClick = { onSavePointOnly(text, roads) }) {
                         Text(stringResource(R.string.place_only_point))
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(text, takeOverNames) }) {
+            TextButton(onClick = { onSave(text, takeOverNames, roads) }) {
                 Text(
                     stringResource(
                         if (named) R.string.action_save else R.string.place_name_apply,
@@ -441,11 +488,13 @@ fun PlaceNameDialog(
 }
 
 /**
- * Asks for a name for one segment. Shared by the segment screen and the trip's
- * leg overlay, which both offer the same action.
+ * Asks for the road name of one segment. Shared by the segment screen and the
+ * trip's leg overlay, which both offer the same action.
  *
- * Saving an empty field is a deliberate way back to the OSM name, so the dialog
- * says so instead of disabling the button.
+ * This name is inference input for the points the segment touches; the segment
+ * itself is displayed by its two atomic end names. Saving an empty field drops
+ * the name from point-naming suggestions, so the dialog says so instead of
+ * disabling the button.
  */
 @Composable
 fun SegmentNameDialog(

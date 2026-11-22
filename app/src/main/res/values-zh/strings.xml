@@ -43,6 +43,8 @@
     <string name="place_preview_hint">虚线圈是这个路口认领的范围。还没保存，看清楚了再命名；大立交可以点「扩大范围」。</string>
     <string name="place_overridden">其中 %1$d 个点已有自己的名字</string>
     <string name="place_overridden_hint">单点名字优先于路口名。打开这个开关，让路口名接管它们。</string>
+    <string name="point_roads_hint">这个点所在的路（根据附近路段推断，点选即确认）</string>
+    <string name="point_roads_none">暂时没有可推断的路名。先给某段路填写路名。</string>
     <string name="place_name_action">命名路口</string>
     <string name="place_member_count">这个路口共 %1$d 个点</string>
     <string name="segment_inside_junction">%1$s 路口内</string>
@@ -176,11 +178,11 @@
     <string name="segment_signal_waited_in">遇到红灯</string>
     <string name="segment_signal_when_stopped">等红灯时</string>
     <string name="segment_distance">长度</string>
-    <string name="segment_name">名称</string>
-    <string name="segment_name_add">命名</string>
-    <string name="segment_name_hint">例如：商场后面的近路</string>
+    <string name="segment_name">路名</string>
+    <string name="segment_name_add">填写路名</string>
+    <string name="segment_name_hint">例如：新华路</string>
     <string name="segment_name_use">使用「%1$s」</string>
-    <string name="segment_name_clear_hint">留空保存即恢复 OSM 名称。</string>
+    <string name="segment_name_clear_hint">留空保存即从命名点的候选里去掉这个路名。路段的显示名由两端点名拼出。</string>
     <string name="segment_name_reuse">用过的路名</string>
     <string name="segment_from">起点</string>
     <string name="segment_to">终点</string>
