@@ -156,6 +156,33 @@ data class Place(
 fun pointPairName(from: String?, to: String?): String? =
     if (from != null && to != null && from != to) "$from - $to" else null
 
+/** Endpoint label for display: named point, or raw endpoint key. */
+fun endpointLabel(key: String?, name: String?): String? = name ?: key
+
+/**
+ * Edge display pair. Uses endpoint names when available, otherwise endpoint keys.
+ * Returns null only when neither key nor name is available on both sides.
+ */
+fun edgeEndpointPairLabel(
+    fromKey: String?,
+    fromName: String?,
+    toKey: String?,
+    toName: String?,
+): String? {
+    val from = endpointLabel(fromKey, fromName)
+    val to = endpointLabel(toKey, toName)
+    return if (from != null && to != null && from != to) "$from - $to" else null
+}
+
+/** Formats a raw edge key like `geo:59-60` as `geo:59 - geo:60` for display. */
+fun formatEdgeKey(key: String): String {
+    val prefix = key.substringBefore(':', "")
+    if (prefix !in setOf("osm", "geo", "mix")) return key
+    val body = key.substringAfter(':', "")
+    val parts = body.split('-', limit = 2)
+    return if (parts.size == 2) "$prefix:${parts[0]} - $prefix:${parts[1]}" else key
+}
+
 /** The same pair as a direction: "A → B". */
 fun directionalName(from: String?, to: String?): String? =
     if (from != null && to != null && from != to) "$from → $to" else null
@@ -226,6 +253,9 @@ data class Edge(
      */
     val pointName: String? get() = pointPairName(fromName, toName)
 
+    /** Endpoint pair for display, including partial name + endpoint key. */
+    val endpointPairDisplay: String? get() = edgeEndpointPairLabel(fromKey, fromName, toKey, toName)
+
     /**
      * An edge is named by its two ends. [userName] is a road name the user
      * typed as inference input for the points it touches — it no longer
@@ -239,8 +269,11 @@ data class Edge(
     /** "B → A" for the backward direction (−1), when both ends are named. */
     val backwardName: String? get() = directionalName(toName, fromName)
 
-    /** What every screen shows: the point pair, OSM's, then the key. */
-    val displayName: String get() = preferredLabel ?: key
+    /** What every screen shows: endpoint names/keys, OSM's, then formatted key. */
+    val displayName: String get() = when {
+        fromName != null || toName != null -> endpointPairDisplay ?: name ?: formatEdgeKey(key)
+        else -> name ?: formatEdgeKey(key)
+    }
 }
 
 

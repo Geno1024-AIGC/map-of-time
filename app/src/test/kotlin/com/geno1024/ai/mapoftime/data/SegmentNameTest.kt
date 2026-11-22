@@ -69,10 +69,11 @@ class SegmentNameTest {
     }
 
     @Test
-    fun oneNamedEndIsNotEnough() {
-        // "north gate - ..." says less than the road's own name, so OSM wins.
+    fun oneNamedEndShowsNamedEndAndRawOtherEnd() {
+        // A single named end is still useful: show it, keep the other end as its key.
         assertNull(segment("Main Street", fromName = "north gate").pointName)
-        assertEquals("Main Street", segment("Main Street", fromName = "north gate").displayName)
+        assertEquals("north gate - geo:2", segment("Main Street", fromName = "north gate").displayName)
+        assertEquals("geo:1 - metro", segment("Main Street", toName = "metro").displayName)
     }
 
     @Test
@@ -91,10 +92,9 @@ class SegmentNameTest {
     }
 
     @Test
-    fun aCompletelyUnnamedSegmentFallsBackToItsKey() {
-        // The key is ugly but stable, and never blank: the list needs something
-        // to show and something to search.
-        assertEquals("geo:1-2", segment(name = null).displayName)
+    fun aCompletelyUnnamedSegmentFallsBackToItsFormattedKey() {
+        // The key is stable and never blank; format it for readability.
+        assertEquals("geo:1 - geo:2", segment(name = null).displayName)
     }
 
     @Test

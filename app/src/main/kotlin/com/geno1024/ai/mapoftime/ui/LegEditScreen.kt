@@ -277,7 +277,9 @@ fun LegEditScreen(
                             onName = {
                                 previewAt = edge?.from
                                 previewReach = PlaceDrafts.SPAN_M
-                                preview = viewModel.placeDraft(fromPoint, previewAt, previewReach)
+                                val draft = viewModel.placeDraft(fromPoint, previewAt, previewReach)
+                                preview = draft
+                                namingPlace = draft
                             },
                             onOpenNetwork = { onOpenNode(fromPoint.key) },
                         )
@@ -291,7 +293,9 @@ fun LegEditScreen(
                             onName = {
                                 previewAt = edge?.to
                                 previewReach = PlaceDrafts.SPAN_M
-                                preview = viewModel.placeDraft(toPoint, previewAt, previewReach)
+                                val draft = viewModel.placeDraft(toPoint, previewAt, previewReach)
+                                preview = draft
+                                namingPlace = draft
                             },
                             onOpenNetwork = { onOpenNode(toPoint.key) },
                         )

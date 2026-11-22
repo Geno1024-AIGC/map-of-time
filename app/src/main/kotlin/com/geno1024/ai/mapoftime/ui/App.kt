@@ -44,6 +44,7 @@ private enum class Tab(val labelRes: Int, val glyph: String) {
 fun App(viewModel: AppViewModel) {
     var tab by rememberSaveable { mutableStateOf(Tab.RECORD.name) }
     var detail by rememberSaveable { mutableStateOf<String?>(null) }
+    var returnDetail by rememberSaveable { mutableStateOf<String?>(null) }
     // An edge endpoint can ask the network tab to preselect its node. It is a
     // one-shot request: NetworkScreen consumes it, so coming back later restores
     // whatever selection the user made there instead of snapping to it again.
@@ -52,13 +53,21 @@ fun App(viewModel: AppViewModel) {
 
     // Announced by TalkBack in place of the unlabelled dot.
     val updateBadge = stringResource(R.string.update_badge)
-    val closeDetail = { detail = null }
+    val closeDetail = {
+        detail = null
+        returnDetail = null
+    }
     val openNode: (String) -> Unit = { key ->
+        returnDetail = detail
         networkNode = key
         tab = Tab.NETWORK.name
         detail = null
     }
     BackHandler(enabled = detail != null) { detail = null }
+    BackHandler(enabled = detail == null && returnDetail != null) {
+        detail = returnDetail
+        returnDetail = null
+    }
 
     Surface(color = MaterialTheme.colorScheme.background) {
         Scaffold(
@@ -71,6 +80,7 @@ fun App(viewModel: AppViewModel) {
                             selected = selected,
                             onClick = {
                                 detail = null
+                                returnDetail = null
                                 tab = entry.name
                             },
                             icon = {
