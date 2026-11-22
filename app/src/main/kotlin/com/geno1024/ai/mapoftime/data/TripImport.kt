@@ -19,6 +19,7 @@ data class ImportedEdge(
     val fromKey: String? = null,
     val toKey: String? = null,
     val roadName: String? = null,
+    val roadNames: List<String> = emptyList(),
 )
 
 typealias ImportedSegment = ImportedEdge
@@ -128,6 +129,9 @@ object TripImport {
             fromKey = PointRef.parse(objectValue.optStringOrNull("fromKey"))?.key,
             toKey = PointRef.parse(objectValue.optStringOrNull("toKey"))?.key,
             roadName = objectValue.optStringOrNull("roadName"),
+            roadNames = objectValue.optJSONArray("roadNames")?.let { arr ->
+                (0 until arr.length()).mapNotNull { i -> arr.optString(i).trim().takeIf { it.isNotEmpty() } }
+            }.orEmpty(),
         )
     }
 

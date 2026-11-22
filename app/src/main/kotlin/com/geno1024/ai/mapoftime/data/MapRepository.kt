@@ -175,13 +175,16 @@ class MapRepository(private val helper: MapDb) {
             val definition = definitions[cacheKey]
             if (existing != null) {
                 val values = ContentValues()
-                val defRoadName = definition?.roadName ?: definition?.userName
+                val defRoadNames = definition?.let { d ->
+                    (d.roadNames + listOfNotNull(d.roadName ?: d.userName)).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+                }.orEmpty()
                 if (existing.userName == null && definition?.userName != null) {
                     values.put("user_name", definition.userName)
                 }
-                if (existing.roadId == null && defRoadName != null) {
-                    val roadId = ensureRoad(defRoadName, "user")
-                    if (roadId > 0) values.put("road_id", roadId)
+                var addedRoadIds: List<Long> = emptyList()
+                if (existing.roadIds.isEmpty() && defRoadNames.isNotEmpty()) {
+                    addedRoadIds = defRoadNames.mapNotNull { rn -> ensureRoad(rn, "user").takeIf { it > 0 } }.distinct()
+                    if (addedRoadIds.isNotEmpty()) values.put("road_id", addedRoadIds.first())
                 }
                 if (existing.fromNodeId == null && definition?.fromKey != null) {
                     ensureNode(definition.fromKey, existing.from, System.currentTimeMillis())?.let { values.put("from_node_id", it) }
@@ -190,12 +193,15 @@ class MapRepository(private val helper: MapDb) {
                     ensureNode(definition.toKey, existing.to, System.currentTimeMillis())?.let { values.put("to_node_id", it) }
                 }
                 if (values.size() > 0) db.update("edges", values, "id = ?", arrayOf(existing.id.toString()))
+                if (addedRoadIds.isNotEmpty()) replaceEdgeRoads(existing.id, addedRoadIds)
                 resolved[cacheKey] = existing.id
                 return existing.id
             }
             val id = definition?.let { segment ->
                 segmentsAdded++
-                val roadId = (segment.roadName ?: segment.userName)?.let { ensureRoad(it, "user") }?.takeIf { it > 0 }
+                val roadNames = (segment.roadNames + listOfNotNull(segment.roadName ?: segment.userName))
+                    .map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+                val roadIds = roadNames.mapNotNull { ensureRoad(it, "user").takeIf { it > 0 } }
                 insertEdge(
                     key = segment.key,
                     mode = mode,
@@ -208,7 +214,7 @@ class MapRepository(private val helper: MapDb) {
                     userName = segment.userName,
                     fromKey = segment.fromKey,
                     toKey = segment.toKey,
-                    roadId = roadId,
+                    roadIds = roadIds,
                 )
             } ?: return null
             resolved[cacheKey] = id
@@ -416,7 +422,8 @@ class MapRepository(private val helper: MapDb) {
             SELECT e.*,
                    nf.ref_kind AS from_ref_kind, nf.ref_node_id AS from_ref_node_id, nf.name AS from_node_name,
                    nt.ref_kind AS to_ref_kind, nt.ref_node_id AS to_ref_node_id, nt.name AS to_node_name,
-                   nl_from.name AS from_name, nl_to.name AS to_name
+                   nl_from.name AS from_name, nl_to.name AS to_name,
+                   (SELECT GROUP_CONCAT(road_id) FROM edge_roads WHERE edge_id = e.id) AS road_ids
               FROM edges e
               LEFT JOIN nodes nf ON nf.id = e.from_node_id
               LEFT JOIN nodes nt ON nt.id = e.to_node_id
@@ -451,7 +458,9 @@ class MapRepository(private val helper: MapDb) {
         fromKey: String? = null,
         toKey: String? = null,
         roadId: Long? = null,
+        roadIds: List<Long> = emptyList(),
     ): Long {
+        val effectiveRoadIds = (roadIds + listOfNotNull(roadId)).distinct()
         val existing = edgeByKey(key, mode)
         val fromNodeId = ensureNode(fromKey, from, seenAt)
         val toNodeId = ensureNode(toKey, to, seenAt)
@@ -462,12 +471,15 @@ class MapRepository(private val helper: MapDb) {
                 put("length_m", lengthM)
                 if (existing.fromNodeId == null && fromNodeId != null) put("from_node_id", fromNodeId)
                 if (existing.toNodeId == null && toNodeId != null) put("to_node_id", toNodeId)
-                if (existing.roadId == null && roadId != null) put("road_id", roadId)
+                if (existing.roadIds.isEmpty() && effectiveRoadIds.isNotEmpty()) {
+                    put("road_id", effectiveRoadIds.first())
+                }
             }
             db.update("edges", values, "id = ?", arrayOf(existing.id.toString()))
+            if (existing.roadIds.isEmpty() && effectiveRoadIds.isNotEmpty()) replaceEdgeRoads(existing.id, effectiveRoadIds)
             return existing.id
         }
-        return db.insert(
+        val id = db.insert(
             "edges",
             null,
             ContentValues().apply {
@@ -485,9 +497,11 @@ class MapRepository(private val helper: MapDb) {
                 put("last_seen", seenAt)
                 if (fromNodeId != null) put("from_node_id", fromNodeId)
                 if (toNodeId != null) put("to_node_id", toNodeId)
-                if (roadId != null) put("road_id", roadId)
+                if (effectiveRoadIds.isNotEmpty()) put("road_id", effectiveRoadIds.first())
             },
         )
+        if (effectiveRoadIds.isNotEmpty()) replaceEdgeRoads(id, effectiveRoadIds)
+        return id
     }
 
     /**
@@ -497,7 +511,15 @@ class MapRepository(private val helper: MapDb) {
     fun renameEdge(id: Long, name: String?) {
         val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
         db.transaction {
-            val roadId = trimmed?.let { ensureRoad(it, "user") }
+            val roadId = trimmed?.let { ensureRoad(it, "user") }?.takeIf { it > 0 }
+            if (roadId != null) {
+                db.insertWithOnConflict(
+                    "edge_roads",
+                    null,
+                    ContentValues().apply { put("edge_id", id); put("road_id", roadId) },
+                    SQLiteDatabase.CONFLICT_IGNORE,
+                )
+            }
             db.update(
                 "edges",
                 ContentValues().apply {
@@ -507,29 +529,21 @@ class MapRepository(private val helper: MapDb) {
                 "id = ?",
                 arrayOf(id.toString()),
             )
-            val edge = edge(id) ?: return@transaction
-            db.update(
-                "legs",
-                ContentValues().apply { put("label", edge.preferredLabel) },
-                "edge_id = ?",
-                arrayOf(id.toString()),
-            )
+            relabelEdge(id)
         }
     }
 
-    fun setEdgeRoad(id: Long, roadId: Long?) {
+    fun setEdgeRoads(id: Long, roadIds: Collection<Long>) {
+        val chosen = roadIds.distinct()
         db.transaction {
-            val roadName = roadId?.let { rid ->
-                db.rawQuery("SELECT name FROM roads WHERE id = ?", arrayOf(rid.toString())).use { c ->
-                    if (c.moveToFirst()) c.getString(0) else null
-                }
-            }
+            replaceEdgeRoads(id, chosen)
+            val primaryName = chosen.firstOrNull()?.let { rid -> roadName(rid) }
             db.update(
                 "edges",
                 ContentValues().apply {
-                    if (roadName != null) {
-                        put("user_name", roadName)
-                        put("road_id", roadId)
+                    if (primaryName != null) {
+                        put("user_name", primaryName)
+                        put("road_id", chosen.first())
                     } else {
                         putNull("user_name")
                         putNull("road_id")
@@ -538,14 +552,37 @@ class MapRepository(private val helper: MapDb) {
                 "id = ?",
                 arrayOf(id.toString()),
             )
-            val edge = edge(id) ?: return@transaction
-            db.update(
-                "legs",
-                ContentValues().apply { put("label", edge.preferredLabel) },
-                "edge_id = ?",
-                arrayOf(id.toString()),
+            relabelEdge(id)
+        }
+    }
+
+    fun setEdgeRoad(id: Long, roadId: Long?) = setEdgeRoads(id, listOfNotNull(roadId))
+
+    private fun replaceEdgeRoads(edgeId: Long, roadIds: Collection<Long>) {
+        db.delete("edge_roads", "edge_id = ?", arrayOf(edgeId.toString()))
+        for (roadId in roadIds.distinct()) {
+            db.insertWithOnConflict(
+                "edge_roads",
+                null,
+                ContentValues().apply { put("edge_id", edgeId); put("road_id", roadId) },
+                SQLiteDatabase.CONFLICT_IGNORE,
             )
         }
+    }
+
+    private fun roadName(id: Long): String? =
+        db.rawQuery("SELECT name FROM roads WHERE id = ?", arrayOf(id.toString())).use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        }
+
+    private fun relabelEdge(edgeId: Long) {
+        val edge = edge(edgeId) ?: return
+        db.update(
+            "legs",
+            ContentValues().apply { put("label", edge.preferredLabel) },
+            "edge_id = ?",
+            arrayOf(edgeId.toString()),
+        )
     }
 
     // ------------------------------------------------------------- points
@@ -631,6 +668,7 @@ class MapRepository(private val helper: MapDb) {
                     )
                 }
             }
+            relabelEdgesTouching(distinct.map { it.key })
         }
     }
 
@@ -1020,6 +1058,12 @@ class MapRepository(private val helper: MapDb) {
             "UPDATE edges SET user_name = ? WHERE road_id = ? AND user_name = ?",
             arrayOf<Any>(trimmed, id, old),
         )
+        // Keep edge_roads links; road name is in roads table. Relabel legs for affected edges.
+        val edgeIds = ArrayList<Long>()
+        db.rawQuery("SELECT edge_id FROM edge_roads WHERE road_id = ?", arrayOf(id.toString())).use { c ->
+            while (c.moveToNext()) edgeIds += c.getLong(0)
+        }
+        for (edgeId in edgeIds) relabelEdge(edgeId)
         true
     }
 
@@ -1027,9 +1071,30 @@ class MapRepository(private val helper: MapDb) {
         val name = db.rawQuery("SELECT name FROM roads WHERE id = ?", arrayOf(id.toString())).use { c ->
             if (c.moveToFirst()) c.getString(0) else null
         } ?: return@transaction false
-        db.execSQL("UPDATE edges SET road_id = NULL WHERE road_id = ?", arrayOf(id))
-        db.execSQL("UPDATE edges SET user_name = NULL WHERE user_name = ? AND road_id IS NULL", arrayOf(name))
+        val affected = ArrayList<Long>()
+        db.rawQuery("SELECT edge_id FROM edge_roads WHERE road_id = ?", arrayOf(id.toString())).use { c ->
+            while (c.moveToNext()) affected += c.getLong(0)
+        }
+        db.execSQL("DELETE FROM edge_roads WHERE road_id = ?", arrayOf(id))
         db.execSQL("DELETE FROM node_roads WHERE road_id = ?", arrayOf(id))
+        for (edgeId in affected) {
+            val remaining = db.rawQuery("SELECT road_id FROM edge_roads WHERE edge_id = ? ORDER BY road_id LIMIT 1", arrayOf(edgeId.toString())).use { c ->
+                if (c.moveToFirst()) c.getLong(0) else null
+            }
+            val remainingName = remaining?.let { roadName(it) }
+            db.update(
+                "edges",
+                ContentValues().apply {
+                    if (remaining != null) put("road_id", remaining) else putNull("road_id")
+                    if (remainingName != null) put("user_name", remainingName) else putNull("user_name")
+                },
+                "id = ?",
+                arrayOf(edgeId.toString()),
+            )
+            relabelEdge(edgeId)
+        }
+        // Also clear legacy road_id references not in edge_roads.
+        db.execSQL("UPDATE edges SET road_id = NULL, user_name = NULL WHERE road_id = ?", arrayOf(id))
         db.delete("roads", "id = ?", arrayOf(id.toString())) > 0
     }
 
@@ -1190,14 +1255,16 @@ class MapRepository(private val helper: MapDb) {
 
     fun clearRoadNames(): Int {
         val pointRoads = count("node_roads")
-        val edgeRoads = countWhere("edges", "user_name IS NOT NULL")
+        val edgeRoads = count("edge_roads")
         val removed = pointRoads + edgeRoads
         if (removed == 0) return 0
+        val keys = pointNames().keys
         db.transaction {
             db.delete("node_roads", null, null)
+            db.delete("edge_roads", null, null)
             db.execSQL("UPDATE edges SET user_name = NULL, road_id = NULL WHERE user_name IS NOT NULL OR road_id IS NOT NULL")
-            // Keep roads table rows that may still be referenced? No references after nulling.
-            db.execSQL("DELETE FROM roads WHERE id NOT IN (SELECT road_id FROM edges WHERE road_id IS NOT NULL) AND id NOT IN (SELECT road_id FROM node_roads)")
+            db.execSQL("DELETE FROM roads WHERE id NOT IN (SELECT road_id FROM node_roads) AND id NOT IN (SELECT road_id FROM edge_roads)")
+            relabelEdgesTouching(keys)
         }
         return removed
     }
@@ -1288,7 +1355,11 @@ class MapRepository(private val helper: MapDb) {
             toName = getStringOrNull(getColumnIndexOrThrow("to_name")),
             fromNodeId = getLongOrNull(getColumnIndexOrThrow("from_node_id")),
             toNodeId = getLongOrNull(getColumnIndexOrThrow("to_node_id")),
-            roadId = getLongOrNull(getColumnIndexOrThrow("road_id")),
+            roadIds = run {
+                val raw = getStringOrNull(getColumnIndexOrThrow("road_ids"))
+                val ids = raw?.split(',')?.mapNotNull { it.trim().toLongOrNull() }?.distinct().orEmpty()
+                if (ids.isNotEmpty()) ids else getLongOrNull(getColumnIndexOrThrow("road_id"))?.let { listOf(it) }.orEmpty()
+            },
         )
     }
 

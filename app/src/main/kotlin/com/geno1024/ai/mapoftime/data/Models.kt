@@ -148,23 +148,17 @@ data class Place(
  * next fallback wins.
  *
  * Two identical names are not a pair either: both ends of a short link inside
- * one junction carry the junction's name, and "X × X" describes nothing.
+ * one junction carry the junction's name, and "X - X" describes nothing.
  *
- * A name that already contains × is a crossing of roads, not a point name.
- * Joining it with another end used to spell "gate × road × road" — three
- * parts, mixing a point with a crossing. Such a name belongs on [RoadNames]
- * as a list of roads, never here, so this returns null and the OSM name wins.
+ * Crossing names like "roadA × roadB" are valid derived point names; the edge
+ * separator is "-", so "gate - roadA × roadB" stays unambiguous.
  */
 fun pointPairName(from: String?, to: String?): String? =
-    if (from != null && to != null && from != to &&
-        !RoadNames.isComposite(from) && !RoadNames.isComposite(to)
-    ) "$from × $to" else null
+    if (from != null && to != null && from != to) "$from - $to" else null
 
-/** The same pair as a direction: "A → B"; composite road-crossing names are excluded. */
+/** The same pair as a direction: "A → B". */
 fun directionalName(from: String?, to: String?): String? =
-    if (from != null && to != null && from != to &&
-        !RoadNames.isComposite(from) && !RoadNames.isComposite(to)
-    ) "$from → $to" else null
+    if (from != null && to != null && from != to) "$from → $to" else null
 
 /**
  * The names to label the two ends of one traversal with, in the order the trip
@@ -215,9 +209,11 @@ data class Edge(
     /** Internal node ids once the v8 node table is populated. */
     val fromNodeId: Long? = null,
     val toNodeId: Long? = null,
-    /** Optional owning named road. */
-    val roadId: Long? = null,
+    /** Named roads this edge travels along; an edge may span multiple roads. */
+    val roadIds: List<Long> = emptyList(),
 ) {
+    /** Convenience: first linked road, for single-road UI paths. */
+    val roadId: Long? get() = roadIds.firstOrNull()
     val from: LatLon get() = LatLon(aLat, aLon)
     val to: LatLon get() = LatLon(bLat, bLon)
 

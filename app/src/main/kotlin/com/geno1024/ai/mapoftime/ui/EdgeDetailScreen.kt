@@ -15,8 +15,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -198,49 +198,39 @@ fun EdgeDetailScreen(
 
     if (bindingRoad) {
         val roads = viewModel.roads
-        val currentRoadId = edge?.roadId
+        var selectedRoadIds by remember(edge?.id, edge?.roadIds) { mutableStateOf(edge?.roadIds?.toSet().orEmpty()) }
         AlertDialog(
             onDismissRequest = { bindingRoad = false },
             title = { Text(stringResource(R.string.edge_bind_road_title)) },
             text = {
                 LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
-                    item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            RadioButton(selected = currentRoadId == null, onClick = null)
-                            Spacer(Modifier.width(8.dp))
-                            TextButton(onClick = {
-                                bindingRoad = false
-                                scope.launch {
-                                    viewModel.setEdgeRoad(edgeId, null)
-                                    edge = viewModel.edge(edgeId)
-                                    legs = viewModel.legsForEdge(edgeId)
-                                }
-                            }) { Text(stringResource(R.string.edge_bind_road_none)) }
-                        }
-                    }
                     items(roads, key = { it.id }) { road ->
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            RadioButton(selected = currentRoadId == road.id, onClick = null)
+                            Checkbox(
+                                checked = road.id in selectedRoadIds,
+                                onCheckedChange = { checked ->
+                                    selectedRoadIds = if (checked) selectedRoadIds + road.id else selectedRoadIds - road.id
+                                },
+                            )
                             Spacer(Modifier.width(8.dp))
-                            TextButton(onClick = {
-                                bindingRoad = false
-                                scope.launch {
-                                    viewModel.setEdgeRoad(edgeId, road.id)
-                                    edge = viewModel.edge(edgeId)
-                                    legs = viewModel.legsForEdge(edgeId)
-                                }
-                            }) { Text(road.name) }
+                            Text(road.name)
                         }
                     }
                 }
             },
-            confirmButton = {},
+            confirmButton = {
+                TextButton(onClick = {
+                    bindingRoad = false
+                    scope.launch {
+                        viewModel.setEdgeRoads(edgeId, selectedRoadIds)
+                        edge = viewModel.edge(edgeId)
+                        legs = viewModel.legsForEdge(edgeId)
+                    }
+                }) { Text(stringResource(R.string.action_save)) }
+            },
             dismissButton = {
                 TextButton(onClick = { bindingRoad = false }) {
                     Text(stringResource(R.string.action_cancel))
@@ -373,10 +363,10 @@ fun EdgeDetailScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            val linkedRoad = edge?.roadId?.let { id -> viewModel.roads.firstOrNull { it.id == id }?.name }
-                            if (linkedRoad != null) {
+                            val linkedRoads = edge?.roadIds.orEmpty().mapNotNull { id -> viewModel.roads.firstOrNull { it.id == id }?.name }
+                            if (linkedRoads.isNotEmpty()) {
                                 Text(
-                                    text = stringResource(R.string.edge_linked_road, linkedRoad),
+                                    text = stringResource(R.string.edge_linked_road, linkedRoads.joinToString("、")),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )

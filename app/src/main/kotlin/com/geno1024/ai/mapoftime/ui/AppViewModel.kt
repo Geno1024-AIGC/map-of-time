@@ -209,7 +209,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     suspend fun setEdgeRoad(edgeId: Long, roadId: Long?) {
-        withContext(container.dbDispatcher) { container.repository.setEdgeRoad(edgeId, roadId) }
+        setEdgeRoads(edgeId, listOfNotNull(roadId))
+    }
+
+    suspend fun setEdgeRoads(edgeId: Long, roadIds: Collection<Long>) {
+        withContext(container.dbDispatcher) { container.repository.setEdgeRoads(edgeId, roadIds) }
         refresh()
     }
 
@@ -710,7 +714,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     put("userName", edge.userName)
                     put("fromKey", edge.fromKey)
                     put("toKey", edge.toKey)
-                    put("roadName", edge.roadId?.let { roadsById[it]?.name })
+                    val roadNames = edge.roadIds.mapNotNull { roadsById[it]?.name }
+                    put("roadName", roadNames.firstOrNull())
+                    put("roadNames", JSONArray(roadNames))
                     put("identity", edge.identity.name)
                     put("lengthM", edge.lengthM)
                     put("fromLat", edge.aLat)

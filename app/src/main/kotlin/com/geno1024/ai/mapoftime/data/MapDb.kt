@@ -141,17 +141,47 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
             )
             """.trimIndent(),
         )
+        db.execSQL(
+            """
+            CREATE TABLE edge_roads(
+                edge_id INTEGER NOT NULL REFERENCES edges(id) ON DELETE CASCADE,
+                road_id INTEGER NOT NULL REFERENCES roads(id) ON DELETE CASCADE,
+                PRIMARY KEY(edge_id, road_id)
+            )
+            """.trimIndent(),
+        )
 
-        // Effective node label: explicit node name wins, else junction name.
+        // Effective node label: explicit node/junction name wins, else derived crossing from roads.
         db.execSQL(
             """
             CREATE VIEW node_labels AS
                 SELECT n.id AS node_id, n.ref_kind, n.ref_node_id,
-                       COALESCE(n.name, j.name) AS name
+                       COALESCE(
+                           n.name,
+                           j.name,
+                           (
+                               SELECT GROUP_CONCAT(rn, ' × ')
+                               FROM (
+                                   SELECT r.name AS rn
+                                     FROM node_roads nr
+                                     JOIN roads r ON r.id = nr.road_id
+                                    WHERE nr.node_id = n.id
+                                    ORDER BY r.name
+                               )
+                           )
+                       ) AS name
                   FROM nodes n
                   LEFT JOIN junctions j ON j.id = n.junction_id
-                 WHERE COALESCE(n.name, j.name) IS NOT NULL
-                   AND COALESCE(n.name, j.name) NOT LIKE '%×%'
+                 WHERE n.name IS NOT NULL
+                    OR j.name IS NOT NULL
+                    OR EXISTS (SELECT 1 FROM node_roads nr WHERE nr.node_id = n.id)
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE VIEW point_labels AS
+                SELECT ref_kind AS kind, ref_node_id AS node_id, name
+                  FROM node_labels
             """.trimIndent(),
         )
 
@@ -242,6 +272,7 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
         db.execSQL("CREATE INDEX idx_edges_from_node ON edges(from_node_id)")
         db.execSQL("CREATE INDEX idx_edges_to_node ON edges(to_node_id)")
         db.execSQL("CREATE INDEX idx_edges_road ON edges(road_id)")
+        db.execSQL("CREATE INDEX idx_edge_roads_road ON edge_roads(road_id)")
         db.execSQL("CREATE INDEX idx_legs_trip ON legs(trip_id, seq)")
         db.execSQL("CREATE INDEX idx_legs_edge ON legs(edge_id)")
         db.execSQL("CREATE INDEX idx_geo_nodes_cell ON geo_nodes(cell_x, cell_y)")
@@ -434,6 +465,8 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
             )
         }
         if (oldVersion < 8) migrateToV8(db)
+        if (oldVersion < 9) migrateToV9(db)
+        if (oldVersion < 10) migrateToV10(db)
     }
 
     /**
@@ -749,11 +782,25 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
             """
             CREATE VIEW node_labels AS
                 SELECT n.id AS node_id, n.ref_kind, n.ref_node_id,
-                       COALESCE(n.name, j.name) AS name
+                       COALESCE(
+                           n.name,
+                           j.name,
+                           (
+                               SELECT GROUP_CONCAT(rn, ' × ')
+                               FROM (
+                                   SELECT r.name AS rn
+                                     FROM node_roads nr
+                                     JOIN roads r ON r.id = nr.road_id
+                                    WHERE nr.node_id = n.id
+                                    ORDER BY r.name
+                               )
+                           )
+                       ) AS name
                   FROM nodes n
                   LEFT JOIN junctions j ON j.id = n.junction_id
-                 WHERE COALESCE(n.name, j.name) IS NOT NULL
-                   AND COALESCE(n.name, j.name) NOT LIKE '%×%'
+                 WHERE n.name IS NOT NULL
+                    OR j.name IS NOT NULL
+                    OR EXISTS (SELECT 1 FROM node_roads nr WHERE nr.node_id = n.id)
             """.trimIndent(),
         )
         // Keep a compatibility view for any code still reading point_labels during transition.
@@ -780,6 +827,7 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_edges_from_node ON edges(from_node_id)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_edges_to_node ON edges(to_node_id)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_edges_road ON edges(road_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_edge_roads_road ON edge_roads(road_id)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_legs_trip ON legs(trip_id, seq)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_legs_edge ON legs(edge_id)")
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_geo_nodes_cell ON geo_nodes(cell_x, cell_y)")
@@ -836,8 +884,92 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
         }
     }
 
+    /**
+     * v9: node labels derive crossing names from node_roads, and edge endpoint
+     * pairs use "-" so crossing names (with "×") stay unambiguous.
+     */
+    private fun migrateToV9(db: SQLiteDatabase) {
+        db.execSQL("DROP VIEW IF EXISTS point_labels")
+        db.execSQL("DROP VIEW IF EXISTS node_labels")
+        db.execSQL(
+            """
+            CREATE VIEW node_labels AS
+                SELECT n.id AS node_id, n.ref_kind, n.ref_node_id,
+                       COALESCE(
+                           n.name,
+                           j.name,
+                           (
+                               SELECT GROUP_CONCAT(rn, ' × ')
+                               FROM (
+                                   SELECT r.name AS rn
+                                     FROM node_roads nr
+                                     JOIN roads r ON r.id = nr.road_id
+                                    WHERE nr.node_id = n.id
+                                    ORDER BY r.name
+                               )
+                           )
+                       ) AS name
+                  FROM nodes n
+                  LEFT JOIN junctions j ON j.id = n.junction_id
+                 WHERE n.name IS NOT NULL
+                    OR j.name IS NOT NULL
+                    OR EXISTS (SELECT 1 FROM node_roads nr WHERE nr.node_id = n.id)
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE VIEW point_labels AS
+                SELECT ref_kind AS kind, ref_node_id AS node_id, name
+                  FROM node_labels
+            """.trimIndent(),
+        )
+        // Refresh cached leg labels using derived endpoint names.
+        db.execSQL(
+            """
+            UPDATE legs SET label = COALESCE(
+                (
+                    SELECT CASE
+                        WHEN nf.name IS NOT NULL AND nt.name IS NOT NULL AND nf.name <> nt.name
+                            THEN nf.name || ' - ' || nt.name
+                        ELSE NULL
+                    END
+                      FROM edges e
+                      LEFT JOIN node_labels nf ON nf.node_id = e.from_node_id
+                      LEFT JOIN node_labels nt ON nt.node_id = e.to_node_id
+                     WHERE e.id = legs.edge_id
+                ),
+                (SELECT name FROM edges WHERE id = legs.edge_id),
+                (SELECT key FROM edges WHERE id = legs.edge_id)
+            )
+            """.trimIndent(),
+        )
+    }
+
+    /**
+     * v10: edges can span multiple roads. Move the single road_id into
+     * edge_roads; keep road_id column for legacy reads but edge_roads is truth.
+     */
+    private fun migrateToV10(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS edge_roads(
+                edge_id INTEGER NOT NULL REFERENCES edges(id) ON DELETE CASCADE,
+                road_id INTEGER NOT NULL REFERENCES roads(id) ON DELETE CASCADE,
+                PRIMARY KEY(edge_id, road_id)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            INSERT OR IGNORE INTO edge_roads(edge_id, road_id)
+            SELECT id, road_id FROM edges WHERE road_id IS NOT NULL
+            """.trimIndent(),
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_edge_roads_road ON edge_roads(road_id)")
+    }
+
     companion object {
         const val NAME = "map-of-time.db"
-        const val VERSION = 8
+        const val VERSION = 10
     }
 }
