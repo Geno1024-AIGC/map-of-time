@@ -20,16 +20,16 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-/** `4 min 12 s`, `1 h 07 min`, `42 s` — compact, no zeros padded. */
+/** `1:07:42`, `4:12`, `0:42` — colon-separated duration. */
 fun formatDuration(ms: Long): String {
     val totalSeconds = (ms / 1000).coerceAtLeast(0)
     val hours = totalSeconds / 3600
     val minutes = (totalSeconds % 3600) / 60
     val seconds = totalSeconds % 60
     return when {
-        hours > 0 -> "%d h %02d min".format(hours, minutes)
-        minutes > 0 -> "%d min %02d s".format(minutes, seconds)
-        else -> "%d s".format(seconds)
+        hours > 0 -> "%d:%02d:%02d".format(hours, minutes, seconds)
+        minutes > 0 -> "%d:%02d".format(minutes, seconds)
+        else -> "0:%02d".format(seconds)
     }
 }
 
