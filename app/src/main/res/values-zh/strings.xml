@@ -31,11 +31,11 @@
     <string name="nav_network">路网</string>
 
     <string name="place_name_title">命名这个路口</string>
-    <string name="place_name_hint">路口名称</string>
+    <string name="place_name_hint">物理名称（可选，如北门）</string>
     <string name="place_name_apply">命名</string>
     <string name="place_summary">%1$d 个点 · 跨度 %2$s</string>
-    <string name="place_body">这些点都会用这个名字；以后路口里新出现的点会自动加入，不用再命名一次。</string>
-    <string name="place_clear_hint">留空则解散这个路口，各点退回到自己的名字或所在道路。</string>
+    <string name="place_body">可以填物理名称，也可以在下方选择交叉道路，由系统推导交叉名。所选点都会使用该结果；路口内后续出现的新点会自动加入。</string>
+    <string name="place_clear_hint">物理名称留空且清空道路，则解散这个路口；各点退回到自己的名字或派生标注。</string>
     <string name="place_only_point">只命名这一个点</string>
     <string name="place_preview_name">命名这些点</string>
     <string name="place_preview_wider">扩大范围</string>
@@ -43,8 +43,10 @@
     <string name="place_preview_hint">虚线圈是这个路口认领的范围。还没保存，看清楚了再命名；大立交可以点「扩大范围」。</string>
     <string name="place_overridden">其中 %1$d 个点已有自己的名字</string>
     <string name="place_overridden_hint">单点名字优先于路口名。打开这个开关，让路口名接管它们。</string>
-    <string name="point_roads_hint">这个点所在的路（根据附近边推断，点选即确认）</string>
-    <string name="point_roads_none">暂时没有可推断的路名。先给某段路填写路名。</string>
+    <string name="point_roads_hint">交叉道路（选择后可推导出如 A × B 的名称）</string>
+    <string name="point_roads_none">暂时没有可推断的路名。可先给边绑定道路，或在边上填写路名。</string>
+    <string name="point_derived_name">派生交叉名：%1$s</string>
+    <string name="point_infer_roads_from_edge">可从边推断的道路候选：%1$s</string>
     <string name="place_name_action">命名路口</string>
     <string name="place_member_count">这个路口共 %1$d 个点</string>
     <string name="edge_inside_junction">%1$s 路口内</string>
@@ -188,7 +190,7 @@
     <string name="edge_to">终点</string>
     <string name="edge_open_in_network">在路网中查看</string>
     <string name="edge_from_points">端点：%1$s</string>
-    <string name="point_name_hint">例如：小区北门</string>
+    <string name="point_name_hint">物理名称（可选，例如：小区北门）</string>
     <string name="point_unnamed">未命名</string>
     <string name="edge_osm_name">OSM：%1$s</string>
     <string name="edge_directions">按方向</string>

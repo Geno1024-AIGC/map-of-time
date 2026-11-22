@@ -54,6 +54,7 @@ import com.geno1024.ai.mapoftime.core.TrackPoint
 import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.MatchKind
 import com.geno1024.ai.mapoftime.data.Edge
+import com.geno1024.ai.mapoftime.data.RoadNames
 import com.geno1024.ai.mapoftime.data.Trip
 import com.geno1024.ai.mapoftime.data.traversalEndNames
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
@@ -1091,6 +1092,13 @@ private fun LegEditDialog(
                     PointRoadsPicker(fromCandidates, fromRoads) { road ->
                         fromRoads = if (road in fromRoads) fromRoads - road else fromRoads + road
                     }
+                    RoadNames.join(fromRoads)?.let { derived ->
+                        Text(
+                            text = stringResource(R.string.point_derived_name, derived),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (fromName.trim().isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 if (toPoint != null) {
                     NameField(
@@ -1101,6 +1109,13 @@ private fun LegEditDialog(
                     )
                     PointRoadsPicker(toCandidates, toRoads) { road ->
                         toRoads = if (road in toRoads) toRoads - road else toRoads + road
+                    }
+                    RoadNames.join(toRoads)?.let { derived ->
+                        Text(
+                            text = stringResource(R.string.point_derived_name, derived),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (toName.trim().isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
                 Text(

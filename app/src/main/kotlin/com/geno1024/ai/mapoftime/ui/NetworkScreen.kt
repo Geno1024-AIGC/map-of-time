@@ -42,6 +42,7 @@ import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.PointRef
+import com.geno1024.ai.mapoftime.data.RoadNames
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
 import com.geno1024.ai.mapoftime.ui.map.MapRing
 import com.geno1024.ai.mapoftime.ui.map.TrackMap
@@ -182,14 +183,17 @@ fun NetworkScreen(
     }
 
     namingPlace?.let { draft ->
+        val initialRoadsSet = viewModel.roadsAt(draft.refs)
+        val rawInitial = viewModel.placeName(draft.existingPlaceId) ?: selected?.name.orEmpty()
+        val physicalInitial = if (RoadNames.isComposite(rawInitial) && rawInitial == RoadNames.join(initialRoadsSet)) "" else rawInitial
         PlaceNameDialog(
-            initial = viewModel.placeName(draft.existingPlaceId) ?: selected?.name.orEmpty(),
+            initial = physicalInitial,
             pointCount = draft.count,
             spanM = draft.spanM,
             named = draft.existingPlaceId != null,
             overriddenCount = viewModel.overriddenMembers(draft),
             roadCandidates = viewModel.pointRoadCandidatesFor(draft.refs),
-            initialRoads = viewModel.roadsAt(draft.refs),
+            initialRoads = initialRoadsSet,
             onDismiss = {
                 namingPlace = null
                 preview = null

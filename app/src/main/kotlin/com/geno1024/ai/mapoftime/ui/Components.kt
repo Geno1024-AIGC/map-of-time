@@ -40,6 +40,7 @@ import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.core.Confidence
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.MatchKind
+import com.geno1024.ai.mapoftime.data.RoadNames
 
 /** A rounded block with an optional heading; the only container the screens use. */
 @Composable
@@ -456,6 +457,15 @@ fun PlaceNameDialog(
                 Spacer(Modifier.height(10.dp))
                 PointRoadsPicker(roadCandidates, roads) { road ->
                     roads = if (road in roads) roads - road else roads + road
+                }
+                val derived = RoadNames.join(roads)
+                if (derived != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.point_derived_name, derived),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (text.trim().isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(

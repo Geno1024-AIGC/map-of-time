@@ -43,8 +43,10 @@
     <string name="place_preview_hint">The dashed circle is the ground this junction claims. Nothing is saved until you name it. If it is a big interchange, tap Wider.</string>
     <string name="place_overridden">%1$d points already have their own names</string>
     <string name="place_overridden_hint">Their own name wins over the junction\'s. Turn this on to let the junction name cover them.</string>
-    <string name="point_roads_hint">Roads at this point (suggested from nearby edges — tap to confirm)</string>
-    <string name="point_roads_none">No road names to suggest yet. Type a road name on an edge first.</string>
+    <string name="point_roads_hint">Crossing roads (select to derive a name like A × B)</string>
+    <string name="point_roads_none">No road names to suggest yet. Bind a road to an edge or type a road name.</string>
+    <string name="point_derived_name">Derived crossing name: %1$s</string>
+    <string name="point_infer_roads_from_edge">Edge roads available as candidates: %1$s</string>
     <string name="place_name_action">Name junction</string>
     <string name="place_member_count">%1$d points share this name</string>
     <string name="edge_inside_junction">inside %1$s</string>
@@ -188,7 +190,7 @@
     <string name="edge_to">To</string>
     <string name="edge_open_in_network">View in network</string>
     <string name="edge_from_points">Ends: %1$s</string>
-    <string name="point_name_hint">e.g. north gate</string>
+    <string name="point_name_hint">Physical name (optional, e.g. north gate)</string>
     <string name="point_unnamed">Unnamed</string>
     <string name="edge_osm_name">OSM: %1$s</string>
     <string name="edge_directions">By direction</string>

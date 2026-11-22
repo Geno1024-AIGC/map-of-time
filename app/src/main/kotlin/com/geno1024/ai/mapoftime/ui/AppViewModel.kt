@@ -257,9 +257,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     /** The same inference over every point a junction covers. */
     fun pointRoadCandidatesFor(refs: Collection<PointRef>): List<String> {
         val keys = refs.map { it.key }.toSet()
-        val fromSegments = summaries.map { it.edge }
-            .filter { it.fromKey in keys || it.toKey in keys }
-            .mapNotNull { it.userName?.trim()?.takeIf(String::isNotBlank) }
+        val roadNameById = roads.associate { it.id to it.name }
+        val touching = summaries.map { it.edge }.filter { it.fromKey in keys || it.toKey in keys }
+        val fromSegments = touching.flatMap { edge ->
+            edge.roadIds.mapNotNull { roadNameById[it] } + listOfNotNull(edge.userName?.trim()?.takeIf(String::isNotBlank))
+        }
         val neighbours = refs.flatMap { ref ->
             val place = placeOf(ref)
             if (place != null) {

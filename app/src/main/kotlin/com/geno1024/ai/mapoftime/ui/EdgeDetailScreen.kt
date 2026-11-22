@@ -56,6 +56,7 @@ import com.geno1024.ai.mapoftime.core.samples
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.PointRef
+import com.geno1024.ai.mapoftime.data.RoadNames
 import com.geno1024.ai.mapoftime.data.Edge
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
 import com.geno1024.ai.mapoftime.ui.map.MapRing
@@ -242,20 +243,23 @@ fun EdgeDetailScreen(
     // Naming a junction names every point the app grouped under it, which is
     // the only way a crossing with a dozen corners stays one action.
     namingPlace?.let { draft ->
+        val initialRoadsSet = viewModel.roadsAt(draft.refs)
+        val rawInitial = viewModel.placeName(draft.existingPlaceId) ?: draft.seed.key.let { key ->
+            when (key) {
+                edge?.fromKey -> edge?.fromName
+                edge?.toKey -> edge?.toName
+                else -> null
+            }
+        }.orEmpty()
+        val physicalInitial = if (RoadNames.isComposite(rawInitial) && rawInitial == RoadNames.join(initialRoadsSet)) "" else rawInitial
         PlaceNameDialog(
-            initial = viewModel.placeName(draft.existingPlaceId) ?: draft.seed.key.let { key ->
-                when (key) {
-                    edge?.fromKey -> edge?.fromName
-                    edge?.toKey -> edge?.toName
-                    else -> null
-                }
-            }.orEmpty(),
+            initial = physicalInitial,
             pointCount = draft.count,
             spanM = draft.spanM,
             named = draft.existingPlaceId != null,
             overriddenCount = viewModel.overriddenMembers(draft),
             roadCandidates = viewModel.pointRoadCandidatesFor(draft.refs),
-            initialRoads = viewModel.roadsAt(draft.refs),
+            initialRoads = initialRoadsSet,
             onDismiss = {
                 namingPlace = null
                 preview = null
@@ -393,11 +397,14 @@ fun EdgeDetailScreen(
                     val fromPoint = edge?.fromPoint
                     val toPoint = edge?.toPoint
                     if (fromPoint != null && toPoint != null) {
+                        val edgeRoadNames = edge?.roadIds.orEmpty().mapNotNull { id -> viewModel.roads.firstOrNull { it.id == id }?.name }
                         ThinDivider()
+                        val fromInferred = edgeRoadNames.filter { it !in viewModel.roadsAt(listOf(fromPoint)) }.takeIf { it.isNotEmpty() }
                         EndpointRow(
                             label = stringResource(R.string.edge_from),
                             name = edge?.fromName,
                             note = placeNote(viewModel, fromPoint),
+                            suggestion = fromInferred?.let { stringResource(R.string.point_infer_roads_from_edge, it.joinToString("、")) },
                             onName = {
                                 previewAt = edge?.from
                                 previewReach = PlaceDrafts.SPAN_M
@@ -405,10 +412,12 @@ fun EdgeDetailScreen(
                             },
                             onOpenNetwork = { onOpenNode(fromPoint.key) },
                         )
+                        val toInferred = edgeRoadNames.filter { it !in viewModel.roadsAt(listOf(toPoint)) }.takeIf { it.isNotEmpty() }
                         EndpointRow(
                             label = stringResource(R.string.edge_to),
                             name = edge?.toName,
                             note = placeNote(viewModel, toPoint),
+                            suggestion = toInferred?.let { stringResource(R.string.point_infer_roads_from_edge, it.joinToString("、")) },
                             onName = {
                                 previewAt = edge?.to
                                 previewReach = PlaceDrafts.SPAN_M
@@ -904,6 +913,7 @@ private fun EndpointRow(
     label: String,
     name: String?,
     note: String?,
+    suggestion: String? = null,
     onName: () -> Unit,
     onOpenNetwork: () -> Unit,
 ) {
@@ -923,6 +933,13 @@ private fun EndpointRow(
                     text = note,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (suggestion != null) {
+                Text(
+                    text = suggestion,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
         }
