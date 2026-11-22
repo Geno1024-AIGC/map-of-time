@@ -41,20 +41,20 @@ class SegmentNameTest {
 
     @Test
     fun twoNamedEndsNameTheSegment() {
-        assertEquals("north gate – metro", segment(null, fromName = "north gate", toName = "metro").displayName)
+        assertEquals("north gate × metro", segment(null, fromName = "north gate", toName = "metro").displayName)
     }
 
     @Test
     fun thePointPairOutranksTheOsmName() {
         assertEquals(
-            "north gate – metro",
+            "north gate × metro",
             segment("Main Street", fromName = "north gate", toName = "metro").displayName,
         )
     }
 
     @Test
     fun oneNamedEndIsNotEnough() {
-        // "north gate – ..." says less than the road's own name, so OSM wins.
+        // "north gate × ..." says less than the road's own name, so OSM wins.
         assertNull(segment("Main Street", fromName = "north gate").pointName)
         assertEquals("Main Street", segment("Main Street", fromName = "north gate").displayName)
     }
@@ -62,7 +62,7 @@ class SegmentNameTest {
     @Test
     fun twoEndsWithTheSameJunctionNameAreNotAPair() {
         // Both ends of a link inside one junction carry the junction's name.
-        // "X – X" describes nothing, so the road's own name takes over.
+        // "X × X" describes nothing, so the road's own name takes over.
         val inside = segment("Jianguo Road", fromName = "Renmin × Jianguo", toName = "Renmin × Jianguo")
         assertNull(inside.pointName)
         assertNull(inside.forwardName)

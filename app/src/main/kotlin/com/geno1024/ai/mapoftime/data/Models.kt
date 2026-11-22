@@ -119,16 +119,19 @@ data class Place(
 )
 
 /**
- * "A → B" when both ends are named. One name alone says nothing useful about
+ * "A × B" when both ends are named. One name alone says nothing useful about
  * the piece between the ends, so it stays null and the next fallback wins.
  *
  * Two identical names are not a pair either: both ends of a short link inside
- * one junction carry the junction's name, and "X – X" describes nothing. That
+ * one junction carry the junction's name, and "X × X" describes nothing. That
  * piece falls back to the road it belongs to, or to the name the user gave the
  * segment itself.
+ *
+ * The same × a derived crossing caption uses: two named ends, one separator
+ * for every combination, so the app spells a pair the same way everywhere.
  */
 fun pointPairName(from: String?, to: String?): String? =
-    if (from != null && to != null && from != to) "$from – $to" else null
+    if (from != null && to != null && from != to) "$from × $to" else null
 
 /** The same pair as a direction: "A → B". */
 fun directionalName(from: String?, to: String?): String? =
@@ -184,7 +187,7 @@ data class Segment(
 
     /**
      * The name the two endpoint names spell out. Only when both ends are named:
-     * "north gate – metro" is useful, "north gate – ..." is not.
+     * "north gate × metro" is useful, "north gate × ..." is not.
      */
     val pointName: String? get() = pointPairName(fromName, toName)
 
