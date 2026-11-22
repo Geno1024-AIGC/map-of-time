@@ -309,6 +309,9 @@
     <string name="settings_roads_rename_title">Rename road</string>
     <string name="settings_roads_delete_confirm">Delete road “%1$s”? Edges keep their geometry, but this road link is removed.</string>
     <string name="edge_linked_road">Road: %1$s</string>
+    <string name="edge_bind_road">Bind road</string>
+    <string name="edge_bind_road_title">Bind edge to road</string>
+    <string name="edge_bind_road_none">No road</string>
     <string name="settings_attribution">Map data © OpenStreetMap contributors</string>
     <plurals name="samples_count">
         <item quantity="one">%1$d sample</item>

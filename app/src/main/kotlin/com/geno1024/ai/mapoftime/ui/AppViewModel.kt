@@ -210,6 +210,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         refresh()
     }
 
+    suspend fun setEdgeRoad(edgeId: Long, roadId: Long?) {
+        withContext(container.dbDispatcher) { container.repository.setEdgeRoad(edgeId, roadId) }
+        refresh()
+    }
+
     suspend fun renameSegment(segmentId: Long, name: String?) = renameEdge(segmentId, name)
 
     /**

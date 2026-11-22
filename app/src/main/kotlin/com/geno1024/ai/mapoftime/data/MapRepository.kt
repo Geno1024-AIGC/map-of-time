@@ -541,6 +541,37 @@ class MapRepository(private val helper: MapDb) {
         }
     }
 
+    fun setEdgeRoad(id: Long, roadId: Long?) {
+        db.transaction {
+            val roadName = roadId?.let { rid ->
+                db.rawQuery("SELECT name FROM roads WHERE id = ?", arrayOf(rid.toString())).use { c ->
+                    if (c.moveToFirst()) c.getString(0) else null
+                }
+            }
+            db.update(
+                "edges",
+                ContentValues().apply {
+                    if (roadName != null) {
+                        put("user_name", roadName)
+                        put("road_id", roadId)
+                    } else {
+                        putNull("user_name")
+                        putNull("road_id")
+                    }
+                },
+                "id = ?",
+                arrayOf(id.toString()),
+            )
+            val edge = edge(id) ?: return@transaction
+            db.update(
+                "legs",
+                ContentValues().apply { put("label", edge.preferredLabel) },
+                "edge_id = ?",
+                arrayOf(id.toString()),
+            )
+        }
+    }
+
     // ------------------------------------------------------------- points
 
     /** Every point the user has named, keyed by `kind:node`. */

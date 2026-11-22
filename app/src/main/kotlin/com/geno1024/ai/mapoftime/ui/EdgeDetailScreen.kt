@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -73,6 +75,7 @@ fun EdgeDetailScreen(
     var samples by remember(edgeId) { mutableStateOf<List<TraversalSample>>(emptyList()) }
     var legs by remember(edgeId) { mutableStateOf<List<Leg>>(emptyList()) }
     var renaming by remember { mutableStateOf(false) }
+    var bindingRoad by remember { mutableStateOf(false) }
     // Same two steps as the network screen: preview the circle, then name it.
     var preview by remember { mutableStateOf<PlaceDraft?>(null) }
     var previewAt by remember { mutableStateOf<com.geno1024.ai.mapoftime.core.LatLon?>(null) }
@@ -187,6 +190,59 @@ fun EdgeDetailScreen(
                     viewModel.renameEdge(edgeId, name)
                     edge = viewModel.edge(edgeId)
                     legs = viewModel.legsForEdge(edgeId)
+                }
+            },
+        )
+    }
+
+    if (bindingRoad) {
+        val roads = viewModel.roads
+        val currentRoadId = edge?.roadId
+        AlertDialog(
+            onDismissRequest = { bindingRoad = false },
+            title = { Text(stringResource(R.string.edge_bind_road_title)) },
+            text = {
+                LazyColumn {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = currentRoadId == null, onClick = null)
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = {
+                                bindingRoad = false
+                                scope.launch {
+                                    viewModel.setEdgeRoad(edgeId, null)
+                                    edge = viewModel.edge(edgeId)
+                                    legs = viewModel.legsForEdge(edgeId)
+                                }
+                            }) { Text(stringResource(R.string.edge_bind_road_none)) }
+                        }
+                    }
+                    items(roads, key = { it.id }) { road ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = currentRoadId == road.id, onClick = null)
+                            Spacer(Modifier.width(8.dp))
+                            TextButton(onClick = {
+                                bindingRoad = false
+                                scope.launch {
+                                    viewModel.setEdgeRoad(edgeId, road.id)
+                                    edge = viewModel.edge(edgeId)
+                                    legs = viewModel.legsForEdge(edgeId)
+                                }
+                            }) { Text(road.name) }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { bindingRoad = false }) {
+                    Text(stringResource(R.string.action_cancel))
                 }
             },
         )
@@ -325,16 +381,21 @@ fun EdgeDetailScreen(
                                 )
                             }
                         }
-                        TextButton(onClick = { renaming = true }) {
-                            Text(
-                                stringResource(
-                                    if (edge?.userName == null) {
-                                        R.string.segment_name_add
-                                    } else {
-                                        R.string.action_edit
-                                    },
-                                ),
-                            )
+                        Column(horizontalAlignment = Alignment.End) {
+                            TextButton(onClick = { renaming = true }) {
+                                Text(
+                                    stringResource(
+                                        if (edge?.userName == null) {
+                                            R.string.segment_name_add
+                                        } else {
+                                            R.string.action_edit
+                                        },
+                                    ),
+                                )
+                            }
+                            TextButton(onClick = { bindingRoad = true }) {
+                                Text(stringResource(R.string.edge_bind_road))
+                            }
                         }
                     }
 
