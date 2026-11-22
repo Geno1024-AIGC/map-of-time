@@ -21,13 +21,13 @@ data class NetworkNode(
 }
 
 /**
- * One segment as seen from one of its ends. Which end is being looked at
+ * One edge as seen from one of its ends. Which end is being looked at
  * decides which direction's numbers apply: `forward` samples left the
- * segment's `from`, `backward` samples arrived at it.
+ * edge's `from`, `backward` samples arrived at it.
  */
 data class NetworkLink(
-    val summary: SegmentSummary,
-    /** True when the node holding this link is the segment's `from` end. */
+    val summary: EdgeSummary,
+    /** True when the node holding this link is the edge's `from` end. */
     val fromHere: Boolean,
     /** The node at the far end, so the caller can name it without a second pass. */
     val otherKey: String,
@@ -40,15 +40,18 @@ data class NetworkLink(
 }
 
 /**
- * The segments the user has travelled, arranged by the junctions they share.
+ * The edges the user has travelled, arranged by the junctions they share.
  * Pure data: no map, no database, so the shape can be unit-tested.
  */
 data class NetworkGraph(
     val nodes: List<NetworkNode>,
-    val segments: List<SegmentSummary>,
+    val edges: List<EdgeSummary>,
     /** How many groups of nodes are not connected to each other. */
     val parts: Int,
 ) {
+    /** Compatibility while callers migrate from segment terminology. */
+    val segments: List<EdgeSummary> get() = edges
+
     fun node(key: String?): NetworkNode? =
         if (key == null) null else nodes.firstOrNull { it.key == key }
 
@@ -59,11 +62,11 @@ data class NetworkGraph(
 
 object NetworkGraphs {
     /**
-     * Groups [summaries] by shared endpoint identity. Segments without a
+     * Groups [summaries] by shared endpoint identity. Edges without a
      * parseable point key (old `mix:` rows) fall back to their coordinates, so
      * they still connect to something instead of each becoming an island.
      */
-    fun build(summaries: List<SegmentSummary>): NetworkGraph {
+    fun build(summaries: List<EdgeSummary>): NetworkGraph {
         if (summaries.isEmpty()) return NetworkGraph.EMPTY
 
         val nodes = LinkedHashMap<String, Accumulator>()
@@ -85,17 +88,17 @@ object NetworkGraphs {
         }
 
         for (summary in summaries) {
-            val segment = summary.segment
-            val fromKey = nodeKey(segment.fromKey, segment.from)
-            val toKey = nodeKey(segment.toKey, segment.to)
-            nodes.getOrPut(fromKey) { Accumulator(segment.from) }.also {
-                if (it.name == null) it.name = segment.fromName
+            val edge = summary.edge
+            val fromKey = nodeKey(edge.fromKey, edge.from)
+            val toKey = nodeKey(edge.toKey, edge.to)
+            nodes.getOrPut(fromKey) { Accumulator(edge.from) }.also {
+                if (it.name == null) it.name = edge.fromName
             }
-            nodes.getOrPut(toKey) { Accumulator(segment.to) }.also {
-                if (it.name == null) it.name = segment.toName
+            nodes.getOrPut(toKey) { Accumulator(edge.to) }.also {
+                if (it.name == null) it.name = edge.toName
             }
-            // A degenerate segment whose two ends collapsed onto one identity
-            // cannot add an edge; drawing it twice would inflate the degree.
+            // A degenerate edge whose two ends collapsed onto one identity
+            // cannot add a link; drawing it twice would inflate the degree.
             if (fromKey == toKey) continue
 
             nodes.getValue(fromKey).links += NetworkLink(summary, fromHere = true, otherKey = toKey)
@@ -110,7 +113,7 @@ object NetworkGraphs {
             }.sortedWith(
                 compareByDescending<NetworkNode> { it.degree }.thenBy { it.key },
             ),
-            segments = summaries,
+            edges = summaries,
             parts = parts,
         )
     }

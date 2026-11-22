@@ -3,17 +3,17 @@ package com.geno1024.ai.mapoftime.analysis
 import com.geno1024.ai.mapoftime.core.BucketTake
 import com.geno1024.ai.mapoftime.core.DurationStats
 import com.geno1024.ai.mapoftime.core.TrafficContext
-import com.geno1024.ai.mapoftime.data.Segment
+import com.geno1024.ai.mapoftime.data.Edge
 
-/** A segment together with everything its samples say about it. */
-data class SegmentSummary(
-    val segment: Segment,
+/** An edge together with everything its samples say about it. */
+data class EdgeSummary(
+    val edge: Edge,
     val combined: DurationStats,
     val forward: DurationStats,
     val backward: DurationStats,
     /**
      * The typical time in each part of the week, per direction. The list uses
-     * it to answer "how long does this take now"; the segment page recomputes
+     * it to answer "how long does this take now"; the edge page recomputes
      * the full statistics from the samples instead.
      */
     val forwardTakes: Map<TrafficContext, BucketTake> = emptyMap(),
@@ -26,4 +26,8 @@ data class SegmentSummary(
     val backwardFridayRush: BucketTake = BucketTake.NONE,
 ) {
     val sampleCount: Int get() = combined.count
+    /** Compatibility while callers migrate from segment terminology. */
+    val segment: Edge get() = edge
 }
+
+typealias SegmentSummary = EdgeSummary

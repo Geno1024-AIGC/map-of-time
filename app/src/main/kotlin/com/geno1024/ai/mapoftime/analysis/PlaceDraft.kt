@@ -2,9 +2,9 @@ package com.geno1024.ai.mapoftime.analysis
 
 import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.LatLon
+import com.geno1024.ai.mapoftime.data.Edge
 import com.geno1024.ai.mapoftime.data.Place
 import com.geno1024.ai.mapoftime.data.PointRef
-import com.geno1024.ai.mapoftime.data.Segment
 
 /** One point that a proposed junction would cover. */
 data class PlaceMember(val ref: PointRef, val at: LatLon, val distanceM: Double)
@@ -101,7 +101,7 @@ object PlaceDrafts {
 
     fun draft(
         seed: PointRef,
-        segments: List<Segment>,
+        edges: List<Edge>,
         places: List<Place> = emptyList(),
         /** Where the seed is, when no stored segment mentions it. */
         fallbackAt: LatLon? = null,
@@ -132,17 +132,17 @@ object PlaceDrafts {
         val nearLimit = NEAR_M * scale
         val refs = HashMap<String, PointRef>()
         val at = HashMap<String, LatLon>()
-        val edges = HashMap<String, MutableList<Pair<String, Double>>>()
-        for (segment in segments) {
-            val from = segment.fromPoint ?: continue
-            val to = segment.toPoint ?: continue
+        val adjacency = HashMap<String, MutableList<Pair<String, Double>>>()
+        for (edge in edges) {
+            val from = edge.fromPoint ?: continue
+            val to = edge.toPoint ?: continue
             refs.putIfAbsent(from.key, from)
             refs.putIfAbsent(to.key, to)
-            at.putIfAbsent(from.key, segment.from)
-            at.putIfAbsent(to.key, segment.to)
+            at.putIfAbsent(from.key, edge.from)
+            at.putIfAbsent(to.key, edge.to)
             if (from.key == to.key) continue
-            edges.getOrPut(from.key) { ArrayList() } += to.key to segment.lengthM
-            edges.getOrPut(to.key) { ArrayList() } += from.key to segment.lengthM
+            adjacency.getOrPut(from.key) { ArrayList() } += to.key to edge.lengthM
+            adjacency.getOrPut(to.key) { ArrayList() } += from.key to edge.lengthM
         }
         if (seed.key !in at && fallbackAt != null) {
             refs[seed.key] = seed
@@ -182,7 +182,7 @@ object PlaceDrafts {
         // reaches it; nor is the short piece joining its entrance to its exit.
         // Manual picks override this — the user can still add one on purpose.
         val protected = HashSet<String>(namedKeys)
-        for ((key, links) in edges) {
+        for ((key, links) in adjacency) {
             if (key in namedKeys) {
                 links.forEach { (other, length) ->
                     if (length <= edgeLimit) protected += other
@@ -204,7 +204,7 @@ object PlaceDrafts {
             for (key in snapshot) {
                 val here = at[key] ?: continue
                 val candidates = ArrayList<String>()
-                edges[key]?.forEach { (other, length) ->
+                adjacency[key]?.forEach { (other, length) ->
                     if (length <= edgeLimit) candidates += other
                 }
                 for (other in window) {

@@ -2,7 +2,7 @@ package com.geno1024.ai.mapoftime.analysis
 
 import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.data.RoadNames
-import com.geno1024.ai.mapoftime.data.Segment
+import com.geno1024.ai.mapoftime.data.Edge
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -60,7 +60,7 @@ object PointDetails {
         point: LatLon,
         centre: LatLon,
         placeName: String? = null,
-        touching: List<Segment> = emptyList(),
+        touching: List<Edge> = emptyList(),
         explicitRoads: Collection<String> = emptyList(),
     ): PointDetail {
         val chosen = explicitRoads.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
@@ -75,9 +75,9 @@ object PointDetails {
     }
 
     /** The user's road name wins; OSM is the fallback when there is none. */
-    private fun roadName(segment: Segment): String? =
-        segment.userName?.trim()?.takeIf(String::isNotBlank)
-            ?: segment.name?.trim()?.takeIf(String::isNotBlank)
+    private fun roadName(edge: Edge): String? =
+        edge.userName?.trim()?.takeIf(String::isNotBlank)
+            ?: edge.name?.trim()?.takeIf(String::isNotBlank)
 
     private fun bearing(point: LatLon, centre: LatLon): String? {
         val north = (point.lat - centre.lat) * METERS_PER_DEGREE

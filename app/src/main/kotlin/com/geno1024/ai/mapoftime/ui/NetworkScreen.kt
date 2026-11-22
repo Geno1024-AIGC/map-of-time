@@ -55,7 +55,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun NetworkScreen(
     viewModel: AppViewModel,
-    onOpenSegment: (Long) -> Unit,
+    onOpenEdge: (Long) -> Unit,
     /** One-shot request from a segment endpoint: preselect this node. */
     requestedNode: String? = null,
     onNodeRequestHandled: () -> Unit = {},
@@ -104,7 +104,7 @@ fun NetworkScreen(
 
     val graph = remember(viewModel.summaries, modeFilter) {
         NetworkGraphs.build(
-            viewModel.summaries.filter { modeFilter == null || it.segment.mode == modeFilter },
+            viewModel.summaries.filter { modeFilter == null || it.edge.mode == modeFilter },
         )
     }
     val selected = graph.node(selectedKey)
@@ -112,7 +112,7 @@ fun NetworkScreen(
     // One track per segment; shared junctions produce identical coordinates,
     // so the lines meet exactly where the node dots are.
     val tracks = remember(graph) {
-        graph.segments.map { listOf(it.segment.from, it.segment.to) }
+        graph.edges.map { listOf(it.edge.from, it.edge.to) }
     }
     val previewKeys = remember(preview) {
         preview?.refs?.mapTo(HashSet()) { it.key } ?: emptySet<String>()
@@ -217,20 +217,20 @@ fun NetworkScreen(
     Column(modifier.fillMaxSize()) {
         ScreenHeader(
             title = stringResource(R.string.network_title),
-            subtitle = if (graph.segments.isEmpty()) {
+            subtitle = if (graph.edges.isEmpty()) {
                 null
             } else if (graph.parts > 1) {
                 stringResource(
                     R.string.network_summary_parts,
                     graph.nodes.size,
-                    graph.segments.size,
+                    graph.edges.size,
                     graph.parts,
                 )
             } else {
                 stringResource(
                     R.string.network_summary,
                     graph.nodes.size,
-                    graph.segments.size,
+                    graph.edges.size,
                 )
             },
         )
@@ -290,7 +290,7 @@ fun NetworkScreen(
             Spacer(Modifier.height(8.dp))
         }
 
-        if (graph.segments.isEmpty()) {
+        if (graph.edges.isEmpty()) {
             EmptyState(
                 title = stringResource(R.string.network_empty_title),
                 body = stringResource(R.string.network_empty_body),
@@ -316,7 +316,7 @@ fun NetworkScreen(
                         node = selected,
                         graph = graph,
                         detail = viewModel.pointDetail(selected.key, selected.at, mode = modeFilter)?.label,
-                        onOpenSegment = onOpenSegment,
+                        onOpenEdge = onOpenEdge,
                         onNamePlace = {
                             val ref = PointRef.parse(selected.key)
                             focusNode = false
@@ -342,7 +342,7 @@ private fun NodeCard(
     graph: NetworkGraph,
     /** Auto-derived "north side · People's Rd" caption, never a typed name. */
     detail: String?,
-    onOpenSegment: (Long) -> Unit,
+    onOpenEdge: (Long) -> Unit,
     onNamePlace: () -> Unit,
 ) {
     SectionCard {
@@ -390,7 +390,7 @@ private fun NodeCard(
             LinkRow(
                 link = link,
                 other = graph.node(link.otherKey),
-                onClick = { onOpenSegment(link.summary.segment.id) },
+                onClick = { onOpenEdge(link.summary.edge.id) },
             )
         }
     }
@@ -399,7 +399,7 @@ private fun NodeCard(
 /** One segment leaving the selected junction: away first, back second. */
 @Composable
 private fun LinkRow(link: NetworkLink, other: NetworkNode?, onClick: () -> Unit) {
-    val segment = link.summary.segment
+    val segment = link.summary.edge
     Row(
         modifier = Modifier
             .fillMaxWidth()

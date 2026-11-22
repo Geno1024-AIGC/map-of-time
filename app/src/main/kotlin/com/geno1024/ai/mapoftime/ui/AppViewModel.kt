@@ -11,7 +11,7 @@ import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
 import com.geno1024.ai.mapoftime.analysis.PointDetail
 import com.geno1024.ai.mapoftime.analysis.PointDetails
-import com.geno1024.ai.mapoftime.analysis.SegmentSummary
+import com.geno1024.ai.mapoftime.analysis.EdgeSummary
 import com.geno1024.ai.mapoftime.analysis.TripAnalyzer
 import com.geno1024.ai.mapoftime.core.BucketTake
 import com.geno1024.ai.mapoftime.core.DurationStats
@@ -33,7 +33,8 @@ import com.geno1024.ai.mapoftime.data.EXPORT_FORMAT
 import com.geno1024.ai.mapoftime.data.ImportResult
 import com.geno1024.ai.mapoftime.data.Place
 import com.geno1024.ai.mapoftime.data.PointRef
-import com.geno1024.ai.mapoftime.data.Segment
+import com.geno1024.ai.mapoftime.data.Road
+import com.geno1024.ai.mapoftime.data.Edge
 import com.geno1024.ai.mapoftime.data.Trip
 import com.geno1024.ai.mapoftime.data.TripImport
 import com.geno1024.ai.mapoftime.track.Recorder
@@ -67,9 +68,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
 
     var trips by mutableStateOf<List<Trip>>(emptyList())
         private set
-    var summaries by mutableStateOf<List<SegmentSummary>>(emptyList())
+    var summaries by mutableStateOf<List<EdgeSummary>>(emptyList())
         private set
     var places by mutableStateOf<List<Place>>(emptyList())
+        private set
+    var roads by mutableStateOf<List<Road>>(emptyList())
         private set
 
     /** Names the user gave a single point; these outrank a junction's name. */
@@ -113,18 +116,18 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             loading = true
             val loaded = withContext(container.dbDispatcher) {
                 val trips = container.repository.trips()
-                val segments = container.repository.segments()
+                val edges = container.repository.edges()
                 val includePartial = settings.state.value.includePartial
                 val calendar = settings.state.value.holidayCalendar
                 val byMode = TripMode.entries.associateWith {
                     container.repository.samplesByMode(it, includePartial)
                 }
-                val summaries = segments.map { segment ->
-                    val samples = byMode[segment.mode]?.get(segment.id).orEmpty()
+                val summaries = edges.map { edge ->
+                    val samples = byMode[edge.mode]?.get(edge.id).orEmpty()
                     val forward = samples.filter { it.direction > 0 }
                     val backward = samples.filter { it.direction < 0 }
-                    SegmentSummary(
-                        segment = segment,
+                    EdgeSummary(
+                        edge = edge,
                         combined = DurationStats.of(samples),
                         forward = DurationStats.of(forward),
                         backward = DurationStats.of(backward),
@@ -133,11 +136,12 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         forwardFridayRush = takeOn(forward, calendar, TrafficDay.FRIDAY_RUSH),
                         backwardFridayRush = takeOn(backward, calendar, TrafficDay.FRIDAY_RUSH),
                     )
-                }.sortedWith(compareByDescending<SegmentSummary> { it.sampleCount }.thenBy { it.segment.displayName })
+                }.sortedWith(compareByDescending<EdgeSummary> { it.sampleCount }.thenBy { it.edge.displayName })
                 Loaded(
                     trips = trips,
                     summaries = summaries,
                     places = container.repository.places(),
+                    roads = container.repository.roads(),
                     pointNames = container.repository.pointNames(),
                     pointRoads = container.repository.pointRoads(),
                 )
@@ -145,6 +149,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             trips = loaded.trips
             summaries = loaded.summaries
             places = loaded.places
+            roads = loaded.roads
             pointNames = loaded.pointNames
             pointRoads = loaded.pointRoads
             loading = false
@@ -190,26 +195,30 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         container.repository.marks(tripId)
     }
 
-    suspend fun segment(id: Long): Segment? = withContext(container.dbDispatcher) {
-        container.repository.segment(id)
+    suspend fun edge(id: Long): Edge? = withContext(container.dbDispatcher) {
+        container.repository.edge(id)
     }
 
+    suspend fun segment(id: Long): Edge? = edge(id)
+
     /**
-     * Names a segment (or clears the name when [name] is blank) and rewrites the
-     * labels of its legs, so every screen shows the new name immediately.
+     * Names an edge (or clears the road-name input when [name] is blank) and
+     * rewrites the labels of its legs, so every screen shows the new name.
      */
-    suspend fun renameSegment(segmentId: Long, name: String?) {
-        withContext(container.dbDispatcher) { container.repository.renameSegment(segmentId, name) }
+    suspend fun renameEdge(edgeId: Long, name: String?) {
+        withContext(container.dbDispatcher) { container.repository.renameEdge(edgeId, name) }
         refresh()
     }
 
+    suspend fun renameSegment(segmentId: Long, name: String?) = renameEdge(segmentId, name)
+
     /**
-     * Road names already given to some segment. Offered as one-tap chips when
+     * Road names already given to some edge. Offered as one-tap chips when
      * naming another piece of the same road, so a name is typed once, not once
-     * per segment. Derived from what is on disk, never a second stored copy.
+     * per edge. Derived from what is on disk, never a second stored copy.
      */
     val roadNames: List<String>
-        get() = summaries.mapNotNull { it.segment.userName?.trim()?.takeIf(String::isNotBlank) }
+        get() = summaries.mapNotNull { it.edge.userName?.trim()?.takeIf(String::isNotBlank) }
             .distinct()
             .sorted()
 
@@ -283,7 +292,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         manual: Map<String, Boolean> = emptyMap(),
     ): PlaceDraft? = PlaceDrafts.draft(
         ref,
-        summaries.map { it.segment },
+        summaries.map { it.edge },
         places,
         at,
         reachM,
@@ -400,16 +409,18 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     fun overriddenMembers(draft: PlaceDraft): Int =
         draft.refs.count { pointNames.containsKey(it.key) }
 
-    suspend fun samples(segmentId: Long): List<TraversalSample> = withContext(container.dbDispatcher) {
-        container.repository.samples(segmentId, settings.state.value.includePartial)
+    suspend fun samples(edgeId: Long): List<TraversalSample> = withContext(container.dbDispatcher) {
+        container.repository.samples(edgeId, settings.state.value.includePartial)
     }
 
-    suspend fun legsForSegment(segmentId: Long): List<Leg> = withContext(container.dbDispatcher) {
-        container.repository.legsForSegment(segmentId)
+    suspend fun legsForEdge(edgeId: Long): List<Leg> = withContext(container.dbDispatcher) {
+        container.repository.legsForEdge(edgeId)
     }
+
+    suspend fun legsForSegment(segmentId: Long): List<Leg> = legsForEdge(segmentId)
 
     suspend fun identities(ids: List<Long>): Map<Long, MatchKind> = withContext(container.dbDispatcher) {
-        container.repository.segmentIdentities(ids)
+        container.repository.edgeIdentities(ids)
     }
 
     /**
@@ -649,10 +660,18 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         root.put("format", EXPORT_FORMAT)
         root.put("exportedAt", System.currentTimeMillis())
 
-        val segmentArray = JSONArray()
+        val roads = repository.roads()
+        val roadsById = roads.associateBy { it.id }
+        val nodes = repository.nodes()
+        val junctions = repository.places()
+        val junctionNameById = junctions.associate { it.id to it.name }
+
+        val edgeArray = JSONArray()
+        val edgeKeys = HashMap<Long, String>()
         for (summary in summaries) {
-            val segment = summary.segment
-            val samples = repository.samples(segment.id)
+            val edge = summary.segment
+            edgeKeys[edge.id] = edge.key
+            val samples = repository.samples(edge.id)
             val sampleArray = JSONArray()
             for (sample in samples) {
                 sampleArray.put(
@@ -669,73 +688,59 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     },
                 )
             }
-            segmentArray.put(
+            edgeArray.put(
                 JSONObject().apply {
-                    put("key", segment.key)
-                    put("mode", segment.mode.id)
-                    put("name", segment.name)
-                    put("userName", segment.userName)
-                    put("fromKey", segment.fromKey)
-                    put("toKey", segment.toKey)
-                    put("identity", segment.identity.name)
-                    put("lengthM", segment.lengthM)
-                    put("fromLat", segment.aLat)
-                    put("fromLon", segment.aLon)
-                    put("toLat", segment.bLat)
-                    put("toLon", segment.bLon)
+                    put("key", edge.key)
+                    put("mode", edge.mode.id)
+                    put("name", edge.name)
+                    put("userName", edge.userName)
+                    put("fromKey", edge.fromKey)
+                    put("toKey", edge.toKey)
+                    put("roadName", edge.roadId?.let { roadsById[it]?.name })
+                    put("identity", edge.identity.name)
+                    put("lengthM", edge.lengthM)
+                    put("fromLat", edge.aLat)
+                    put("fromLon", edge.aLon)
+                    put("toLat", edge.bLat)
+                    put("toLon", edge.bLon)
                     put("medianMs", summary.combined.medianMs)
                     put("confidence", summary.combined.confidence.name)
                     put("samples", sampleArray)
                 },
             )
         }
-        root.put("segments", segmentArray)
+        root.put("edges", edgeArray)
 
-        // The names the user gave to points travel with the document: without
-        // them a restore would fall back to OSM names for every segment.
-        val pointArray = JSONArray()
-        for (point in repository.namedPoints()) {
-            pointArray.put(
-                JSONObject().apply {
-                    put("kind", point.ref.kind)
-                    put("nodeId", point.ref.nodeId)
-                    put("name", point.name)
-                },
-            )
-        }
-        root.put("points", pointArray)
-
-        // Roads chosen at points travel separately: a crossing is a list of
-        // roads, never a composite string that could leak into a segment name.
-        val pointRoadArray = JSONArray()
-        for ((key, roads) in repository.pointRoads()) {
-            val ref = PointRef.parse(key) ?: continue
-            val roadsArray = JSONArray()
-            roads.forEach(roadsArray::put)
-            pointRoadArray.put(
-                JSONObject().apply {
-                    put("kind", ref.kind)
-                    put("nodeId", ref.nodeId)
-                    put("roads", roadsArray)
-                },
-            )
-        }
-        root.put("pointRoads", pointRoadArray)
-
-        // Junctions are names too, and one of them can cover a dozen points.
-        // A reader that predates this key ignores it and still gets the rest.
-        val placeArray = JSONArray()
-        for (place in repository.places()) {
-            val members = JSONArray()
-            for (ref in place.points) {
-                members.put(
-                    JSONObject().apply {
-                        put("kind", ref.kind)
-                        put("nodeId", ref.nodeId)
-                    },
-                )
+        val nodeArray = JSONArray()
+        for (node in nodes) {
+            if (node.name == null && node.junctionId == null) {
+                // Keep export small; unnamed ungrouped nodes can be reconstructed from edges.
+                val touched = edgeKeys.isNotEmpty() // no-op, just keep logic simple
             }
-            placeArray.put(
+            nodeArray.put(
+                JSONObject().apply {
+                    put("kind", node.ref.kind)
+                    put("nodeId", node.ref.nodeId)
+                    put("lat", node.lat)
+                    put("lon", node.lon)
+                    node.name?.let { put("name", it) }
+                    node.junctionId?.let { junctionNameById[it] }?.let { put("junctionName", it) }
+                },
+            )
+        }
+        root.put("nodes", nodeArray)
+
+        val roadArray = JSONArray()
+        for (road in roads) {
+            roadArray.put(JSONObject().apply { put("name", road.name); put("source", road.source) })
+        }
+        root.put("roads", roadArray)
+
+        val junctionArray = JSONArray()
+        for (place in junctions) {
+            val members = JSONArray()
+            for (ref in place.points) members.put(JSONObject().apply { put("kind", ref.kind); put("nodeId", ref.nodeId) })
+            junctionArray.put(
                 JSONObject().apply {
                     put("name", place.name)
                     put("lat", place.at.lat)
@@ -745,11 +750,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 },
             )
         }
-        root.put("places", placeArray)
+        root.put("junctions", junctionArray)
 
-        // A leg refers to its segment by id in the database, but ids are local
-        // to this install. The key + mode pair is what survives a restore.
-        val segmentKeys = summaries.associate { it.segment.id to it.segment.key }
         val tripArray = JSONArray()
         for (trip in repository.trips()) {
             val legArray = JSONArray()
@@ -759,8 +761,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         put("startMs", leg.startMs)
                         put("endMs", leg.endMs)
                         put("distanceM", leg.distanceM)
-                        put("segmentId", leg.segmentId)
-                        put("segmentKey", leg.segmentId?.let { segmentKeys[it] })
+                        put("edgeKey", leg.edgeId?.let { edgeKeys[it] })
                         put("label", leg.label)
                         put("partial", leg.partial)
                         put("movingMs", leg.movingMs)
@@ -834,8 +835,9 @@ private fun takeOn(
 /** Everything one background refresh loads, handed over in one go. */
 private data class Loaded(
     val trips: List<Trip>,
-    val summaries: List<SegmentSummary>,
+    val summaries: List<EdgeSummary>,
     val places: List<Place>,
+    val roads: List<Road>,
     val pointNames: Map<String, String>,
     val pointRoads: Map<String, List<String>>,
 )

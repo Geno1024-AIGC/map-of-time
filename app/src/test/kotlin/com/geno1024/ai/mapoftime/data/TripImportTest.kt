@@ -168,4 +168,33 @@ class TripImportTest {
         assertNotNull(bundle)
         assertTrue(bundle!!.trips.isEmpty())
     }
+
+    @Test
+    fun readsV4EdgesNodesRoadsAndJunctions() {
+        val bundle = TripImport.parse(
+            """
+            {
+              "format":"map-of-time/4",
+              "edges":[{"key":"osm:1-2","mode":"walk","name":"Main","identity":"OSM","lengthM":10,
+                "fromLat":0,"fromLon":0,"toLat":1,"toLon":1,"fromKey":"osm:1","toKey":"osm:2","roadName":"Main"}],
+              "nodes":[{"kind":"osm","nodeId":1,"name":"Gate","lat":0,"lon":0,"junctionName":"J"}],
+              "roads":[{"name":"Main","source":"osm"}],
+              "junctions":[{"name":"J","lat":0,"lon":0,"radiusM":20,"points":[{"kind":"osm","nodeId":1}]}],
+              "trips":[{"mode":"walk","startedAt":1700000000000,"endedAt":1700000060000,"status":"FINISHED","legs":[
+                {"startMs":1700000000000,"endMs":1700000060000,"distanceM":10,"edgeKey":"osm:1-2","direction":1,"polyline":"abc"}
+              ]}]
+            }
+            """.trimIndent(),
+        )
+        assertNotNull(bundle)
+        bundle!!
+        assertEquals(1, bundle.edges.size)
+        assertEquals("Main", bundle.edges.first().roadName)
+        assertEquals(1, bundle.nodes.size)
+        assertEquals("Gate", bundle.nodes.first().name)
+        assertEquals(1, bundle.roads.size)
+        assertEquals(1, bundle.junctions.size)
+        assertEquals("osm:1-2", bundle.trips.first().legs.first().edgeKey)
+        assertEquals("osm:1-2", bundle.trips.first().legs.first().segmentKey)
+    }
 }

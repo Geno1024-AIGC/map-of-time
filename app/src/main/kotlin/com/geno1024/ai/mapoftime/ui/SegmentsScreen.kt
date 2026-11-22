@@ -34,7 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
-import com.geno1024.ai.mapoftime.analysis.SegmentSummary
+import com.geno1024.ai.mapoftime.analysis.EdgeSummary
 import com.geno1024.ai.mapoftime.core.TrafficContext
 import com.geno1024.ai.mapoftime.core.TrafficDay
 import com.geno1024.ai.mapoftime.core.TripMode
@@ -43,12 +43,12 @@ import com.geno1024.ai.mapoftime.core.takeOrNull
 import com.geno1024.ai.mapoftime.core.trafficDayOf
 
 /** How the segment list is ordered. Every one is a question the user asks. */
-private enum class SegmentSort { RECENT, SAMPLES, SLOWEST, NAME }
+private enum class EdgeSort { RECENT, SAMPLES, SLOWEST, NAME }
 
 @Composable
 fun SegmentsScreen(
     viewModel: AppViewModel,
-    onOpenSegment: (Long) -> Unit,
+    onOpenEdge: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // What the user is looking at travels with the scroll offset: opening a
@@ -58,8 +58,8 @@ fun SegmentsScreen(
     var modeFilter by rememberSaveable(stateSaver = nullableEnumNameSaver(TripMode.entries.toTypedArray())) {
         mutableStateOf<TripMode?>(null)
     }
-    var sort by rememberSaveable(stateSaver = enumNameSaver(SegmentSort.entries.toTypedArray())) {
-        mutableStateOf(SegmentSort.SAMPLES)
+    var sort by rememberSaveable(stateSaver = enumNameSaver(EdgeSort.entries.toTypedArray())) {
+        mutableStateOf(EdgeSort.SAMPLES)
     }
     var query by rememberSaveable { mutableStateOf("") }
 
@@ -87,13 +87,13 @@ fun SegmentsScreen(
             }
         when (sort) {
             // Most used first: the segments that actually accumulate samples.
-            SegmentSort.SAMPLES -> filtered.sortedWith(
-                compareByDescending<SegmentSummary> { it.sampleCount }.thenBy { it.displayName },
+            EdgeSort.SAMPLES -> filtered.sortedWith(
+                compareByDescending<EdgeSummary> { it.sampleCount }.thenBy { it.displayName },
             )
-            SegmentSort.RECENT -> filtered.sortedByDescending { it.segment.lastSeen }
+            EdgeSort.RECENT -> filtered.sortedByDescending { it.segment.lastSeen }
             // Slowest first: the question is almost always "where do I lose time".
-            SegmentSort.SLOWEST -> filtered.sortedByDescending { it.combined.medianMs }
-            SegmentSort.NAME -> filtered.sortedBy { it.displayName.lowercase() }
+            EdgeSort.SLOWEST -> filtered.sortedByDescending { it.combined.medianMs }
+            EdgeSort.NAME -> filtered.sortedBy { it.displayName.lowercase() }
         }
     }
 
@@ -115,10 +115,10 @@ fun SegmentsScreen(
             ModeFilter(selected = modeFilter, onSelect = { modeFilter = it })
             Spacer(Modifier.height(8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SortChip(SegmentSort.SAMPLES, sort, R.string.segments_sort_samples) { sort = it }
-                SortChip(SegmentSort.RECENT, sort, R.string.segments_sort_recent) { sort = it }
-                SortChip(SegmentSort.SLOWEST, sort, R.string.segments_sort_slowest) { sort = it }
-                SortChip(SegmentSort.NAME, sort, R.string.segments_sort_name) { sort = it }
+                SortChip(EdgeSort.SAMPLES, sort, R.string.segments_sort_samples) { sort = it }
+                SortChip(EdgeSort.RECENT, sort, R.string.segments_sort_recent) { sort = it }
+                SortChip(EdgeSort.SLOWEST, sort, R.string.segments_sort_slowest) { sort = it }
+                SortChip(EdgeSort.NAME, sort, R.string.segments_sort_name) { sort = it }
             }
             Spacer(Modifier.height(12.dp))
         }
@@ -141,11 +141,11 @@ fun SegmentsScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(summaries, key = { it.segment.id }) { summary ->
-                SegmentCard(
+                EdgeCard(
                     summary = summary,
                     now = now,
                     fridayRush = fridayRush,
-                    onClick = { onOpenSegment(summary.segment.id) },
+                    onClick = { onOpenEdge(summary.edge.id) },
                 )
             }
         }
@@ -154,10 +154,10 @@ fun SegmentsScreen(
 
 @Composable
 private fun SortChip(
-    value: SegmentSort,
-    selected: SegmentSort,
+    value: EdgeSort,
+    selected: EdgeSort,
     label: Int,
-    onSelect: (SegmentSort) -> Unit,
+    onSelect: (EdgeSort) -> Unit,
 ) {
     FilterChip(
         selected = selected == value,
@@ -167,17 +167,17 @@ private fun SortChip(
 }
 
 /** The human name when OSM gave one, the key otherwise; also used for search. */
-private val SegmentSummary.displayName: String
-    get() = segment.displayName
+private val EdgeSummary.displayName: String
+    get() = edge.displayName
 
 @Composable
-private fun SegmentCard(
-    summary: SegmentSummary,
+private fun EdgeCard(
+    summary: EdgeSummary,
     now: TrafficContext,
     fridayRush: Boolean,
     onClick: () -> Unit,
 ) {
-    val segment = summary.segment
+    val edge = summary.edge
     // Two carriageways, two numbers: the combined median of a divided road
     // describes neither side. With one direction only, the median is that
     // side and the big number stays.
@@ -200,21 +200,21 @@ private fun SegmentCard(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = summary.displayName,
+                    text = summary.edge.displayName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = modeLabel(segment.mode) + " · " +
+                    text = modeLabel(edge.mode) + " · " +
                         pluralStringResource(R.plurals.samples_count, summary.sampleCount, summary.sampleCount) + " · " +
-                        formatDistance(summary.combined.medianDistanceM.takeIf { it > 0 } ?: segment.lengthM),
+                        formatDistance(summary.combined.medianDistanceM.takeIf { it > 0 } ?: edge.lengthM),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            MatchBadge(segment.identity)
+            MatchBadge(edge.identity)
         }
         Spacer(Modifier.height(10.dp))
         if (divided) {
@@ -222,12 +222,12 @@ private fun SegmentCard(
                 val from = stringResource(R.string.segment_from)
                 val to = stringResource(R.string.segment_to)
                 DirectionTime(
-                    label = segment.forwardName ?: "$from → $to",
+                    label = edge.forwardName ?: "$from → $to",
                     ms = forwardNow?.medianMs ?: summary.forward.typicalMs,
                     modifier = Modifier.weight(1f),
                 )
                 DirectionTime(
-                    label = segment.backwardName ?: "$to → $from",
+                    label = edge.backwardName ?: "$to → $from",
                     ms = backwardNow?.medianMs ?: summary.backward.typicalMs,
                     modifier = Modifier.weight(1f),
                 )

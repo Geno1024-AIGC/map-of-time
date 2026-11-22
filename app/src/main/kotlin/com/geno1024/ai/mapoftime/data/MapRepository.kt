@@ -150,10 +150,21 @@ class MapRepository(private val helper: MapDb) {
         for (roads in bundle.pointRoads) {
             setPointRoads(listOf(roads.ref), roads.roads)
         }
-        // Junctions travel too. A point name restored above still wins over
-        // the junction name, exactly as it does locally.
-        for (place in bundle.places) {
+        for (place in bundle.junctions.ifEmpty { bundle.places }) {
             mergePlace(place.name, place.center, place.radiusM, place.points)
+        }
+        // v4 first-class nodes/roads
+        for (road in bundle.roads) ensureRoad(road.name, road.source)
+        for (node in bundle.nodes) {
+            val at = if (node.lat != null && node.lon != null) LatLon(node.lat, node.lon) else null
+            if (at != null) ensureNode(node.ref.key, at, 0L)
+            node.name?.let { if (!knownPoints.containsKey(node.ref.key)) { renamePoint(node.ref, it); knownPoints[node.ref.key] = it } }
+            val jName = node.junctionName
+            if (jName != null) {
+                val j = bundle.junctions.firstOrNull { it.name == jName }
+                if (j != null) mergePlace(j.name, j.center, j.radiusM, listOf(node.ref))
+                else if (at != null) mergePlace(jName, at, 30.0, listOf(node.ref))
+            }
         }
 
         fun edgeFor(mode: TripMode, key: String?): Long? {
@@ -164,9 +175,12 @@ class MapRepository(private val helper: MapDb) {
             val definition = definitions[cacheKey]
             if (existing != null) {
                 val values = ContentValues()
+                val defRoadName = definition?.roadName ?: definition?.userName
                 if (existing.userName == null && definition?.userName != null) {
                     values.put("user_name", definition.userName)
-                    val roadId = ensureRoad(definition.userName, "user")
+                }
+                if (existing.roadId == null && defRoadName != null) {
+                    val roadId = ensureRoad(defRoadName, "user")
                     if (roadId > 0) values.put("road_id", roadId)
                 }
                 if (existing.fromNodeId == null && definition?.fromKey != null) {
@@ -181,6 +195,7 @@ class MapRepository(private val helper: MapDb) {
             }
             val id = definition?.let { segment ->
                 segmentsAdded++
+                val roadId = (segment.roadName ?: segment.userName)?.let { ensureRoad(it, "user") }?.takeIf { it > 0 }
                 insertEdge(
                     key = segment.key,
                     mode = mode,
@@ -193,6 +208,7 @@ class MapRepository(private val helper: MapDb) {
                     userName = segment.userName,
                     fromKey = segment.fromKey,
                     toKey = segment.toKey,
+                    roadId = roadId,
                 )
             } ?: return null
             resolved[cacheKey] = id
@@ -980,6 +996,36 @@ class MapRepository(private val helper: MapDb) {
     }
 
     // -------------------------------------------------------------- nodes/roads
+
+    fun roads(): List<Road> =
+        db.rawQuery("SELECT id, name, source, osm_name FROM roads ORDER BY name", null).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(Road(c.getLong(0), c.getString(1), c.getString(2) ?: "user", c.getStringOrNull(3)))
+                }
+            }
+        }
+
+    fun nodes(): List<Node> =
+        db.rawQuery(
+            "SELECT id, ref_kind, ref_node_id, lat, lon, name, junction_id FROM nodes ORDER BY id",
+            null,
+        ).use { c ->
+            buildList {
+                while (c.moveToNext()) {
+                    add(
+                        Node(
+                            id = c.getLong(0),
+                            ref = PointRef(c.getString(1), c.getLong(2)),
+                            lat = c.getDouble(3),
+                            lon = c.getDouble(4),
+                            name = c.getStringOrNull(5),
+                            junctionId = c.getLongOrNull(6),
+                        ),
+                    )
+                }
+            }
+        }
 
     private fun ensureNode(refKey: String?, at: LatLon, seenAt: Long): Long? {
         val ref = PointRef.parse(refKey) ?: return null

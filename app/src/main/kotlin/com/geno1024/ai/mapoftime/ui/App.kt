@@ -45,7 +45,7 @@ private enum class Tab(val labelRes: Int, val glyph: String) {
 fun App(viewModel: AppViewModel) {
     var tab by rememberSaveable { mutableStateOf(Tab.RECORD.name) }
     var detail by rememberSaveable { mutableStateOf<String?>(null) }
-    // A segment endpoint can ask the network tab to preselect its node. It is a
+    // An edge endpoint can ask the network tab to preselect its node. It is a
     // one-shot request: NetworkScreen consumes it, so coming back later restores
     // whatever selection the user made there instead of snapping to it again.
     var networkNode by rememberSaveable { mutableStateOf<String?>(null) }
@@ -98,8 +98,8 @@ fun App(viewModel: AppViewModel) {
             val route = detail
             val tripId = route?.takeIf { it.startsWith("trip:") }
                 ?.removePrefix("trip:")?.toLongOrNull()
-            val segmentId = route?.takeIf { it.startsWith("segment:") }
-                ?.removePrefix("segment:")?.toLongOrNull()
+            val edgeId = route?.takeIf { it.startsWith("edge:") || it.startsWith("segment:") }
+                ?.substringAfter(':')?.toLongOrNull()
 
             // Each tab and each detail gets its own bucket. A detail never
             // shares a key with the list it was opened from, so saving one
@@ -114,9 +114,9 @@ fun App(viewModel: AppViewModel) {
                         modifier = Modifier.padding(padding),
                     )
 
-                    segmentId != null -> SegmentDetailScreen(
+                    edgeId != null -> SegmentDetailScreen(
                         viewModel = viewModel,
-                        segmentId = segmentId,
+                        segmentId = edgeId,
                         onBack = closeDetail,
                         onOpenNode = openNode,
                         modifier = Modifier.padding(padding),
@@ -136,7 +136,7 @@ fun App(viewModel: AppViewModel) {
 
                         Tab.NETWORK -> NetworkScreen(
                             viewModel = viewModel,
-                            onOpenSegment = { id -> detail = "segment:$id" },
+                            onOpenEdge = { id -> detail = "edge:$id" },
                             requestedNode = networkNode,
                             onNodeRequestHandled = { networkNode = null },
                             modifier = Modifier.padding(padding),
@@ -144,7 +144,7 @@ fun App(viewModel: AppViewModel) {
 
                         Tab.SEGMENTS -> SegmentsScreen(
                             viewModel = viewModel,
-                            onOpenSegment = { id -> detail = "segment:$id" },
+                            onOpenEdge = { id -> detail = "edge:$id" },
                             modifier = Modifier.padding(padding),
                         )
 

@@ -5,7 +5,7 @@ import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.MatchKind
-import com.geno1024.ai.mapoftime.data.Segment
+import com.geno1024.ai.mapoftime.data.Edge
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Test
@@ -28,7 +28,7 @@ class NetworkGraphTest {
             if (backwardMs > 0) add(TraversalSample(backwardMs, 100.0, -1, 1_000))
         }
         return SegmentSummary(
-            segment = Segment(
+            edge = Edge(
                 id = nextId++,
                 key = "${fromKey ?: from}-${toKey ?: to}",
                 mode = TripMode.WALK,

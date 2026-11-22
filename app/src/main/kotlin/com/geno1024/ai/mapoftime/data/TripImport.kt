@@ -5,14 +5,9 @@ import com.geno1024.ai.mapoftime.core.TripMode
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * The current export shape. v1 had no segment keys, v2 had no point roads.
- * New readers accept all three; older readers ignore keys they do not know.
- */
-const val EXPORT_FORMAT = "map-of-time/3"
+const val EXPORT_FORMAT = "map-of-time/4"
 
-/** One segment definition carried by an export, used to re-link imported legs. */
-data class ImportedSegment(
+data class ImportedEdge(
     val key: String,
     val mode: TripMode,
     val name: String?,
@@ -20,36 +15,43 @@ data class ImportedSegment(
     val from: LatLon,
     val to: LatLon,
     val lengthM: Double,
-    /** A name the user typed, kept apart from the OSM [name]. */
     val userName: String? = null,
-    /** Identities of the two ends, so point names can be restored with them. */
     val fromKey: String? = null,
     val toKey: String? = null,
+    val roadName: String? = null,
 )
 
-/** One point the user named. */
-data class ImportedPoint(val ref: PointRef, val name: String)
+typealias ImportedSegment = ImportedEdge
 
-/** Roads chosen at one point; a crossing is a list, not a composite point name. */
+data class ImportedNode(
+    val ref: PointRef,
+    val name: String? = null,
+    val lat: Double? = null,
+    val lon: Double? = null,
+    val junctionName: String? = null,
+)
+
+data class ImportedRoad(
+    val name: String,
+    val source: String = "user",
+)
+
+data class ImportedPoint(val ref: PointRef, val name: String)
 data class ImportedPointRoads(val ref: PointRef, val roads: List<String>)
 
-/**
- * One junction the user named. Older files have no `places` array at all, so
- * this is optional and those files simply restore the per-point names.
- */
 data class ImportedPlace(
     val name: String,
     val center: LatLon,
     val radiusM: Double,
     val points: List<PointRef>,
 )
+typealias ImportedJunction = ImportedPlace
 
 data class ImportedLeg(
     val startMs: Long,
     val endMs: Long,
     val distanceM: Double,
-    /** Which exported segment this leg belongs to; null in older exports. */
-    val segmentKey: String?,
+    val edgeKey: String?,
     val direction: Int,
     val label: String?,
     val partial: Boolean,
@@ -60,7 +62,9 @@ data class ImportedLeg(
     val longestStopMs: Long,
     val signalStopCount: Int,
     val signalWaitMs: Long,
-)
+) {
+    val segmentKey: String? get() = edgeKey
+}
 
 data class ImportedTrip(
     val mode: TripMode,
@@ -73,45 +77,46 @@ data class ImportedTrip(
 )
 
 data class ImportBundle(
-    val segments: List<ImportedSegment>,
+    val edges: List<ImportedEdge> = emptyList(),
+    val nodes: List<ImportedNode> = emptyList(),
+    val roads: List<ImportedRoad> = emptyList(),
+    val junctions: List<ImportedJunction> = emptyList(),
     val points: List<ImportedPoint> = emptyList(),
     val pointRoads: List<ImportedPointRoads> = emptyList(),
     val places: List<ImportedPlace> = emptyList(),
-    val trips: List<ImportedTrip>,
+    val trips: List<ImportedTrip> = emptyList(),
 ) {
+    val segments: List<ImportedSegment> get() = edges
     val legCount: Int get() = trips.sumOf { it.legs.size }
 }
 
-/**
- * Reads the JSON the app itself exports.
- *
- * Deliberately synchronous and Android-free so the whole format can be unit
- * tested. Anything unreadable is rejected as a whole — importing half a file
- * would quietly create trips with missing legs. Individual malformed elements
- * inside a valid document are skipped, because one bad row is not a reason to
- * throw away every other trip in it.
- */
 object TripImport {
     fun parse(json: String): ImportBundle? {
         val root = runCatching { JSONObject(json) }.getOrNull() ?: return null
         val format = root.optString("format")
         if (format !in SUPPORTED_FORMATS) return null
+        val edges = root.optJSONArray("edges").mapObjects { edge(it) }
+            .ifEmpty { root.optJSONArray("segments").mapObjects { edge(it) } }
+        val junctions = root.optJSONArray("junctions").mapObjects { place(it) }
+            .ifEmpty { root.optJSONArray("places").mapObjects { place(it) } }
         return ImportBundle(
-            segments = root.optJSONArray("segments").mapObjects { segment(it) },
+            edges = edges,
+            nodes = root.optJSONArray("nodes").mapObjects { node(it) },
+            roads = root.optJSONArray("roads").mapObjects { road(it) },
+            junctions = junctions,
             points = root.optJSONArray("points").mapObjects { point(it) },
             pointRoads = root.optJSONArray("pointRoads").mapObjects { pointRoads(it) },
-            places = root.optJSONArray("places").mapObjects { place(it) },
+            places = junctions,
             trips = root.optJSONArray("trips").mapObjects { trip(it) },
         )
     }
 
-    private val SUPPORTED_FORMATS = setOf("map-of-time/1", "map-of-time/2", EXPORT_FORMAT)
+    private val SUPPORTED_FORMATS = setOf("map-of-time/1", "map-of-time/2", "map-of-time/3", EXPORT_FORMAT)
 
-    private fun segment(objects: JSONObject?): ImportedSegment? {
-        val objectValue = objects ?: return null
+    private fun edge(objectValue: JSONObject): ImportedEdge? {
         val key = objectValue.optString("key").takeIf { it.isNotBlank() } ?: return null
         val mode = modeOf(objectValue.optString("mode")) ?: return null
-        return ImportedSegment(
+        return ImportedEdge(
             key = key,
             mode = mode,
             name = objectValue.optStringOrNull("name"),
@@ -122,23 +127,34 @@ object TripImport {
             userName = objectValue.optStringOrNull("userName"),
             fromKey = PointRef.parse(objectValue.optStringOrNull("fromKey"))?.key,
             toKey = PointRef.parse(objectValue.optStringOrNull("toKey"))?.key,
+            roadName = objectValue.optStringOrNull("roadName"),
         )
     }
 
-    private fun point(objectValue: JSONObject): ImportedPoint? {
-        val kind = objectValue.optString("kind")
-        val nodeId = objectValue.optLong("nodeId", 0L)
+    private fun node(objectValue: JSONObject): ImportedNode? {
+        val ref = refOf(objectValue) ?: return null
+        return ImportedNode(
+            ref = ref,
+            name = objectValue.optStringOrNull("name"),
+            lat = objectValue.optDoubleOrNull("lat"),
+            lon = objectValue.optDoubleOrNull("lon"),
+            junctionName = objectValue.optStringOrNull("junctionName"),
+        )
+    }
+
+    private fun road(objectValue: JSONObject): ImportedRoad? {
         val name = objectValue.optStringOrNull("name") ?: return null
-        val ref = PointRef.parse("$kind:$nodeId") ?: return null
-        if (nodeId <= 0) return null
+        return ImportedRoad(name = name, source = objectValue.optStringOrNull("source") ?: "user")
+    }
+
+    private fun point(objectValue: JSONObject): ImportedPoint? {
+        val ref = refOf(objectValue) ?: return null
+        val name = objectValue.optStringOrNull("name") ?: return null
         return ImportedPoint(ref, name)
     }
 
     private fun pointRoads(objectValue: JSONObject): ImportedPointRoads? {
-        val kind = objectValue.optString("kind")
-        val nodeId = objectValue.optLong("nodeId", 0L)
-        val ref = PointRef.parse("$kind:$nodeId") ?: return null
-        if (nodeId <= 0) return null
+        val ref = refOf(objectValue) ?: return null
         val roads = objectValue.optJSONArray("roads")?.let { array ->
             buildList {
                 for (i in 0 until array.length()) {
@@ -151,13 +167,13 @@ object TripImport {
 
     private fun place(objectValue: JSONObject): ImportedPlace? {
         val name = objectValue.optStringOrNull("name") ?: return null
-        val members = objectValue.optJSONArray("points").mapObjects { point(it) }
+        val members = objectValue.optJSONArray("points").mapObjects { refOf(it) }
         if (members.isEmpty()) return null
         return ImportedPlace(
             name = name,
             center = LatLon(objectValue.optDouble("lat"), objectValue.optDouble("lon")),
             radiusM = objectValue.optDouble("radiusM", 0.0).coerceAtLeast(0.0),
-            points = members.map { it.ref },
+            points = members,
         )
     }
 
@@ -186,7 +202,7 @@ object TripImport {
             startMs = startMs,
             endMs = endMs,
             distanceM = objectValue.optDouble("distanceM", 0.0).coerceAtLeast(0.0),
-            segmentKey = objectValue.optStringOrNull("segmentKey"),
+            edgeKey = objectValue.optStringOrNull("edgeKey") ?: objectValue.optStringOrNull("segmentKey"),
             direction = objectValue.optInt("direction", 1),
             label = objectValue.optStringOrNull("label"),
             partial = objectValue.optBoolean("partial", false),
@@ -200,10 +216,20 @@ object TripImport {
         )
     }
 
+    private fun refOf(objectValue: JSONObject): PointRef? {
+        val kind = objectValue.optString("kind")
+        val nodeId = objectValue.optLong("nodeId", 0L)
+        if (nodeId <= 0) return null
+        return PointRef.parse("$kind:$nodeId")
+    }
+
     private fun modeOf(id: String): TripMode? = TripMode.entries.firstOrNull { it.id == id }
 
     private fun JSONObject.optStringOrNull(name: String): String? =
         optString(name).takeIf { it.isNotBlank() && it != "null" }
+
+    private fun JSONObject.optDoubleOrNull(name: String): Double? =
+        if (has(name) && !isNull(name)) optDouble(name).takeIf { !it.isNaN() } else null
 
     private inline fun <T> JSONArray?.mapObjects(parse: (JSONObject) -> T?): List<T> {
         if (this == null) return emptyList()
@@ -214,5 +240,4 @@ object TripImport {
         }
         return out
     }
-
 }
