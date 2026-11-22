@@ -947,7 +947,7 @@ private fun EndpointRow(
             TextButton(onClick = onName) {
                 Text(
                     stringResource(
-                        if (name == null) R.string.edge_name_add else R.string.action_edit,
+                        if (name == null) R.string.place_name_action else R.string.action_edit,
                     ),
                 )
             }

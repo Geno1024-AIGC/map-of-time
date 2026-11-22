@@ -355,7 +355,7 @@ private fun EndpointEditRow(
                 }
             }
             Column(horizontalAlignment = Alignment.End) {
-                TextButton(onClick = onName) { Text(stringResource(if (name == null) R.string.edge_name_add else R.string.action_edit)) }
+                TextButton(onClick = onName) { Text(stringResource(if (name == null) R.string.place_name_action else R.string.action_edit)) }
                 TextButton(onClick = onOpenNetwork) { Text(stringResource(R.string.edge_open_in_network)) }
             }
         }
