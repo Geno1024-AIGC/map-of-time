@@ -32,6 +32,7 @@ import com.geno1024.ai.mapoftime.data.MatchKind
 import com.geno1024.ai.mapoftime.data.EXPORT_FORMAT
 import com.geno1024.ai.mapoftime.data.ImportResult
 import com.geno1024.ai.mapoftime.data.Place
+import com.geno1024.ai.mapoftime.data.PlaceKind
 import com.geno1024.ai.mapoftime.data.PointRef
 import com.geno1024.ai.mapoftime.data.Road
 import com.geno1024.ai.mapoftime.data.Edge
@@ -315,6 +316,10 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         places.firstOrNull { it.id == wanted }?.name
     }
 
+    fun placeKind(id: Long?): PlaceKind = id?.let { wanted ->
+        places.firstOrNull { it.id == wanted }?.kind
+    } ?: PlaceKind.CROSSING
+
     /**
      * The auto-derived caption for one point of a wide junction: which side of
      * the junction it is on and which roads meet there. While a new junction is
@@ -358,6 +363,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         name: String?,
         clearMemberNames: Boolean = false,
         roads: Collection<String>? = null,
+        kind: PlaceKind = PlaceKind.CROSSING,
     ) {
         withContext(container.dbDispatcher) {
             // The name is typed by hand. If a nearby junction already carries
@@ -407,6 +413,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 clearMemberNames = clearMemberNames,
                 roads = roads,
                 absorbIds = absorbIds,
+                kind = kind,
             )
         }
         refresh()
@@ -763,6 +770,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             junctionArray.put(
                 JSONObject().apply {
                     put("name", place.name)
+                    put("kind", place.kind.id)
                     put("lat", place.at.lat)
                     put("lon", place.at.lon)
                     put("radiusM", place.radiusM)

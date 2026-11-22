@@ -30,8 +30,12 @@
     <string name="nav_trips">Trips</string>
     <string name="nav_network">Network</string>
 
-    <string name="place_name_title">Name this junction</string>
-    <string name="place_name_hint">Junction name</string>
+    <string name="place_name_title">Name this point</string>
+    <string name="place_name_hint">Point name</string>
+    <string name="place_kind_label">Point type</string>
+    <string name="place_kind_crossing">Crossing</string>
+    <string name="place_kind_uturn">U-turn</string>
+    <string name="place_kind_landmark">Landmark</string>
     <string name="place_name_apply">Name it</string>
     <string name="place_summary">%1$d points · %2$s across</string>
     <string name="place_body">All of them take this name. A corner that shows up later inside the junction joins on its own.</string>

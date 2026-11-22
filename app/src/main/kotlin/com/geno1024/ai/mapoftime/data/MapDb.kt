@@ -65,7 +65,8 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
                 lat REAL NOT NULL,
                 lon REAL NOT NULL,
                 radius_m REAL NOT NULL,
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'crossing'
             )
             """.trimIndent(),
         )
@@ -467,6 +468,7 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
         if (oldVersion < 8) migrateToV8(db)
         if (oldVersion < 9) migrateToV9(db)
         if (oldVersion < 10) migrateToV10(db)
+        if (oldVersion < 11) migrateToV11(db)
     }
 
     /**
@@ -968,8 +970,12 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
         db.execSQL("CREATE INDEX IF NOT EXISTS idx_edge_roads_road ON edge_roads(road_id)")
     }
 
+    private fun migrateToV11(db: SQLiteDatabase) {
+        db.execSQL("ALTER TABLE junctions ADD COLUMN kind TEXT NOT NULL DEFAULT 'crossing'")
+    }
+
     companion object {
         const val NAME = "map-of-time.db"
-        const val VERSION = 10
+        const val VERSION = 11
     }
 }

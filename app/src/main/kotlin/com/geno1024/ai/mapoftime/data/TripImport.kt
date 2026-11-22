@@ -5,7 +5,7 @@ import com.geno1024.ai.mapoftime.core.TripMode
 import org.json.JSONArray
 import org.json.JSONObject
 
-const val EXPORT_FORMAT = "map-of-time/4"
+const val EXPORT_FORMAT = "map-of-time/5"
 
 data class ImportedEdge(
     val key: String,
@@ -45,6 +45,7 @@ data class ImportedPlace(
     val center: LatLon,
     val radiusM: Double,
     val points: List<PointRef>,
+    val kind: PlaceKind = PlaceKind.CROSSING,
 )
 typealias ImportedJunction = ImportedPlace
 
@@ -112,7 +113,7 @@ object TripImport {
         )
     }
 
-    private val SUPPORTED_FORMATS = setOf("map-of-time/1", "map-of-time/2", "map-of-time/3", EXPORT_FORMAT)
+    private val SUPPORTED_FORMATS = setOf("map-of-time/1", "map-of-time/2", "map-of-time/3", "map-of-time/4", EXPORT_FORMAT)
 
     private fun edge(objectValue: JSONObject): ImportedEdge? {
         val key = objectValue.optString("key").takeIf { it.isNotBlank() } ?: return null
@@ -178,6 +179,7 @@ object TripImport {
             center = LatLon(objectValue.optDouble("lat"), objectValue.optDouble("lon")),
             radiusM = objectValue.optDouble("radiusM", 0.0).coerceAtLeast(0.0),
             points = members,
+            kind = PlaceKind.of(objectValue.optStringOrNull("kind")),
         )
     }
 

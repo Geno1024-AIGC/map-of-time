@@ -30,8 +30,12 @@
     <string name="nav_trips">行程</string>
     <string name="nav_network">路网</string>
 
-    <string name="place_name_title">命名这个路口</string>
-    <string name="place_name_hint">物理名称（可选，如北门）</string>
+    <string name="place_name_title">命名这个点</string>
+    <string name="place_name_hint">点名称（可选，如北门）</string>
+    <string name="place_kind_label">点类型</string>
+    <string name="place_kind_crossing">交叉点</string>
+    <string name="place_kind_uturn">掉头点</string>
+    <string name="place_kind_landmark">地标</string>
     <string name="place_name_apply">命名</string>
     <string name="place_summary">%1$d 个点 · 跨度 %2$s</string>
     <string name="place_body">可以填物理名称，也可以在下方选择交叉道路，由系统推导交叉名。所选点都会使用该结果；路口内后续出现的新点会自动加入。</string>

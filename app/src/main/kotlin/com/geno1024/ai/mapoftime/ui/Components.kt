@@ -22,7 +22,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -45,6 +45,7 @@ import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.core.Confidence
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.MatchKind
+import com.geno1024.ai.mapoftime.data.PlaceKind
 import com.geno1024.ai.mapoftime.data.RoadNames
 import java.text.Collator
 import java.util.Locale
@@ -391,12 +392,9 @@ fun PointRoadsPicker(
 }
 
 /**
- * Asks for a name for a junction, and says how many points it will cover.
- *
- * The point count is the whole reason this dialog exists: a wide crossing is a
- * dozen corners and lane ends, and they keep growing as new turns are driven.
- * Naming them one by one never converges, so the default action names them all
- * and [onSavePointOnly] is the escape hatch for a single point.
+ * Names a point/junction. The kind is chosen first because it determines
+ * which operations make sense: crossings derive names from roads, U-turns
+ * attach to one road, landmarks are named places.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -411,20 +409,53 @@ fun PlaceNameDialog(
     roadCandidates: List<String> = emptyList(),
     /** Roads already chosen, so reopening the dialog does not lose them. */
     initialRoads: Set<String> = emptySet(),
+    initialKind: PlaceKind = PlaceKind.CROSSING,
     onDismiss: () -> Unit,
-    onSave: (String, Boolean, Set<String>) -> Unit,
-    onSavePointOnly: (String, Set<String>) -> Unit,
+    onSave: (String, Boolean, Set<String>, PlaceKind) -> Unit,
+    onSavePointOnly: (String, Set<String>, PlaceKind) -> Unit,
 ) {
+    var kind by remember(initialKind) { mutableStateOf(initialKind) }
     var text by remember(initial) { mutableStateOf(initial) }
     var roads by remember(initialRoads) { mutableStateOf(initialRoads) }
     var takeOverNames by remember { mutableStateOf(false) }
     var uturnRoad by remember { mutableStateOf<String?>(null) }
     var uturnExpanded by remember { mutableStateOf(false) }
+    val collator = remember { Collator.getInstance(Locale.CHINA) }
+    val roadOptions = remember(roadCandidates, roads, collator) {
+        (roadCandidates + roads).distinct().sortedWith(collator)
+    }
+    val uturnNames = roadOptions.associateWith { road -> stringResource(R.string.place_uturn_name, road) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.place_name_title)) },
         text = {
             Column {
+                Text(
+                    text = stringResource(R.string.place_kind_label),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PlaceKind.entries.forEach { option ->
+                        FilterChip(
+                            selected = kind == option,
+                            onClick = { kind = option },
+                            label = {
+                                Text(
+                                    stringResource(
+                                        when (option) {
+                                            PlaceKind.CROSSING -> R.string.place_kind_crossing
+                                            PlaceKind.UTURN -> R.string.place_kind_uturn
+                                            PlaceKind.LANDMARK -> R.string.place_kind_landmark
+                                        },
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
@@ -438,24 +469,21 @@ fun PlaceNameDialog(
                         text = stringResource(R.string.place_summary, pointCount, formatDistance(spanM)),
                         style = MaterialTheme.typography.labelLarge,
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.place_body),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    if (kind == PlaceKind.CROSSING) {
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.place_body),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
-                // Points named one by one before junctions had names keep
-                // their own label; folding them in is offered, never assumed.
                 if (overriddenCount > 0) {
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                text = stringResource(
-                                    R.string.place_overridden,
-                                    overriddenCount,
-                                ),
+                                text = stringResource(R.string.place_overridden, overriddenCount),
                                 style = MaterialTheme.typography.labelLarge,
                             )
                             Text(
@@ -467,69 +495,70 @@ fun PlaceNameDialog(
                         Switch(checked = takeOverNames, onCheckedChange = { takeOverNames = it })
                     }
                 }
-                Spacer(Modifier.height(10.dp))
-                PointRoadsPicker(roadCandidates, roads) { road ->
-                    roads = if (road in roads) roads - road else roads + road
-                }
-                val derived = RoadNames.join(roads)
-                if (derived != null) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = stringResource(R.string.point_derived_name, derived),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (text.trim().isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                val roadOptions = remember(roadCandidates, roads) {
-                    (roadCandidates + roads).distinct().sortedWith(Collator.getInstance(Locale.CHINA))
-                }
-                if (roadOptions.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(R.string.place_uturn),
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    Text(
-                        text = stringResource(R.string.place_uturn_hint),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    val uturnNames = roadOptions.associateWith { road ->
-                        stringResource(R.string.place_uturn_name, road)
+
+                when (kind) {
+                    PlaceKind.CROSSING -> {
+                        Spacer(Modifier.height(10.dp))
+                        PointRoadsPicker(roadCandidates, roads) { road ->
+                            roads = if (road in roads) roads - road else roads + road
+                        }
+                        val derived = RoadNames.join(roads)
+                        if (derived != null) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = stringResource(R.string.point_derived_name, derived),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (text.trim().isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
-                    ExposedDropdownMenuBox(
-                        expanded = uturnExpanded,
-                        onExpandedChange = { uturnExpanded = it },
-                    ) {
-                        OutlinedTextField(
-                            value = uturnRoad.orEmpty(),
-                            onValueChange = {},
-                            readOnly = true,
-                            singleLine = true,
-                            label = { Text(stringResource(R.string.place_uturn_road)) },
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = uturnExpanded) },
-                            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
-                        )
-                        ExposedDropdownMenu(
-                            expanded = uturnExpanded,
-                            onDismissRequest = { uturnExpanded = false },
-                        ) {
-                            roadOptions.forEach { road ->
-                                val uturnName = uturnNames[road].orEmpty()
-                                DropdownMenuItem(
-                                    text = { Text(uturnName) },
-                                    onClick = {
-                                        uturnRoad = road
-                                        text = uturnName
-                                        roads = roads + road
-                                        uturnExpanded = false
-                                    },
-                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+
+                    PlaceKind.UTURN -> {
+                        if (roadOptions.isNotEmpty()) {
+                            Spacer(Modifier.height(10.dp))
+                            Text(
+                                text = stringResource(R.string.place_uturn_hint),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            ExposedDropdownMenuBox(
+                                expanded = uturnExpanded,
+                                onExpandedChange = { uturnExpanded = it },
+                            ) {
+                                OutlinedTextField(
+                                    value = uturnRoad.orEmpty(),
+                                    onValueChange = {},
+                                    readOnly = true,
+                                    singleLine = true,
+                                    label = { Text(stringResource(R.string.place_uturn_road)) },
+                                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = uturnExpanded) },
+                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                                 )
+                                ExposedDropdownMenu(
+                                    expanded = uturnExpanded,
+                                    onDismissRequest = { uturnExpanded = false },
+                                ) {
+                                    roadOptions.forEach { road ->
+                                        val uturnName = uturnNames[road].orEmpty()
+                                        DropdownMenuItem(
+                                            text = { Text(uturnName) },
+                                            onClick = {
+                                                uturnRoad = road
+                                                text = uturnName
+                                                roads = setOf(road)
+                                                uturnExpanded = false
+                                            },
+                                            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
+
+                    PlaceKind.LANDMARK -> Unit
                 }
+
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.place_clear_hint),
@@ -537,25 +566,19 @@ fun PlaceNameDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (pointCount > 1) {
-                    TextButton(onClick = { onSavePointOnly(text, roads) }) {
+                    TextButton(onClick = { onSavePointOnly(text, roads, kind) }) {
                         Text(stringResource(R.string.place_only_point))
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(text, takeOverNames, roads) }) {
-                Text(
-                    stringResource(
-                        if (named) R.string.action_save else R.string.place_name_apply,
-                    ),
-                )
+            TextButton(onClick = { onSave(text, takeOverNames, roads, kind) }) {
+                Text(stringResource(if (named) R.string.action_save else R.string.place_name_apply))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_cancel))
-            }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }
@@ -649,7 +672,7 @@ fun RoadNameReuse(
             singleLine = true,
             label = { Text(stringResource(R.string.edge_name_reuse)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
         )
         ExposedDropdownMenu(
             expanded = expanded,

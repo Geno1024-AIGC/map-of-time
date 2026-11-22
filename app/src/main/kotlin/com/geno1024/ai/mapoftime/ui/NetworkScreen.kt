@@ -237,11 +237,12 @@ fun NetworkScreen(
             overriddenCount = viewModel.overriddenMembers(draft),
             roadCandidates = viewModel.pointRoadCandidatesFor(draft.refs),
             initialRoads = initialRoadsSet,
+            initialKind = viewModel.placeKind(draft.existingPlaceId),
             onDismiss = {
                 namingPlace = null
                 preview = null
             },
-            onSave = { name, takeOverNames, roads ->
+            onSave = { name, takeOverNames, roads, kind ->
                 namingPlace = null
                 preview = null
                 scope.launch {
@@ -250,10 +251,11 @@ fun NetworkScreen(
                         name,
                         clearMemberNames = takeOverNames,
                         roads = roads,
+                        kind = kind,
                     )
                 }
             },
-            onSavePointOnly = { name, roads ->
+            onSavePointOnly = { name, roads, _ ->
                 namingPlace = null
                 preview = null
                 scope.launch { viewModel.renamePoint(draft.seed, name, roads = roads) }

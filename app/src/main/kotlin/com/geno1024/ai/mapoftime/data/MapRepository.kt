@@ -151,7 +151,7 @@ class MapRepository(private val helper: MapDb) {
             setPointRoads(listOf(roads.ref), roads.roads)
         }
         for (place in bundle.junctions.ifEmpty { bundle.places }) {
-            mergePlace(place.name, place.center, place.radiusM, place.points)
+            mergePlace(place.name, place.center, place.radiusM, place.points, place.kind)
         }
         // v4 first-class nodes/roads
         for (road in bundle.roads) ensureRoad(road.name, road.source)
@@ -162,7 +162,7 @@ class MapRepository(private val helper: MapDb) {
             val jName = node.junctionName
             if (jName != null) {
                 val j = bundle.junctions.firstOrNull { it.name == jName }
-                if (j != null) mergePlace(j.name, j.center, j.radiusM, listOf(node.ref))
+                if (j != null) mergePlace(j.name, j.center, j.radiusM, listOf(node.ref), j.kind)
                 else if (at != null) mergePlace(jName, at, 30.0, listOf(node.ref))
             }
         }
@@ -743,7 +743,7 @@ class MapRepository(private val helper: MapDb) {
             }
         }
         return db.rawQuery(
-            "SELECT id, name, lat, lon, radius_m FROM junctions ORDER BY name",
+            "SELECT id, name, lat, lon, radius_m, kind FROM junctions ORDER BY name",
             null,
         ).use { cursor ->
             buildList {
@@ -756,6 +756,7 @@ class MapRepository(private val helper: MapDb) {
                             at = LatLon(cursor.getDouble(2), cursor.getDouble(3)),
                             radiusM = cursor.getDouble(4),
                             points = members[id].orEmpty(),
+                            kind = PlaceKind.of(cursor.getString(5)),
                         ),
                     )
                 }
@@ -772,6 +773,7 @@ class MapRepository(private val helper: MapDb) {
         clearMemberNames: Boolean = false,
         roads: Collection<String>? = null,
         absorbIds: List<Long> = emptyList(),
+        kind: PlaceKind = PlaceKind.CROSSING,
     ): Long? {
         val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
         var placeId = id
@@ -797,6 +799,7 @@ class MapRepository(private val helper: MapDb) {
                 put("lat", center.lat)
                 put("lon", center.lon)
                 put("radius_m", radiusM)
+                put("kind", kind.id)
             }
             placeId = if (id == null) {
                 values.put("created_at", System.currentTimeMillis())
@@ -834,25 +837,26 @@ class MapRepository(private val helper: MapDb) {
         return placeId
     }
 
-    fun mergePlace(name: String, center: LatLon, radiusM: Double, members: List<PointRef>): Long? {
+    fun mergePlace(name: String, center: LatLon, radiusM: Double, members: List<PointRef>, kind: PlaceKind = PlaceKind.CROSSING): Long? {
         val trimmed = name.trim().takeIf { it.isNotEmpty() } ?: return null
         if (RoadNames.isComposite(trimmed)) {
             setPointRoads(members, RoadNames.split(trimmed))
             return null
         }
-        val (existingId, existingRadius) = db.rawQuery(
-            "SELECT id, radius_m FROM junctions WHERE name = ? LIMIT 1",
+        val existing = db.rawQuery(
+            "SELECT id, radius_m, kind FROM junctions WHERE name = ? LIMIT 1",
             arrayOf(trimmed),
         ).use { cursor ->
-            if (cursor.moveToNext()) cursor.getLong(0) to cursor.getDouble(1) else null to 0.0
+            if (cursor.moveToNext()) Triple(cursor.getLong(0), cursor.getDouble(1), PlaceKind.of(cursor.getString(2))) else null
         }
-        val merged = if (existingId == null) members else placePoints(existingId) + members
+        val merged = if (existing == null) members else placePoints(existing.first) + members
         return upsertPlace(
-            id = existingId,
+            id = existing?.first,
             name = trimmed,
             members = merged,
             center = center,
-            radiusM = maxOf(radiusM, existingRadius),
+            radiusM = maxOf(radiusM, existing?.second ?: 0.0),
+            kind = existing?.third ?: kind,
         )
     }
 

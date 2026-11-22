@@ -125,6 +125,18 @@ data class DangerCounts(
     val trips: Int = 0,
 )
 
+/** What kind of named point/junction this place represents. */
+enum class PlaceKind(val id: String) {
+    CROSSING("crossing"),
+    UTURN("uturn"),
+    LANDMARK("landmark"),
+    ;
+
+    companion object {
+        fun of(id: String?): PlaceKind = entries.firstOrNull { it.id == id } ?: CROSSING
+    }
+}
+
 /**
  * One junction as the user thinks of it: a name plus every point that belongs
  * to it. A wide crossing is a dozen OSM nodes — an entry and an exit per lane,
@@ -140,6 +152,7 @@ data class Place(
     /** How far the members spread from the centre, so adoption has a bound. */
     val radiusM: Double,
     val points: List<PointRef> = emptyList(),
+    val kind: PlaceKind = PlaceKind.CROSSING,
 )
 
 /**

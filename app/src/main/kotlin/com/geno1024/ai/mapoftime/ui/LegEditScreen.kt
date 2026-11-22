@@ -132,17 +132,18 @@ fun LegEditScreen(
             overriddenCount = viewModel.overriddenMembers(draft),
             roadCandidates = viewModel.pointRoadCandidatesFor(draft.refs),
             initialRoads = initialRoadsSet,
+            initialKind = viewModel.placeKind(draft.existingPlaceId),
             onDismiss = { namingPlace = null; preview = null },
-            onSave = { name, takeOverNames, roads ->
+            onSave = { name, takeOverNames, roads, kind ->
                 namingPlace = null
                 preview = null
                 scope.launch {
-                    viewModel.namePlace(draft, name, clearMemberNames = takeOverNames, roads = roads)
+                    viewModel.namePlace(draft, name, clearMemberNames = takeOverNames, roads = roads, kind = kind)
                     edge = edge?.id?.let { viewModel.edge(it) }
                     reload += 1
                 }
             },
-            onSavePointOnly = { name, roads ->
+            onSavePointOnly = { name, roads, _ ->
                 namingPlace = null
                 preview = null
                 scope.launch {
