@@ -46,6 +46,10 @@
     <string name="point_roads_hint">Crossing roads (select to derive a name like A × B)</string>
     <string name="point_roads_none">No road names to suggest yet. Bind a road to an edge or type a road name.</string>
     <string name="point_derived_name">Derived crossing name: %1$s</string>
+    <string name="place_uturn">U-turn point</string>
+    <string name="place_uturn_hint">Mark this point as a U-turn point of a road</string>
+    <string name="place_uturn_road">U-turn road</string>
+    <string name="place_uturn_name">%1$s U-turn</string>
     <string name="point_infer_roads_from_edge">Edge roads available as candidates: %1$s</string>
     <string name="place_name_action">Name junction</string>
     <string name="place_member_count">%1$d points share this name</string>

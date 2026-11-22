@@ -398,6 +398,7 @@ fun PointRoadsPicker(
  * Naming them one by one never converges, so the default action names them all
  * and [onSavePointOnly] is the escape hatch for a single point.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaceNameDialog(
     initial: String,
@@ -417,6 +418,8 @@ fun PlaceNameDialog(
     var text by remember(initial) { mutableStateOf(initial) }
     var roads by remember(initialRoads) { mutableStateOf(initialRoads) }
     var takeOverNames by remember { mutableStateOf(false) }
+    var uturnRoad by remember { mutableStateOf<String?>(null) }
+    var uturnExpanded by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.place_name_title)) },
@@ -476,6 +479,56 @@ fun PlaceNameDialog(
                         style = MaterialTheme.typography.labelMedium,
                         color = if (text.trim().isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                val roadOptions = remember(roadCandidates, roads) {
+                    (roadCandidates + roads).distinct().sortedWith(Collator.getInstance(Locale.CHINA))
+                }
+                if (roadOptions.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.place_uturn),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Text(
+                        text = stringResource(R.string.place_uturn_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val uturnNames = roadOptions.associateWith { road ->
+                        stringResource(R.string.place_uturn_name, road)
+                    }
+                    ExposedDropdownMenuBox(
+                        expanded = uturnExpanded,
+                        onExpandedChange = { uturnExpanded = it },
+                    ) {
+                        OutlinedTextField(
+                            value = uturnRoad.orEmpty(),
+                            onValueChange = {},
+                            readOnly = true,
+                            singleLine = true,
+                            label = { Text(stringResource(R.string.place_uturn_road)) },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = uturnExpanded) },
+                            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                        )
+                        ExposedDropdownMenu(
+                            expanded = uturnExpanded,
+                            onDismissRequest = { uturnExpanded = false },
+                        ) {
+                            roadOptions.forEach { road ->
+                                val uturnName = uturnNames[road].orEmpty()
+                                DropdownMenuItem(
+                                    text = { Text(uturnName) },
+                                    onClick = {
+                                        uturnRoad = road
+                                        text = uturnName
+                                        roads = roads + road
+                                        uturnExpanded = false
+                                    },
+                                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                                )
+                            }
+                        }
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(

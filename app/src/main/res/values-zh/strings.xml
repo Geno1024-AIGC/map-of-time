@@ -46,6 +46,10 @@
     <string name="point_roads_hint">交叉道路（选择后可推导出如 A × B 的名称）</string>
     <string name="point_roads_none">暂时没有可推断的路名。可先给边绑定道路，或在边上填写路名。</string>
     <string name="point_derived_name">派生交叉名：%1$s</string>
+    <string name="place_uturn">掉头点</string>
+    <string name="place_uturn_hint">将此点标记为某条路的掉头点</string>
+    <string name="place_uturn_road">掉头所在道路</string>
+    <string name="place_uturn_name">%1$s掉头点</string>
     <string name="point_infer_roads_from_edge">可从边推断的道路候选：%1$s</string>
     <string name="place_name_action">命名路口</string>
     <string name="place_member_count">这个路口共 %1$d 个点</string>
