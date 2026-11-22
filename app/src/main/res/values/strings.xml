@@ -51,7 +51,7 @@
     <string name="place_member_count">%1$d points share this name</string>
     <string name="edge_inside_junction">inside %1$s</string>
     <string name="edge_inside_junction_road">inside %1$s · %2$s</string>
-    <string name="nav_edges">Edges</string>
+
     <string name="nav_settings">Settings</string>
 
     <string name="map_lock_camera">Lock view</string>
@@ -60,6 +60,8 @@
     <string name="network_summary">%1$d junctions · %2$d edges</string>
     <string name="network_summary_parts">%1$d junctions · %2$d edges · %3$d unconnected clusters</string>
     <string name="network_hint">Tap a junction to see the edges leaving it</string>
+    <string name="network_view_graph">Graph</string>
+    <string name="network_view_list">List</string>
     <string name="network_pick_node">Tap a dot on the map to see what leaves that junction.</string>
     <string name="network_node_unnamed">Unnamed junction</string>
     <string name="network_degree">%1$d edges</string>

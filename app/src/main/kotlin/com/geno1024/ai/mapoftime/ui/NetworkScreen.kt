@@ -1,8 +1,10 @@
 package com.geno1024.ai.mapoftime.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,8 +12,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
+import com.geno1024.ai.mapoftime.analysis.EdgeSummary
 import com.geno1024.ai.mapoftime.analysis.NetworkGraph
 import com.geno1024.ai.mapoftime.analysis.NetworkGraphs
 import com.geno1024.ai.mapoftime.analysis.NetworkLink
@@ -40,13 +47,21 @@ import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
 import com.geno1024.ai.mapoftime.core.DurationStats
 import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.LatLon
+import com.geno1024.ai.mapoftime.core.TrafficContext
+import com.geno1024.ai.mapoftime.core.TrafficDay
 import com.geno1024.ai.mapoftime.core.TripMode
+import com.geno1024.ai.mapoftime.core.takeAt
+import com.geno1024.ai.mapoftime.core.takeOrNull
+import com.geno1024.ai.mapoftime.core.trafficDayOf
 import com.geno1024.ai.mapoftime.data.PointRef
 import com.geno1024.ai.mapoftime.data.RoadNames
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
 import com.geno1024.ai.mapoftime.ui.map.MapRing
 import com.geno1024.ai.mapoftime.ui.map.TrackMap
 import kotlinx.coroutines.launch
+
+private enum class NetworkView { GRAPH, LIST }
+private enum class EdgeSort { RECENT, SAMPLES, SLOWEST, NAME }
 
 /**
  * The segments as a network: junctions are the dots, segments the lines
@@ -83,6 +98,13 @@ fun NetworkScreen(
     // Zoom to a node only when we were sent here from a segment. Ordinary taps
     // keep the whole network framed, so the next junction stays within reach.
     var focusNode by remember { mutableStateOf(false) }
+    var viewMode by rememberSaveable(stateSaver = enumNameSaver(NetworkView.entries.toTypedArray())) {
+        mutableStateOf(NetworkView.GRAPH)
+    }
+    var edgeSort by rememberSaveable(stateSaver = enumNameSaver(EdgeSort.entries.toTypedArray())) {
+        mutableStateOf(EdgeSort.SAMPLES)
+    }
+    var edgeQuery by rememberSaveable { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     // Drawn as a dot always; used by the camera only when there is no network
     // to frame yet, because this tab is about the roads, not about the phone.
@@ -94,6 +116,7 @@ fun NetworkScreen(
         if (requestedNode == null) return@LaunchedEffect
         // A filter left over from an earlier visit could hide the very node we
         // were sent to; clear it so the jump always lands somewhere visible.
+        viewMode = NetworkView.GRAPH
         modeFilter = null
         selectedKey = requestedNode
         preview = null
@@ -109,6 +132,26 @@ fun NetworkScreen(
         )
     }
     val selected = graph.node(selectedKey)
+
+    val nowMs = System.currentTimeMillis()
+    val now = TrafficContext.of(epochMs = nowMs, calendar = settings.holidayCalendar)
+    val fridayRush = trafficDayOf(nowMs, calendar = settings.holidayCalendar) == TrafficDay.FRIDAY_RUSH
+    val edgeSummaries = remember(viewModel.summaries, modeFilter, edgeSort, edgeQuery) {
+        val text = edgeQuery.trim()
+        val filtered = viewModel.summaries
+            .filter { modeFilter == null || it.edge.mode == modeFilter }
+            .filter {
+                text.isEmpty() ||
+                    it.edge.displayName.contains(text, ignoreCase = true) ||
+                    it.edge.key.contains(text, ignoreCase = true)
+            }
+        when (edgeSort) {
+            EdgeSort.SAMPLES -> filtered.sortedWith(compareByDescending<EdgeSummary> { it.sampleCount }.thenBy { it.edge.displayName })
+            EdgeSort.RECENT -> filtered.sortedByDescending { it.edge.lastSeen }
+            EdgeSort.SLOWEST -> filtered.sortedByDescending { it.combined.medianMs }
+            EdgeSort.NAME -> filtered.sortedBy { it.edge.displayName.lowercase() }
+        }
+    }
 
     // One track per segment; shared junctions produce identical coordinates,
     // so the lines meet exactly where the node dots are.
@@ -221,25 +264,28 @@ fun NetworkScreen(
     Column(modifier.fillMaxSize()) {
         ScreenHeader(
             title = stringResource(R.string.network_title),
-            subtitle = if (graph.edges.isEmpty()) {
-                null
-            } else if (graph.parts > 1) {
-                stringResource(
-                    R.string.network_summary_parts,
-                    graph.nodes.size,
-                    graph.edges.size,
-                    graph.parts,
-                )
-            } else {
-                stringResource(
-                    R.string.network_summary,
-                    graph.nodes.size,
-                    graph.edges.size,
-                )
+            subtitle = when (viewMode) {
+                NetworkView.GRAPH -> if (graph.edges.isEmpty()) null
+                else if (graph.parts > 1) stringResource(R.string.network_summary_parts, graph.nodes.size, graph.edges.size, graph.parts)
+                else stringResource(R.string.network_summary, graph.nodes.size, graph.edges.size)
+                NetworkView.LIST -> edgeSummaries.size.toString().takeIf { edgeSummaries.isNotEmpty() }
             },
         )
 
         Column(Modifier.padding(horizontal = 16.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = viewMode == NetworkView.GRAPH,
+                    onClick = { viewMode = NetworkView.GRAPH },
+                    label = { Text(stringResource(R.string.network_view_graph)) },
+                )
+                FilterChip(
+                    selected = viewMode == NetworkView.LIST,
+                    onClick = { viewMode = NetworkView.LIST },
+                    label = { Text(stringResource(R.string.network_view_list)) },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
             ModeFilter(
                 selected = modeFilter,
                 onSelect = {
@@ -248,92 +294,126 @@ fun NetworkScreen(
                 },
             )
             Spacer(Modifier.height(8.dp))
-            Box(Modifier.fillMaxWidth().height(250.dp)) {
-                TrackMap(
-                    tracks = tracks,
+        }
+
+        if (viewMode == NetworkView.LIST) {
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                OutlinedTextField(
+                    value = edgeQuery,
+                    onValueChange = { edgeQuery = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.edges_search)) },
+                )
+                Spacer(Modifier.height(8.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SortChip(EdgeSort.SAMPLES, edgeSort, R.string.edges_sort_samples) { edgeSort = it }
+                    SortChip(EdgeSort.RECENT, edgeSort, R.string.edges_sort_recent) { edgeSort = it }
+                    SortChip(EdgeSort.SLOWEST, edgeSort, R.string.edges_sort_slowest) { edgeSort = it }
+                    SortChip(EdgeSort.NAME, edgeSort, R.string.edges_sort_name) { edgeSort = it }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+            if (edgeSummaries.isEmpty()) {
+                EmptyState(
+                    title = stringResource(if (viewModel.summaries.isEmpty()) R.string.edges_empty_title else R.string.edges_no_match_title),
+                    body = stringResource(if (viewModel.summaries.isEmpty()) R.string.edges_empty_body else R.string.edges_no_match_body),
+                )
+            } else {
+                LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    markers = markers,
-                    tilesEnabled = settings.mapTiles,
-                    basemap = settings.basemap,
-                    customTileUrl = settings.customTileUrl,
-                    customTilesGcj02 = settings.customTilesGcj02,
-                    onMarkerTap = onMapTap,
-                    emptyHint = stringResource(R.string.network_empty_title),
-                    rings = rings,
-                    focusBounds = focusBounds,
-                    here = here,
-                )
-            }
-            // The review step: the ring is on the map, the numbers are here,
-            // and nothing has been written yet.
-            preview?.let { draft ->
-                Text(
-                    text = stringResource(R.string.place_preview_pick_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                val wider = PlaceDrafts.REACH_STEPS_M.firstOrNull { it > previewReach }
-                PlacePreviewRow(
-                    draft = draft,
-                    onName = { namingPlace = draft },
-                    onCancel = { preview = null },
-                    onWider = wider?.let { reach ->
-                        {
-                            previewReach = reach
-                            preview = viewModel.placeDraft(draft.seed, previewAt, reach, previewManual)
-                        }
-                    },
-                )
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = stringResource(R.string.network_hint),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-
-        if (graph.edges.isEmpty()) {
-            EmptyState(
-                title = stringResource(R.string.network_empty_title),
-                body = stringResource(R.string.network_empty_body),
-            )
-            return@Column
-        }
-
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
-        ) {
-            item {
-                if (selected == null) {
-                    SectionCard {
-                        Text(
-                            text = stringResource(R.string.network_pick_node),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(edgeSummaries, key = { it.edge.id }) { summary ->
+                        EdgeCard(summary = summary, now = now, fridayRush = fridayRush, onClick = { onOpenEdge(summary.edge.id) })
                     }
-                } else {
-                    NodeCard(
-                        node = selected,
-                        graph = graph,
-                        detail = viewModel.pointDetail(selected.key, selected.at, mode = modeFilter)?.label,
-                        onOpenEdge = onOpenEdge,
-                        onNamePlace = {
-                            val ref = PointRef.parse(selected.key)
-                            focusNode = false
-                            if (ref != null) {
-                                // Show the proposal on the map first; naming it
-                                // is the next tap, once the circle looks right.
-                                previewAt = selected.at
-                                previewReach = PlaceDrafts.SPAN_M
-                                previewManual = emptyMap()
-                                preview = viewModel.placeDraft(ref, selected.at, previewReach)
+                }
+            }
+        } else {
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                Box(Modifier.fillMaxWidth().height(250.dp)) {
+                    TrackMap(
+                        tracks = tracks,
+                        modifier = Modifier.fillMaxSize(),
+                        markers = markers,
+                        tilesEnabled = settings.mapTiles,
+                        basemap = settings.basemap,
+                        customTileUrl = settings.customTileUrl,
+                        customTilesGcj02 = settings.customTilesGcj02,
+                        onMarkerTap = onMapTap,
+                        emptyHint = stringResource(R.string.network_empty_title),
+                        rings = rings,
+                        focusBounds = focusBounds,
+                        here = here,
+                    )
+                }
+                preview?.let { draft ->
+                    Text(
+                        text = stringResource(R.string.place_preview_pick_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    val wider = PlaceDrafts.REACH_STEPS_M.firstOrNull { it > previewReach }
+                    PlacePreviewRow(
+                        draft = draft,
+                        onName = { namingPlace = draft },
+                        onCancel = { preview = null },
+                        onWider = wider?.let { reach ->
+                            {
+                                previewReach = reach
+                                preview = viewModel.placeDraft(draft.seed, previewAt, reach, previewManual)
                             }
                         },
                     )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.network_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+
+            if (graph.edges.isEmpty()) {
+                EmptyState(
+                    title = stringResource(R.string.network_empty_title),
+                    body = stringResource(R.string.network_empty_body),
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                ) {
+                    item {
+                        if (selected == null) {
+                            SectionCard {
+                                Text(
+                                    text = stringResource(R.string.network_pick_node),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else {
+                            NodeCard(
+                                node = selected,
+                                graph = graph,
+                                detail = viewModel.pointDetail(selected.key, selected.at, mode = modeFilter)?.label,
+                                onOpenEdge = onOpenEdge,
+                                onNamePlace = {
+                                    val ref = PointRef.parse(selected.key)
+                                    focusNode = false
+                                    if (ref != null) {
+                                        previewAt = selected.at
+                                        previewReach = PlaceDrafts.SPAN_M
+                                        previewManual = emptyMap()
+                                        preview = viewModel.placeDraft(ref, selected.at, previewReach)
+                                    }
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -449,3 +529,122 @@ private fun LinkRow(link: NetworkLink, other: NetworkNode?, onClick: () -> Unit)
 
 private fun typical(stats: DurationStats): String =
     if (stats.count == 0) "—" else formatSeconds(stats.typicalMs)
+
+private val EdgeSummary.displayName: String
+    get() = edge.displayName
+
+@Composable
+private fun SortChip(
+    value: EdgeSort,
+    selected: EdgeSort,
+    labelRes: Int,
+    onSelect: (EdgeSort) -> Unit,
+) {
+    FilterChip(
+        selected = value == selected,
+        onClick = { onSelect(value) },
+        label = { Text(stringResource(labelRes)) },
+    )
+}
+
+@Composable
+private fun EdgeCard(
+    summary: EdgeSummary,
+    now: TrafficContext,
+    fridayRush: Boolean,
+    onClick: () -> Unit,
+) {
+    val edge = summary.edge
+    val divided = summary.forward.count > 0 && summary.backward.count > 0
+    val forwardNow = if (fridayRush) summary.forwardFridayRush.takeOrNull() else summary.forwardTakes.takeAt(now)
+    val backwardNow = if (fridayRush) summary.backwardFridayRush.takeOrNull() else summary.backwardTakes.takeAt(now)
+    val singleNow = if (summary.forward.count > 0) forwardNow else backwardNow
+    val specific = if (divided) forwardNow != null && backwardNow != null else singleNow != null
+    val nowLabel = if (fridayRush) {
+        stringResource(R.string.day_friday_rush)
+    } else {
+        dayKindLabel(now.day) + " · " + peakLabel(now.peak)
+    }
+
+    SectionCard(modifier = Modifier.clickable(onClick = onClick)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = summary.edge.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = modeLabel(edge.mode) + " · " +
+                        pluralStringResource(R.plurals.samples_count, summary.sampleCount, summary.sampleCount) + " · " +
+                        formatDistance(summary.combined.medianDistanceM.takeIf { it > 0 } ?: edge.lengthM),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            MatchBadge(edge.identity)
+        }
+        Spacer(Modifier.height(10.dp))
+        if (divided) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                val from = stringResource(R.string.edge_from)
+                val to = stringResource(R.string.edge_to)
+                DirectionTime(
+                    label = edge.forwardName ?: "$from → $to",
+                    ms = forwardNow?.medianMs ?: summary.forward.typicalMs,
+                    modifier = Modifier.weight(1f),
+                )
+                DirectionTime(
+                    label = edge.backwardName ?: "$to → $from",
+                    ms = backwardNow?.medianMs ?: summary.backward.typicalMs,
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(8.dp))
+                ConfidenceBadge(summary.combined.confidence)
+            }
+        } else {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = if (summary.sampleCount == 0) "—" else
+                        formatSeconds(singleNow?.medianMs ?: summary.combined.typicalMs),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                ConfidenceBadge(summary.combined.confidence)
+            }
+        }
+        if (summary.sampleCount > 0) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = if (specific) {
+                    stringResource(R.string.typical_now, nowLabel)
+                } else {
+                    stringResource(R.string.typical_now_thin, nowLabel)
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DirectionTime(label: String, ms: Long, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text(
+            text = formatSeconds(ms),
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}

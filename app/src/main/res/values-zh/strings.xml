@@ -51,7 +51,7 @@
     <string name="place_member_count">这个路口共 %1$d 个点</string>
     <string name="edge_inside_junction">%1$s 路口内</string>
     <string name="edge_inside_junction_road">%1$s 路口内 · %2$s</string>
-    <string name="nav_edges">边</string>
+
     <string name="nav_settings">设置</string>
 
     <string name="map_lock_camera">锁定镜头</string>
@@ -60,6 +60,8 @@
     <string name="network_summary">%1$d 个节点 · %2$d 段</string>
     <string name="network_summary_parts">%1$d 个节点 · %2$d 段 · %3$d 个互不相连的片区</string>
     <string name="network_hint">点一个节点，看看从这里能去哪些边</string>
+    <string name="network_view_graph">图</string>
+    <string name="network_view_list">列表</string>
     <string name="network_pick_node">在地图上点一个点，查看从那里出发的边。</string>
     <string name="network_node_unnamed">未命名节点</string>
     <string name="network_degree">%1$d 段</string>

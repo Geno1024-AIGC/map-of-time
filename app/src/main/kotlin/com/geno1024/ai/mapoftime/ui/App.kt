@@ -26,7 +26,6 @@ private enum class Tab(val labelRes: Int, val glyph: String) {
     RECORD(R.string.nav_record, "◉"),
     TRIPS(R.string.nav_trips, "≡"),
     NETWORK(R.string.nav_network, "⌗"),
-    EDGES(R.string.nav_edges, "⌁"),
     SETTINGS(R.string.nav_settings, "⚙"),
 }
 
@@ -139,12 +138,6 @@ fun App(viewModel: AppViewModel) {
                             onOpenEdge = { id -> detail = "edge:$id" },
                             requestedNode = networkNode,
                             onNodeRequestHandled = { networkNode = null },
-                            modifier = Modifier.padding(padding),
-                        )
-
-                        Tab.EDGES -> EdgesScreen(
-                            viewModel = viewModel,
-                            onOpenEdge = { id -> detail = "edge:$id" },
                             modifier = Modifier.padding(padding),
                         )
 
