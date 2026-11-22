@@ -258,7 +258,7 @@ class TripAnalyzer(
                 Geo.distanceMeters(geometry.first(), existing.to) -> 1
             else -> -1
         }
-        val segmentId = repository.insertSegment(
+        val edgeId = repository.insertEdge(
             key = key,
             mode = mode,
             name = piece.label,
@@ -276,11 +276,8 @@ class TripAnalyzer(
                 startMs = startMs,
                 endMs = endMs,
                 distanceM = meters,
-                segmentId = segmentId,
+                edgeId = edgeId,
                 direction = direction,
-                // A segment is named by its two atomic ends, then by whatever
-                // OSM calls the way. A road name on the segment is inference
-                // input for the points and does not override this label.
                 label = existing?.preferredLabel
                     ?: pointPairName(pointNames[fromKey], pointNames[toKey])
                     ?: piece.label,

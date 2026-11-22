@@ -156,34 +156,32 @@ class MapRepository(private val helper: MapDb) {
             mergePlace(place.name, place.center, place.radiusM, place.points)
         }
 
-        fun segmentFor(mode: TripMode, key: String?): Long? {
+        fun edgeFor(mode: TripMode, key: String?): Long? {
             if (key.isNullOrBlank()) return null
             val cacheKey = mode.id to key
             resolved[cacheKey]?.let { return it }
-            val existing = segmentByKey(key, mode)
+            val existing = edgeByKey(key, mode)
             val definition = definitions[cacheKey]
             if (existing != null) {
-                // Restore a name the user gave the segment, but never replace a
-                // local one with what the file happened to say.
                 val values = ContentValues()
                 if (existing.userName == null && definition?.userName != null) {
                     values.put("user_name", definition.userName)
+                    val roadId = ensureRoad(definition.userName, "user")
+                    if (roadId > 0) values.put("road_id", roadId)
                 }
-                if (existing.fromKey == null && definition?.fromKey != null) {
-                    values.put("from_key", definition.fromKey)
+                if (existing.fromNodeId == null && definition?.fromKey != null) {
+                    ensureNode(definition.fromKey, existing.from, System.currentTimeMillis())?.let { values.put("from_node_id", it) }
                 }
-                if (existing.toKey == null && definition?.toKey != null) {
-                    values.put("to_key", definition.toKey)
+                if (existing.toNodeId == null && definition?.toKey != null) {
+                    ensureNode(definition.toKey, existing.to, System.currentTimeMillis())?.let { values.put("to_node_id", it) }
                 }
-                if (values.size() > 0) {
-                    db.update("segments", values, "id = ?", arrayOf(existing.id.toString()))
-                }
+                if (values.size() > 0) db.update("edges", values, "id = ?", arrayOf(existing.id.toString()))
                 resolved[cacheKey] = existing.id
                 return existing.id
             }
             val id = definition?.let { segment ->
                 segmentsAdded++
-                insertSegment(
+                insertEdge(
                     key = segment.key,
                     mode = mode,
                     name = segment.name,
@@ -232,7 +230,7 @@ class MapRepository(private val helper: MapDb) {
                         put("start_ms", leg.startMs)
                         put("end_ms", leg.endMs)
                         put("distance_m", leg.distanceM)
-                        segmentFor(trip.mode, leg.segmentKey)?.let { put("segment_id", it) }
+                        edgeFor(trip.mode, leg.segmentKey)?.let { put("edge_id", it) }
                         put("direction", leg.direction)
                         leg.label?.let { put("label", it) }
                         put("partial", if (leg.partial) 1 else 0)
@@ -347,7 +345,7 @@ class MapRepository(private val helper: MapDb) {
                         put("start_ms", leg.startMs)
                         put("end_ms", leg.endMs)
                         put("distance_m", leg.distanceM)
-                        leg.segmentId?.let { put("segment_id", it) }
+                        leg.edgeId?.let { put("edge_id", it) }
                         put("direction", leg.direction)
                         leg.label?.let { put("label", it) }
                         put("partial", if (leg.partial) 1 else 0)
@@ -361,10 +359,7 @@ class MapRepository(private val helper: MapDb) {
                     },
                 )
             }
-            // Re-analysing cuts the same trip differently, so any segment that
-            // only the old cut used is now referenced by nothing. Left behind,
-            // it would sit in the segment list with zero samples.
-            deleteOrphanSegments()
+            deleteOrphanEdges()
         }
     }
 
@@ -372,18 +367,22 @@ class MapRepository(private val helper: MapDb) {
         db.rawQuery("SELECT * FROM legs WHERE trip_id = ? ORDER BY seq", arrayOf(tripId.toString()))
             .use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toLeg()) } }
 
-    fun legsForSegment(segmentId: Long): List<Leg> =
+    fun legsForSegment(segmentId: Long): List<Leg> = legsForEdge(segmentId)
+
+    fun legsForEdge(edgeId: Long): List<Leg> =
         db.rawQuery(
-            "SELECT * FROM legs WHERE segment_id = ? ORDER BY start_ms",
-            arrayOf(segmentId.toString()),
+            "SELECT * FROM legs WHERE edge_id = ? ORDER BY start_ms",
+            arrayOf(edgeId.toString()),
         ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toLeg()) } }
 
-    /** Identity of many segments at once, for badging a trip's leg list. */
-    fun segmentIdentities(ids: List<Long>): Map<Long, MatchKind> {
+    /** Identity of many edges at once, for badging a trip's leg list. */
+    fun segmentIdentities(ids: List<Long>): Map<Long, MatchKind> = edgeIdentities(ids)
+
+    fun edgeIdentities(ids: List<Long>): Map<Long, MatchKind> {
         if (ids.isEmpty()) return emptyMap()
         val placeholders = ids.joinToString(",") { "?" }
         return db.rawQuery(
-            "SELECT id, identity FROM segments WHERE id IN ($placeholders)",
+            "SELECT id, identity FROM edges WHERE id IN ($placeholders)",
             ids.map { it.toString() }.toTypedArray(),
         ).use { cursor ->
             buildMap {
@@ -394,31 +393,42 @@ class MapRepository(private val helper: MapDb) {
         }
     }
 
-    // ----------------------------------------------------------- segments
+    // ----------------------------------------------------------- edges
 
     /**
-     * Segments carry the names of their two ends so a single point name can
-     * rename every segment through it. The join is on the full point key; the
-     * name table is tiny, so the concatenation costs nothing worth avoiding.
-     *
-     * `point_labels` is the effective name: a point's own name when it has
-     * one, otherwise the name of the junction it belongs to.
+     * Edges join their endpoint nodes so a single node name or junction name
+     * renames every edge through it.
      */
-    private val segmentSelect: String
-        get() = "SELECT s.*, pf.name AS from_name, pt.name AS to_name FROM segments s " +
-            "LEFT JOIN point_labels pf ON pf.kind || ':' || pf.node_id = s.from_key " +
-            "LEFT JOIN point_labels pt ON pt.kind || ':' || pt.node_id = s.to_key"
+    private val edgeSelect: String
+        get() = """
+            SELECT e.*,
+                   nf.ref_kind AS from_ref_kind, nf.ref_node_id AS from_ref_node_id, nf.name AS from_node_name,
+                   nt.ref_kind AS to_ref_kind, nt.ref_node_id AS to_ref_node_id, nt.name AS to_node_name,
+                   nl_from.name AS from_name, nl_to.name AS to_name
+              FROM edges e
+              LEFT JOIN nodes nf ON nf.id = e.from_node_id
+              LEFT JOIN nodes nt ON nt.id = e.to_node_id
+              LEFT JOIN node_labels nl_from ON nl_from.node_id = e.from_node_id
+              LEFT JOIN node_labels nl_to ON nl_to.node_id = e.to_node_id
+        """.trimIndent()
 
-    fun segment(id: Long): Segment? =
-        db.rawQuery("$segmentSelect WHERE s.id = ?", arrayOf(id.toString())).use { cursor ->
-            if (cursor.moveToFirst()) cursor.toSegment() else null
+    // Compatibility alias while callers migrate.
+    private val segmentSelect: String get() = edgeSelect
+
+    fun segment(id: Long): Segment? = edge(id)
+
+    fun edge(id: Long): Edge? =
+        db.rawQuery("$edgeSelect WHERE e.id = ?", arrayOf(id.toString())).use { cursor ->
+            if (cursor.moveToFirst()) cursor.toEdge() else null
         }
 
-    fun segmentByKey(key: String, mode: TripMode): Segment? =
+    fun segmentByKey(key: String, mode: TripMode): Segment? = edgeByKey(key, mode)
+
+    fun edgeByKey(key: String, mode: TripMode): Edge? =
         db.rawQuery(
-            "$segmentSelect WHERE s.key = ? AND s.mode = ?",
+            "$edgeSelect WHERE e.key = ? AND e.mode = ?",
             arrayOf(key, mode.id),
-        ).use { cursor -> if (cursor.moveToFirst()) cursor.toSegment() else null }
+        ).use { cursor -> if (cursor.moveToFirst()) cursor.toEdge() else null }
 
     fun insertSegment(
         key: String,
@@ -432,31 +442,45 @@ class MapRepository(private val helper: MapDb) {
         userName: String? = null,
         fromKey: String? = null,
         toKey: String? = null,
+    ): Long = insertEdge(key, mode, name, identity, from, to, lengthM, seenAt, userName, fromKey, toKey)
+
+    fun insertEdge(
+        key: String,
+        mode: TripMode,
+        name: String?,
+        identity: MatchKind,
+        from: LatLon,
+        to: LatLon,
+        lengthM: Double,
+        seenAt: Long,
+        userName: String? = null,
+        fromKey: String? = null,
+        toKey: String? = null,
+        roadId: Long? = null,
     ): Long {
-        val existing = segmentByKey(key, mode)
+        val existing = edgeByKey(key, mode)
+        val fromNodeId = ensureNode(fromKey, from, seenAt)
+        val toNodeId = ensureNode(toKey, to, seenAt)
         if (existing != null) {
             val values = ContentValues().apply {
                 put("last_seen", seenAt)
                 if (name != null) put("name", name)
                 put("length_m", lengthM)
-                // Earlier versions did not record which points the ends are;
-                // a re-analysis can fill them in without touching anything else.
-                if (existing.fromKey == null && fromKey != null) put("from_key", fromKey)
-                if (existing.toKey == null && toKey != null) put("to_key", toKey)
+                if (existing.fromNodeId == null && fromNodeId != null) put("from_node_id", fromNodeId)
+                if (existing.toNodeId == null && toNodeId != null) put("to_node_id", toNodeId)
+                if (existing.roadId == null && roadId != null) put("road_id", roadId)
             }
-            db.update("segments", values, "id = ?", arrayOf(existing.id.toString()))
+            db.update("edges", values, "id = ?", arrayOf(existing.id.toString()))
             return existing.id
         }
         return db.insert(
-            "segments",
+            "edges",
             null,
             ContentValues().apply {
                 put("key", key)
                 put("mode", mode.id)
                 put("name", name)
                 put("user_name", userName)
-                put("from_key", fromKey)
-                put("to_key", toKey)
                 put("identity", identity.name)
                 put("a_lat", from.lat)
                 put("a_lon", from.lon)
@@ -465,30 +489,37 @@ class MapRepository(private val helper: MapDb) {
                 put("length_m", lengthM)
                 put("first_seen", seenAt)
                 put("last_seen", seenAt)
+                if (fromNodeId != null) put("from_node_id", fromNodeId)
+                if (toNodeId != null) put("to_node_id", toNodeId)
+                if (roadId != null) put("road_id", roadId)
             },
         )
     }
 
     /**
-     * Gives a segment a name of the user's own, or clears it so the point pair
-     * or OSM's name is used again. Legs carry a copy of the label for display
-     * and export, so they are rewritten in the same transaction — otherwise the
-     * trip list would keep showing the old name until the next analysis.
+     * Gives an edge a user road name, or clears it. Legs carry a label copy for
+     * display/export, so they are rewritten in the same transaction.
      */
-    fun renameSegment(id: Long, name: String?) {
+    fun renameSegment(id: Long, name: String?) = renameEdge(id, name)
+
+    fun renameEdge(id: Long, name: String?) {
         val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
         db.transaction {
+            val roadId = trimmed?.let { ensureRoad(it, "user") }
             db.update(
-                "segments",
-                ContentValues().apply { put("user_name", trimmed) },
+                "edges",
+                ContentValues().apply {
+                    put("user_name", trimmed)
+                    if (roadId != null) put("road_id", roadId) else putNull("road_id")
+                },
                 "id = ?",
                 arrayOf(id.toString()),
             )
-            val segment = segment(id) ?: return@transaction
+            val edge = edge(id) ?: return@transaction
             db.update(
                 "legs",
-                ContentValues().apply { put("label", segment.preferredLabel) },
-                "segment_id = ?",
+                ContentValues().apply { put("label", edge.preferredLabel) },
+                "edge_id = ?",
                 arrayOf(id.toString()),
             )
         }
@@ -498,7 +529,10 @@ class MapRepository(private val helper: MapDb) {
 
     /** Every point the user has named, keyed by `kind:node`. */
     fun pointNames(): Map<String, String> =
-        db.rawQuery("SELECT kind, node_id, name FROM point_names", null).use { cursor ->
+        db.rawQuery(
+            "SELECT ref_kind, ref_node_id, name FROM nodes WHERE name IS NOT NULL AND name NOT LIKE '%×%'",
+            null,
+        ).use { cursor ->
             buildMap {
                 while (cursor.moveToNext()) {
                     put("${cursor.getString(0)}:${cursor.getLong(1)}", cursor.getString(2))
@@ -507,9 +541,7 @@ class MapRepository(private val helper: MapDb) {
         }
 
     /**
-     * What every point is called right now: its own name if it has one, the
-     * junction's otherwise. The analyser reads this once per trip so the legs
-     * it writes already agree with what the lists show.
+     * Effective point label: explicit node name, else junction name.
      */
     fun pointLabels(): Map<String, String> =
         db.rawQuery("SELECT kind, node_id, name FROM point_labels", null).use { cursor ->
@@ -521,7 +553,10 @@ class MapRepository(private val helper: MapDb) {
         }
 
     fun namedPoints(): List<NamedPoint> =
-        db.rawQuery("SELECT kind, node_id, name FROM point_names ORDER BY name", null).use { cursor ->
+        db.rawQuery(
+            "SELECT ref_kind, ref_node_id, name FROM nodes WHERE name IS NOT NULL AND name NOT LIKE '%×%' ORDER BY name",
+            null,
+        ).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
                     add(NamedPoint(PointRef(cursor.getString(0), cursor.getLong(1)), cursor.getString(2)))
@@ -532,7 +567,16 @@ class MapRepository(private val helper: MapDb) {
     /** Roads explicitly attached to points, keyed by `kind:node`. */
     fun pointRoads(): Map<String, List<String>> {
         val roads = HashMap<String, MutableList<String>>()
-        db.rawQuery("SELECT kind, node_id, road FROM point_roads ORDER BY road", null).use { cursor ->
+        db.rawQuery(
+            """
+            SELECT n.ref_kind, n.ref_node_id, r.name
+              FROM node_roads nr
+              JOIN nodes n ON n.id = nr.node_id
+              JOIN roads r ON r.id = nr.road_id
+             ORDER BY r.name
+            """.trimIndent(),
+            null,
+        ).use { cursor ->
             while (cursor.moveToNext()) {
                 val key = "${cursor.getString(0)}:${cursor.getLong(1)}"
                 roads.getOrPut(key) { ArrayList() }.add(cursor.getString(2))
@@ -543,8 +587,7 @@ class MapRepository(private val helper: MapDb) {
 
     /**
      * Replaces the roads chosen for these points. A crossing is a fact about
-     * the point, so every member of a junction gets the same list. No leg
-     * relabel: segment names are point pairs and no longer read road names.
+     * the point, so every member of a junction gets the same list.
      */
     fun setPointRoads(refs: Collection<PointRef>, roads: Collection<String>) {
         val chosen = roads.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
@@ -552,20 +595,15 @@ class MapRepository(private val helper: MapDb) {
         if (distinct.isEmpty()) return
         db.transaction {
             for (ref in distinct) {
-                db.delete(
-                    "point_roads",
-                    "kind = ? AND node_id = ?",
-                    arrayOf(ref.kind, ref.nodeId.toString()),
-                )
+                val nodeId = ensureNode(ref.key, LatLon(0.0, 0.0), 0L) ?: continue
+                db.delete("node_roads", "node_id = ?", arrayOf(nodeId.toString()))
                 for (road in chosen) {
+                    val roadId = ensureRoad(road, "user")
+                    if (roadId <= 0) continue
                     db.insertWithOnConflict(
-                        "point_roads",
+                        "node_roads",
                         null,
-                        ContentValues().apply {
-                            put("kind", ref.kind)
-                            put("node_id", ref.nodeId)
-                            put("road", road)
-                        },
+                        ContentValues().apply { put("node_id", nodeId); put("road_id", roadId) },
                         SQLiteDatabase.CONFLICT_IGNORE,
                     )
                 }
@@ -574,77 +612,79 @@ class MapRepository(private val helper: MapDb) {
     }
 
     /**
-     * Names a point, or clears it when [name] is blank. Every segment that ends
-     * at this point is relabelled in the same transaction, so the list, the
-     * map and the exported legs agree without waiting for a re-analysis.
+     * Names a point, or clears it when [name] is blank. Relabels touching edges
+     * in the same transaction.
      */
     fun renamePoint(ref: PointRef, name: String?) {
         val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
         db.transaction {
-            // Typing "A × B" in the point-name field means the user is naming a
-            // crossing. Store it as roads instead: a composite point name would
-            // reappear inside a segment's point-pair name.
+            val nodeId = ensureNode(ref.key, LatLon(0.0, 0.0), 0L)
             if (RoadNames.isComposite(trimmed)) {
-                db.delete("point_names", "kind = ? AND node_id = ?", arrayOf(ref.kind, ref.nodeId.toString()))
+                if (nodeId != null) {
+                    db.update("nodes", ContentValues().apply { putNull("name") }, "id = ?", arrayOf(nodeId.toString()))
+                }
                 setPointRoads(listOf(ref), RoadNames.split(trimmed))
-            } else if (trimmed == null) {
-                db.delete("point_names", "kind = ? AND node_id = ?", arrayOf(ref.kind, ref.nodeId.toString()))
-            } else {
-                db.insertWithOnConflict(
-                    "point_names",
-                    null,
-                    ContentValues().apply {
-                        put("kind", ref.kind)
-                        put("node_id", ref.nodeId)
-                        put("name", trimmed)
-                        put("named_at", System.currentTimeMillis())
-                    },
-                    SQLiteDatabase.CONFLICT_REPLACE,
+            } else if (nodeId != null) {
+                db.update(
+                    "nodes",
+                    ContentValues().apply { if (trimmed == null) putNull("name") else put("name", trimmed) },
+                    "id = ?",
+                    arrayOf(nodeId.toString()),
                 )
             }
-            relabelSegmentsTouching(listOf(ref.key))
+            relabelEdgesTouching(listOf(ref.key))
         }
     }
 
-    /**
-     * Legs carry a copy of their segment's label, so renaming a point or a
-     * junction has to rewrite them in the same transaction. Otherwise the trip
-     * list would keep the old label until the next analysis, and the two would
-     * quietly disagree in the meantime.
-     */
-    private fun relabelSegmentsTouching(keys: Collection<String>) {
+    private fun relabelSegmentsTouching(keys: Collection<String>) = relabelEdgesTouching(keys)
+
+    private fun relabelEdgesTouching(keys: Collection<String>) {
         if (keys.isEmpty()) return
-        val placeholders = keys.joinToString(",") { "?" }
-        val args = keys.toTypedArray()
+        val nodeIds = keys.mapNotNull { key ->
+            val ref = PointRef.parse(key) ?: return@mapNotNull null
+            db.rawQuery(
+                "SELECT id FROM nodes WHERE ref_kind = ? AND ref_node_id = ?",
+                arrayOf(ref.kind, ref.nodeId.toString()),
+            ).use { c -> if (c.moveToFirst()) c.getLong(0) else null }
+        }
+        if (nodeIds.isEmpty()) return
+        val placeholders = nodeIds.joinToString(",") { "?" }
+        val args = nodeIds.map { it.toString() }.toTypedArray()
         val ids = ArrayList<Long>()
         db.rawQuery(
-            "SELECT id FROM segments WHERE from_key IN ($placeholders) OR to_key IN ($placeholders)",
+            "SELECT id FROM edges WHERE from_node_id IN ($placeholders) OR to_node_id IN ($placeholders)",
             args + args,
         ).use { cursor -> while (cursor.moveToNext()) ids += cursor.getLong(0) }
         for (id in ids) {
-            val segment = segment(id) ?: continue
+            val edge = edge(id) ?: continue
             db.update(
                 "legs",
-                ContentValues().apply { put("label", segment.preferredLabel) },
-                "segment_id = ?",
+                ContentValues().apply { put("label", edge.preferredLabel) },
+                "edge_id = ?",
                 arrayOf(id.toString()),
             )
         }
     }
 
-    // ------------------------------------------------------------- places
+    // ------------------------------------------------------------- junctions/places
 
     /** Every junction the user has named, with the points under it. */
     fun places(): List<Place> {
         val members = HashMap<Long, MutableList<PointRef>>()
-        db.rawQuery("SELECT place_id, kind, node_id FROM place_points", null).use { cursor ->
+        db.rawQuery(
+            """
+            SELECT jn.junction_id, n.ref_kind, n.ref_node_id
+              FROM junction_nodes jn JOIN nodes n ON n.id = jn.node_id
+            """.trimIndent(),
+            null,
+        ).use { cursor ->
             while (cursor.moveToNext()) {
                 members.getOrPut(cursor.getLong(0)) { ArrayList() } +=
                     PointRef(cursor.getString(1), cursor.getLong(2))
             }
         }
         return db.rawQuery(
-            "SELECT id, name, lat, lon, radius_m FROM places ORDER BY name",
+            "SELECT id, name, lat, lon, radius_m FROM junctions ORDER BY name",
             null,
         ).use { cursor ->
             buildList {
@@ -664,18 +704,6 @@ class MapRepository(private val helper: MapDb) {
         }
     }
 
-    /**
-     * Names a junction, or dissolves it when [name] is blank.
-     *
-     * [members] replaces the whole membership: the caller hands over the set it
-     * wants the name to cover, so the points that grew in since the last edit
-     * are included and any the user took out are released. A point keeps its
-     * own name if it has one — an override stays an override — unless
-     * [clearMemberNames] says the junction name should take those points over
-     * too. That is how a junction named corner by corner before junctions had
-     * a name of their own gets folded into one, without guessing on the
-     * user's behalf.
-     */
     fun upsertPlace(
         id: Long?,
         name: String?,
@@ -683,32 +711,23 @@ class MapRepository(private val helper: MapDb) {
         center: LatLon,
         radiusM: Double,
         clearMemberNames: Boolean = false,
-        /** Roads chosen at this junction; a crossing is stored on its points. Null leaves them alone. */
         roads: Collection<String>? = null,
-        /**
-         * Same-name rows folded into this junction by the place draft. Their
-         * points are already in [members]; deleting the rows (their
-         * place_points cascade away) leaves one row for the whole junction.
-         */
         absorbIds: List<Long> = emptyList(),
     ): Long? {
         val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
         var placeId = id
         db.transaction {
             val previous = if (id == null) emptyList() else placePoints(id)
-            // A name spelled "A × B" names two roads, not one junction. Keep
-            // the roads on every point it covered and dissolve the place, just
-            // as the v7 migration does for names typed before this rule.
             if (RoadNames.isComposite(trimmed)) {
-                if (id != null) db.delete("places", "id = ?", arrayOf(id.toString()))
+                if (id != null) db.delete("junctions", "id = ?", arrayOf(id.toString()))
                 setPointRoads(previous + members, RoadNames.split(trimmed))
-                relabelSegmentsTouching((previous + members).map { it.key })
+                relabelEdgesTouching((previous + members).map { it.key })
                 placeId = null
                 return@transaction
             }
             if (trimmed == null) {
-                if (id != null) db.delete("places", "id = ?", arrayOf(id.toString()))
-                relabelSegmentsTouching(previous.map { it.key })
+                if (id != null) db.delete("junctions", "id = ?", arrayOf(id.toString()))
+                relabelEdgesTouching(previous.map { it.key })
                 placeId = null
                 return@transaction
             }
@@ -720,60 +739,48 @@ class MapRepository(private val helper: MapDb) {
             }
             placeId = if (id == null) {
                 values.put("created_at", System.currentTimeMillis())
-                db.insert("places", null, values)
+                db.insert("junctions", null, values)
             } else {
-                db.update("places", values, "id = ?", arrayOf(id.toString()))
+                db.update("junctions", values, "id = ?", arrayOf(id.toString()))
                 id
             }
-            val target = placeId ?: return@transaction
+            val target = placeId
             for (otherId in absorbIds) {
-                if (otherId != target) {
-                    db.delete("places", "id = ?", arrayOf(otherId.toString()))
-                }
+                if (otherId != target) db.delete("junctions", "id = ?", arrayOf(otherId.toString()))
             }
+            val memberRefs = members.distinctBy { it.key }
             if (clearMemberNames) {
-                for (ref in members.distinctBy { it.key }) {
-                    db.delete(
-                        "point_names",
-                        "kind = ? AND node_id = ?",
-                        arrayOf(ref.kind, ref.nodeId.toString()),
-                    )
+                for (ref in memberRefs) {
+                    val nodeId = ensureNode(ref.key, LatLon(0.0, 0.0), 0L) ?: continue
+                    db.update("nodes", ContentValues().apply { putNull("name") }, "id = ?", arrayOf(nodeId.toString()))
                 }
             }
-            db.delete("place_points", "place_id = ?", arrayOf(target.toString()))
-            for (ref in members.distinctBy { it.key }) {
+            db.delete("junction_nodes", "junction_id = ?", arrayOf(target.toString()))
+            db.execSQL("UPDATE nodes SET junction_id = NULL WHERE junction_id = ?", arrayOf(target.toString()))
+            for (ref in memberRefs) {
+                val nodeId = ensureNode(ref.key, center, 0L) ?: continue
+                db.update("nodes", ContentValues().apply { put("junction_id", target) }, "id = ?", arrayOf(nodeId.toString()))
                 db.insertWithOnConflict(
-                    "place_points",
+                    "junction_nodes",
                     null,
-                    ContentValues().apply {
-                        put("kind", ref.kind)
-                        put("node_id", ref.nodeId)
-                        put("place_id", target)
-                    },
+                    ContentValues().apply { put("junction_id", target); put("node_id", nodeId) },
                     SQLiteDatabase.CONFLICT_REPLACE,
                 )
             }
-            if (roads != null) setPointRoads(members, roads)
-            relabelSegmentsTouching((previous + members).map { it.key })
+            if (roads != null) setPointRoads(memberRefs, roads)
+            relabelEdgesTouching((previous + memberRefs).map { it.key })
         }
         return placeId
     }
 
-    /**
-     * Restores a junction from an export. A place this install already knows
-     * under the same name keeps its points and gains the imported ones, so
-     * importing a file from another device adds to the junction instead of
-     * replacing it.
-     */
     fun mergePlace(name: String, center: LatLon, radiusM: Double, members: List<PointRef>): Long? {
         val trimmed = name.trim().takeIf { it.isNotEmpty() } ?: return null
-        // An export from before v7 may still spell a junction as "A × B".
         if (RoadNames.isComposite(trimmed)) {
             setPointRoads(members, RoadNames.split(trimmed))
             return null
         }
         val (existingId, existingRadius) = db.rawQuery(
-            "SELECT id, radius_m FROM places WHERE name = ? LIMIT 1",
+            "SELECT id, radius_m FROM junctions WHERE name = ? LIMIT 1",
             arrayOf(trimmed),
         ).use { cursor ->
             if (cursor.moveToNext()) cursor.getLong(0) to cursor.getDouble(1) else null to 0.0
@@ -790,48 +797,45 @@ class MapRepository(private val helper: MapDb) {
 
     private fun placePoints(placeId: Long): List<PointRef> =
         db.rawQuery(
-            "SELECT kind, node_id FROM place_points WHERE place_id = ?",
+            """
+            SELECT n.ref_kind, n.ref_node_id
+              FROM junction_nodes jn JOIN nodes n ON n.id = jn.node_id
+             WHERE jn.junction_id = ?
+            """.trimIndent(),
             arrayOf(placeId.toString()),
         ).use { cursor ->
-            buildList {
-                while (cursor.moveToNext()) add(PointRef(cursor.getString(0), cursor.getLong(1)))
-            }
+            buildList { while (cursor.moveToNext()) add(PointRef(cursor.getString(0), cursor.getLong(1))) }
         }
 
-    /**
-     * Lets the points that turned up during the last analysis join the
-     * junction they fell inside, so a name given once keeps covering the
-     * corners that later turning movements discover.
-     *
-     * Run after an analysis or an import rather than per leg: one pass costs
-     * a couple of queries, and a point that is already named or already a
-     * member is left alone.
-     */
     fun adoptNewEndpoints() {
         val places = places()
         if (places.isEmpty()) return
         val owned = HashSet<String>()
-        db.rawQuery("SELECT kind, node_id FROM place_points", null).use { cursor ->
-            while (cursor.moveToNext()) owned += "${cursor.getString(0)}:${cursor.getLong(1)}"
-        }
-        db.rawQuery("SELECT kind, node_id FROM point_names", null).use { cursor ->
-            while (cursor.moveToNext()) owned += "${cursor.getString(0)}:${cursor.getLong(1)}"
-        }
+        db.rawQuery(
+            "SELECT n.ref_kind, n.ref_node_id FROM junction_nodes jn JOIN nodes n ON n.id = jn.node_id",
+            null,
+        ).use { c -> while (c.moveToNext()) owned += "${c.getString(0)}:${c.getLong(1)}" }
+        db.rawQuery(
+            "SELECT ref_kind, ref_node_id FROM nodes WHERE name IS NOT NULL",
+            null,
+        ).use { c -> while (c.moveToNext()) owned += "${c.getString(0)}:${c.getLong(1)}" }
 
         val positions = HashMap<String, LatLon>()
         val candidates = LinkedHashMap<String, LatLon>()
-        val endpointSelect =
-            "SELECT from_key, a_lat, a_lon FROM segments WHERE from_key IS NOT NULL " +
-                "UNION ALL SELECT to_key, b_lat, b_lon FROM segments WHERE to_key IS NOT NULL"
-        db.rawQuery(endpointSelect, null).use { cursor ->
-            while (cursor.moveToNext()) {
-                val ref = PointRef.parse(cursor.getString(0)) ?: continue
-                val at = LatLon(cursor.getDouble(1), cursor.getDouble(2))
-                // Every endpoint, including the ones already owned: the
-                // membership test below needs to know where the members are.
-                positions.putIfAbsent(ref.key, at)
-                if (!owned.add(ref.key)) continue
-                candidates[ref.key] = at
+        db.rawQuery(
+            """
+            SELECT n.ref_kind, n.ref_node_id, n.lat, n.lon
+              FROM nodes n
+             WHERE EXISTS (SELECT 1 FROM edges e WHERE e.from_node_id = n.id OR e.to_node_id = n.id)
+            """.trimIndent(),
+            null,
+        ).use { c ->
+            while (c.moveToNext()) {
+                val key = "${c.getString(0)}:${c.getLong(1)}"
+                val at = LatLon(c.getDouble(2), c.getDouble(3))
+                positions.putIfAbsent(key, at)
+                if (!owned.add(key)) continue
+                candidates[key] = at
             }
         }
         if (candidates.isEmpty()) return
@@ -840,31 +844,31 @@ class MapRepository(private val helper: MapDb) {
             val ref = PointRef.parse(key) ?: continue
             val nearest = places.minByOrNull { Geo.distanceMeters(at, it.at) } ?: continue
             if (!PlaceDrafts.adopts(nearest, at) { member -> positions[member.key] }) continue
+            val nodeId = ensureNode(ref.key, at, 0L) ?: continue
+            db.update("nodes", ContentValues().apply { put("junction_id", nearest.id) }, "id = ?", arrayOf(nodeId.toString()))
             db.insertWithOnConflict(
-                "place_points",
+                "junction_nodes",
                 null,
-                ContentValues().apply {
-                    put("kind", ref.kind)
-                    put("node_id", ref.nodeId)
-                    put("place_id", nearest.id)
-                },
+                ContentValues().apply { put("junction_id", nearest.id); put("node_id", nodeId) },
                 SQLiteDatabase.CONFLICT_IGNORE,
             )
-            relabelSegmentsTouching(listOf(ref.key))
+            relabelEdgesTouching(listOf(ref.key))
         }
     }
 
-    fun segments(mode: TripMode? = null): List<Segment> {
-        val (where, args) = if (mode == null) "" to emptyArray<String>() else "WHERE s.mode = ?" to arrayOf(mode.id)
-        return db.rawQuery("$segmentSelect $where ORDER BY s.last_seen DESC", args)
-            .use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toSegment()) } }
+    fun segments(mode: TripMode? = null): List<Segment> = edges(mode)
+
+    fun edges(mode: TripMode? = null): List<Edge> {
+        val (where, args) = if (mode == null) "" to emptyArray<String>() else "WHERE e.mode = ?" to arrayOf(mode.id)
+        return db.rawQuery("$edgeSelect $where ORDER BY e.last_seen DESC", args)
+            .use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toEdge()) } }
     }
 
     fun samples(segmentId: Long, includePartial: Boolean = false): List<TraversalSample> =
         db.rawQuery(
             "SELECT end_ms, start_ms, distance_m, direction, moving_ms, stopped_ms, stop_count, " +
                 "signal_wait_ms, signal_stop_count FROM legs " +
-                "WHERE segment_id = ?" + if (includePartial) "" else " AND partial = 0" +
+                "WHERE edge_id = ?" + if (includePartial) "" else " AND partial = 0" +
                 " ORDER BY start_ms",
             arrayOf(segmentId.toString()),
         ).use { cursor ->
@@ -889,15 +893,15 @@ class MapRepository(private val helper: MapDb) {
             }
         }
 
-    /** Samples of every segment of one mode, one query for the whole list screen. */
+    /** Samples of every edge of one mode, one query for the whole list screen. */
     fun samplesByMode(mode: TripMode, includePartial: Boolean = false): Map<Long, List<TraversalSample>> {
         val out = HashMap<Long, MutableList<TraversalSample>>()
         db.rawQuery(
             """
-            SELECT l.segment_id, l.end_ms, l.start_ms, l.distance_m, l.direction,
+            SELECT l.edge_id, l.end_ms, l.start_ms, l.distance_m, l.direction,
                    l.moving_ms, l.stopped_ms, l.stop_count, l.signal_wait_ms, l.signal_stop_count
-            FROM legs l JOIN segments s ON s.id = l.segment_id
-            WHERE s.mode = ?${if (includePartial) "" else " AND l.partial = 0"}
+            FROM legs l JOIN edges e ON e.id = l.edge_id
+            WHERE e.mode = ?${if (includePartial) "" else " AND l.partial = 0"}
             """.trimIndent(),
             arrayOf(mode.id),
         ).use { cursor ->
@@ -927,14 +931,10 @@ class MapRepository(private val helper: MapDb) {
     fun sampleCounts(): Map<Long, Int> {
         val out = HashMap<Long, Int>()
         db.rawQuery(
-            "SELECT segment_id, COUNT(*) FROM legs WHERE segment_id IS NOT NULL AND partial = 0 GROUP BY segment_id",
+            "SELECT edge_id, COUNT(*) FROM legs WHERE edge_id IS NOT NULL AND partial = 0 GROUP BY edge_id",
             null,
         ).use { cursor -> while (cursor.moveToNext()) out[cursor.getLong(0)] = cursor.getInt(1) }
         return out
-    }
-
-    private fun deleteOrphanSegments() {
-        db.execSQL("DELETE FROM segments WHERE id NOT IN (SELECT segment_id FROM legs WHERE segment_id IS NOT NULL)")
     }
 
     // ----------------------------------------------------------- geo nodes
@@ -979,14 +979,72 @@ class MapRepository(private val helper: MapDb) {
         db.update("geo_nodes", ContentValues().apply { put("last_seen", now) }, "id = ?", arrayOf(id.toString()))
     }
 
+    // -------------------------------------------------------------- nodes/roads
+
+    private fun ensureNode(refKey: String?, at: LatLon, seenAt: Long): Long? {
+        val ref = PointRef.parse(refKey) ?: return null
+        val existing = db.rawQuery(
+            "SELECT id FROM nodes WHERE ref_kind = ? AND ref_node_id = ?",
+            arrayOf(ref.kind, ref.nodeId.toString()),
+        ).use { c -> if (c.moveToFirst()) c.getLong(0) else null }
+        if (existing != null) {
+            db.update(
+                "nodes",
+                ContentValues().apply {
+                    put("lat", at.lat)
+                    put("lon", at.lon)
+                    put("last_seen", seenAt)
+                },
+                "id = ?",
+                arrayOf(existing.toString()),
+            )
+            return existing
+        }
+        return db.insert(
+            "nodes",
+            null,
+            ContentValues().apply {
+                put("ref_kind", ref.kind)
+                put("ref_node_id", ref.nodeId)
+                put("lat", at.lat)
+                put("lon", at.lon)
+                put("last_seen", seenAt)
+            },
+        ).takeIf { it > 0 }
+    }
+
+    private fun ensureRoad(name: String, source: String = "user", osmName: String? = null): Long {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return -1L
+        val existing = db.rawQuery("SELECT id FROM roads WHERE name = ?", arrayOf(trimmed)).use { c ->
+            if (c.moveToFirst()) c.getLong(0) else null
+        }
+        if (existing != null) return existing
+        return db.insert(
+            "roads",
+            null,
+            ContentValues().apply {
+                put("name", trimmed)
+                put("source", source)
+                if (osmName != null) put("osm_name", osmName)
+            },
+        )
+    }
+
+    private fun deleteOrphanEdges() {
+        db.execSQL("DELETE FROM edges WHERE id NOT IN (SELECT edge_id FROM legs WHERE edge_id IS NOT NULL)")
+    }
+
+    private fun deleteOrphanSegments() = deleteOrphanEdges()
+
     // -------------------------------------------------------------- export
 
     fun allSampleRows(): List<ExportSample> =
         db.rawQuery(
             """
-            SELECT s.mode, s.key, s.name, l.start_ms, l.end_ms, l.distance_m, l.direction,
+            SELECT e.mode, e.key, e.name, l.start_ms, l.end_ms, l.distance_m, l.direction,
                    l.partial, l.moving_ms, l.stopped_ms, l.stop_count
-            FROM legs l JOIN segments s ON s.id = l.segment_id
+            FROM legs l JOIN edges e ON e.id = l.edge_id
             ORDER BY l.start_ms
             """.trimIndent(),
             null,
@@ -1016,9 +1074,9 @@ class MapRepository(private val helper: MapDb) {
 
     /** Fresh counts for the Danger Zone dialogs; never read from a cached list. */
     fun dangerCounts(): DangerCounts = DangerCounts(
-        pointNames = count("point_names"),
-        places = count("places"),
-        roadNames = count("point_roads") + countWhere("segments", "user_name IS NOT NULL"),
+        pointNames = countWhere("nodes", "name IS NOT NULL AND name NOT LIKE '%×%'"),
+        places = count("junctions"),
+        roadNames = count("node_roads") + countWhere("edges", "user_name IS NOT NULL"),
         trips = count("trips"),
     )
 
@@ -1033,78 +1091,67 @@ class MapRepository(private val helper: MapDb) {
             if (cursor.moveToFirst()) cursor.getInt(0) else 0
         }
 
-    /**
-     * Forgets every single-point name. Junction names are a separate category
-     * and stay. Cached leg labels are rewritten in the same transaction, just
-     * as clearing one name through [renamePoint] does.
-     */
     fun clearPointNames(): Int {
         val keys = pointNames().keys
         if (keys.isEmpty()) return 0
         db.transaction {
-            db.delete("point_names", null, null)
-            relabelSegmentsTouching(keys)
+            db.execSQL("UPDATE nodes SET name = NULL WHERE name IS NOT NULL")
+            relabelEdgesTouching(keys)
         }
         return keys.size
     }
 
-    /** Dissolves every named junction; single-point names are left alone. */
     fun clearPlaces(): Int {
-        val removed = count("places")
+        val removed = count("junctions")
         if (removed == 0) return 0
-        val keys = db.rawQuery("SELECT kind, node_id FROM place_points", null).use { cursor ->
-            buildList { while (cursor.moveToNext()) add(PointRef(cursor.getString(0), cursor.getLong(1))) }
-        }
+        val keys = db.rawQuery(
+            "SELECT n.ref_kind, n.ref_node_id FROM junction_nodes jn JOIN nodes n ON n.id = jn.node_id",
+            null,
+        ).use { c -> buildList { while (c.moveToNext()) add("${c.getString(0)}:${c.getLong(1)}") } }
         db.transaction {
-            // place_points goes with it through ON DELETE CASCADE.
-            db.delete("places", null, null)
-            relabelSegmentsTouching(keys.map { it.key })
+            db.execSQL("UPDATE nodes SET junction_id = NULL WHERE junction_id IS NOT NULL")
+            db.delete("junction_nodes", null, null)
+            db.delete("junctions", null, null)
+            relabelEdgesTouching(keys)
         }
         return removed
     }
 
-    /**
-     * Forgets every road name: the structured roads on points and the road
-     * names typed on segments. Segment display names are point pairs and do not
-     * change, but the names stop appearing as naming suggestions/captions.
-     */
     fun clearRoadNames(): Int {
-        val pointRoads = count("point_roads")
-        val segmentRoads = countWhere("segments", "user_name IS NOT NULL")
-        val removed = pointRoads + segmentRoads
+        val pointRoads = count("node_roads")
+        val edgeRoads = countWhere("edges", "user_name IS NOT NULL")
+        val removed = pointRoads + edgeRoads
         if (removed == 0) return 0
         db.transaction {
-            db.delete("point_roads", null, null)
-            db.execSQL("UPDATE segments SET user_name = NULL WHERE user_name IS NOT NULL")
+            db.delete("node_roads", null, null)
+            db.execSQL("UPDATE edges SET user_name = NULL, road_id = NULL WHERE user_name IS NOT NULL OR road_id IS NOT NULL")
+            // Keep roads table rows that may still be referenced? No references after nulling.
+            db.execSQL("DELETE FROM roads WHERE id NOT IN (SELECT road_id FROM edges WHERE road_id IS NOT NULL) AND id NOT IN (SELECT road_id FROM node_roads)")
         }
         return removed
     }
 
-    /** Deletes every recorded trip; raw fixes, marks and legs go with them. */
     fun clearTrips(): Int {
         val removed = count("trips")
         if (removed == 0) return 0
         db.transaction {
             db.delete("trips", null, null)
-            deleteOrphanSegments()
+            deleteOrphanEdges()
         }
         return removed
     }
 
-    /**
-     * Nothing derived from travelling survives: trips and their samples, both
-     * kinds of names, local endpoint clusters and the segments built from them.
-     * The OSM cache is cleared by the caller. Preferences are deliberately
-     * kept — resetting the map is not a reset of how the app is configured.
-     */
     fun clearAllData() {
         db.transaction {
-            db.delete("places", null, null)
-            db.delete("point_names", null, null)
-            db.delete("point_roads", null, null)
+            db.delete("junction_nodes", null, null)
+            db.delete("junctions", null, null)
+            db.delete("node_roads", null, null)
+            db.delete("roads", null, null)
+            db.execSQL("UPDATE nodes SET name = NULL, junction_id = NULL")
             db.delete("trips", null, null)
             db.delete("geo_nodes", null, null)
-            db.delete("segments", null, null)
+            db.delete("edges", null, null)
+            db.delete("nodes", null, null)
         }
     }
 
@@ -1130,7 +1177,7 @@ class MapRepository(private val helper: MapDb) {
         startMs = getLong(getColumnIndexOrThrow("start_ms")),
         endMs = getLong(getColumnIndexOrThrow("end_ms")),
         distanceM = getDouble(getColumnIndexOrThrow("distance_m")),
-        segmentId = getLongOrNull(getColumnIndexOrThrow("segment_id")),
+        edgeId = getLongOrNull(getColumnIndexOrThrow("edge_id")),
         direction = getInt(getColumnIndexOrThrow("direction")),
         label = getStringOrNull(getColumnIndexOrThrow("label")),
         partial = getInt(getColumnIndexOrThrow("partial")) != 0,
@@ -1143,25 +1190,38 @@ class MapRepository(private val helper: MapDb) {
         signalWaitMs = getLong(getColumnIndexOrThrow("signal_wait_ms")),
     )
 
-    private fun Cursor.toSegment() = Segment(
-        id = getLong(getColumnIndexOrThrow("id")),
-        key = getString(getColumnIndexOrThrow("key")),
-        mode = TripMode.of(getString(getColumnIndexOrThrow("mode"))),
-        name = getStringOrNull(getColumnIndexOrThrow("name")),
-        identity = MatchKind.of(getStringOrNull(getColumnIndexOrThrow("identity"))),
-        aLat = getDouble(getColumnIndexOrThrow("a_lat")),
-        aLon = getDouble(getColumnIndexOrThrow("a_lon")),
-        bLat = getDouble(getColumnIndexOrThrow("b_lat")),
-        bLon = getDouble(getColumnIndexOrThrow("b_lon")),
-        lengthM = getDouble(getColumnIndexOrThrow("length_m")),
-        firstSeen = getLong(getColumnIndexOrThrow("first_seen")),
-        lastSeen = getLong(getColumnIndexOrThrow("last_seen")),
-        userName = getStringOrNull(getColumnIndexOrThrow("user_name")),
-        fromKey = getStringOrNull(getColumnIndexOrThrow("from_key")),
-        toKey = getStringOrNull(getColumnIndexOrThrow("to_key")),
-        fromName = getStringOrNull(getColumnIndexOrThrow("from_name")),
-        toName = getStringOrNull(getColumnIndexOrThrow("to_name")),
-    )
+    private fun Cursor.toEdge(): Edge {
+        val fromRefKind = getStringOrNull(getColumnIndexOrThrow("from_ref_kind"))
+        val fromRefNodeId = getLongOrNull(getColumnIndexOrThrow("from_ref_node_id"))
+        val toRefKind = getStringOrNull(getColumnIndexOrThrow("to_ref_kind"))
+        val toRefNodeId = getLongOrNull(getColumnIndexOrThrow("to_ref_node_id"))
+        val fromKey = if (fromRefKind != null && fromRefNodeId != null) "$fromRefKind:$fromRefNodeId" else null
+        val toKey = if (toRefKind != null && toRefNodeId != null) "$toRefKind:$toRefNodeId" else null
+        return Edge(
+            id = getLong(getColumnIndexOrThrow("id")),
+            key = getString(getColumnIndexOrThrow("key")),
+            mode = TripMode.of(getString(getColumnIndexOrThrow("mode"))),
+            name = getStringOrNull(getColumnIndexOrThrow("name")),
+            identity = MatchKind.of(getStringOrNull(getColumnIndexOrThrow("identity"))),
+            aLat = getDouble(getColumnIndexOrThrow("a_lat")),
+            aLon = getDouble(getColumnIndexOrThrow("a_lon")),
+            bLat = getDouble(getColumnIndexOrThrow("b_lat")),
+            bLon = getDouble(getColumnIndexOrThrow("b_lon")),
+            lengthM = getDouble(getColumnIndexOrThrow("length_m")),
+            firstSeen = getLong(getColumnIndexOrThrow("first_seen")),
+            lastSeen = getLong(getColumnIndexOrThrow("last_seen")),
+            userName = getStringOrNull(getColumnIndexOrThrow("user_name")),
+            fromKey = fromKey,
+            toKey = toKey,
+            fromName = getStringOrNull(getColumnIndexOrThrow("from_name")),
+            toName = getStringOrNull(getColumnIndexOrThrow("to_name")),
+            fromNodeId = getLongOrNull(getColumnIndexOrThrow("from_node_id")),
+            toNodeId = getLongOrNull(getColumnIndexOrThrow("to_node_id")),
+            roadId = getLongOrNull(getColumnIndexOrThrow("road_id")),
+        )
+    }
+
+    private fun Cursor.toSegment(): Segment = toEdge()
 
     private fun Cursor.getLongOrNull(index: Int): Long? = if (isNull(index)) null else getLong(index)
 

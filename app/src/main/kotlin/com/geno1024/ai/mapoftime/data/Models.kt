@@ -46,7 +46,7 @@ data class Leg(
     val startMs: Long,
     val endMs: Long,
     val distanceM: Double,
-    val segmentId: Long?,
+    val edgeId: Long?,
     val direction: Int,
     val label: String?,
     val partial: Boolean,
@@ -60,12 +60,13 @@ data class Leg(
     val signalWaitMs: Long = 0,
 ) {
     val durationMs: Long get() = (endMs - startMs).coerceAtLeast(0)
-
     val hasWait: Boolean get() = stoppedMs > 0
+    /** Compatibility for code still speaking in segment terms. */
+    val segmentId: Long? get() = edgeId
 }
 
 /**
- * One end of a segment: an OSM node or a locally clustered corner.
+ * Source identity for a node: an OSM node or a locally clustered corner.
  *
  * The kind is part of the identity because an OSM node id and a geo node id
  * are numbered independently and would otherwise collide.
@@ -87,6 +88,29 @@ data class PointRef(val kind: String, val nodeId: Long) {
         }
     }
 }
+
+/** A first-class node: a point where travel can start, end, or turn. */
+data class Node(
+    val id: Long,
+    val ref: PointRef,
+    val lat: Double,
+    val lon: Double,
+    /** Atomic name given by the user, e.g. "5号门". Never a composite road crossing. */
+    val name: String? = null,
+    val junctionId: Long? = null,
+) {
+    val at: LatLon get() = LatLon(lat, lon)
+    val key: String get() = ref.key
+}
+
+/** A first-class named road. Real travel usually covers only part of it. */
+data class Road(
+    val id: Long,
+    val name: String,
+    /** OSM or user-provided. */
+    val source: String = "user",
+    val osmName: String? = null,
+)
 
 /** A point the user has given a name to. */
 data class NamedPoint(val ref: PointRef, val name: String)
@@ -131,9 +155,6 @@ data class Place(
  * Joining it with another end used to spell "gate × road × road" — three
  * parts, mixing a point with a crossing. Such a name belongs on [RoadNames]
  * as a list of roads, never here, so this returns null and the OSM name wins.
- *
- * The same × a derived crossing caption uses: two named ends, one separator
- * for every combination, so the app spells a pair the same way everywhere.
  */
 fun pointPairName(from: String?, to: String?): String? =
     if (from != null && to != null && from != to &&
@@ -152,18 +173,23 @@ fun directionalName(from: String?, to: String?): String? =
  * fall back to the caller's generic "from"/"to" wording.
  */
 fun traversalEndNames(
-    segment: Segment,
+    edge: Edge,
     direction: Int,
     fromFallback: String,
     toFallback: String,
 ): Pair<String, String> = if (direction >= 0) {
-    (segment.fromName ?: fromFallback) to (segment.toName ?: toFallback)
+    (edge.fromName ?: fromFallback) to (edge.toName ?: toFallback)
 } else {
-    (segment.toName ?: toFallback) to (segment.fromName ?: fromFallback)
+    (edge.toName ?: toFallback) to (edge.fromName ?: fromFallback)
 }
 
-/** A repeatable piece of road, keyed by its two endpoints. */
-data class Segment(
+/**
+ * A traversable edge between two nodes. This is the statistical unit: real
+ * travel usually covers an edge, not a whole named road.
+ *
+ * It optionally belongs to a [Road] (a named first-class line).
+ */
+data class Edge(
     val id: Long,
     val key: String,
     val mode: TripMode,
@@ -177,16 +203,21 @@ data class Segment(
     val firstSeen: Long,
     val lastSeen: Long,
     /**
-     * A name the user typed. Kept apart from [name] so a re-analysis can
-     * refresh what OSM says without throwing the user's label away.
+     * A road name the user typed as inference input. Kept apart from [name]
+     * so a re-analysis can refresh what OSM says without losing it.
      */
     val userName: String? = null,
-    /** Identities of the two ends, e.g. `osm:123` / `geo:7`. */
+    /** Source identities of the two ends, e.g. `osm:123` / `geo:7`. */
     val fromKey: String? = null,
     val toKey: String? = null,
     /** Names the user gave the two ends; joined in from [fromKey] / [toKey]. */
     val fromName: String? = null,
     val toName: String? = null,
+    /** Internal node ids once the v8 node table is populated. */
+    val fromNodeId: Long? = null,
+    val toNodeId: Long? = null,
+    /** Optional owning named road. */
+    val roadId: Long? = null,
 ) {
     val from: LatLon get() = LatLon(aLat, aLon)
     val to: LatLon get() = LatLon(bLat, bLon)
@@ -201,11 +232,9 @@ data class Segment(
     val pointName: String? get() = pointPairName(fromName, toName)
 
     /**
-     * A segment is named by its two ends. [userName] is a road name the user
+     * An edge is named by its two ends. [userName] is a road name the user
      * typed as inference input for the points it touches — it no longer
-     * overrides the point pair, which is what used to produce "gate × road ×
-     * road". When neither end is named the OSM name is the fallback; the road
-     * name stays available to the naming dialogs as inference input.
+     * overrides the point pair.
      */
     val preferredLabel: String? get() = pointName ?: name
 
@@ -215,9 +244,12 @@ data class Segment(
     /** "B → A" for the backward direction (−1), when both ends are named. */
     val backwardName: String? get() = directionalName(toName, fromName)
 
-    /** What every screen shows: the user's name, the point pair, OSM's, then the key. */
+    /** What every screen shows: the point pair, OSM's, then the key. */
     val displayName: String get() = preferredLabel ?: key
 }
+
+/** Compatibility alias while the codebase migrates from Segment to Edge. */
+typealias Segment = Edge
 
 /** A locally discovered corner, used when OSM data is unavailable. */
 data class GeoNode(val id: Long, val at: LatLon, val lastSeen: Long)
@@ -227,7 +259,7 @@ data class PendingLeg(
     val startMs: Long,
     val endMs: Long,
     val distanceM: Double,
-    val segmentId: Long?,
+    val edgeId: Long?,
     val direction: Int,
     val label: String?,
     val partial: Boolean,
@@ -238,4 +270,6 @@ data class PendingLeg(
     val longestStopMs: Long,
     val signalStopCount: Int = 0,
     val signalWaitMs: Long = 0,
-)
+) {
+    val segmentId: Long? get() = edgeId
+}

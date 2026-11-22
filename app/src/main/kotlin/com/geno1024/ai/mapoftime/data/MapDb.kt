@@ -55,62 +55,11 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
             )
             """.trimIndent(),
         )
+
+        // ---- First-class junction grouping (was places) --------------------
         db.execSQL(
             """
-            CREATE TABLE segments(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                key TEXT NOT NULL,
-                mode TEXT NOT NULL,
-                name TEXT,
-                user_name TEXT,
-                from_key TEXT,
-                to_key TEXT,
-                identity TEXT NOT NULL,
-                a_lat REAL NOT NULL,
-                a_lon REAL NOT NULL,
-                b_lat REAL NOT NULL,
-                b_lon REAL NOT NULL,
-                length_m REAL NOT NULL,
-                first_seen INTEGER NOT NULL,
-                last_seen INTEGER NOT NULL,
-                UNIQUE(key, mode)
-            )
-            """.trimIndent(),
-        )
-        // Names live on the points, not on every segment that touches them: a
-        // junction is shared by everything that crosses it.
-        db.execSQL(
-            """
-            CREATE TABLE point_names(
-                kind TEXT NOT NULL,
-                node_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                named_at INTEGER NOT NULL,
-                PRIMARY KEY(kind, node_id)
-            )
-            """.trimIndent(),
-        )
-        // Roads a point sits at, chosen by the user. Several roads make a
-        // crossing; the crossing caption is derived from this list, never typed
-        // into the point's own name where it would poison segment names.
-        db.execSQL(
-            """
-            CREATE TABLE point_roads(
-                kind TEXT NOT NULL,
-                node_id INTEGER NOT NULL,
-                road TEXT NOT NULL,
-                PRIMARY KEY(kind, node_id, road)
-            )
-            """.trimIndent(),
-        )
-        // A wide crossing is many OSM nodes, one per lane and one per corner
-        // refuge, and more of them show up every time a new turning movement
-        // brushes another corner. The junction is therefore its own thing: a
-        // name with a set of points under it, so one name covers all of them
-        // and later arrivals inherit it without being named again.
-        db.execSQL(
-            """
-            CREATE TABLE places(
+            CREATE TABLE junctions(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 lat REAL NOT NULL,
@@ -120,31 +69,92 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
             )
             """.trimIndent(),
         )
+
+        // ---- First-class nodes ---------------------------------------------
         db.execSQL(
             """
-            CREATE TABLE place_points(
-                kind TEXT NOT NULL,
-                node_id INTEGER NOT NULL,
-                place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
-                PRIMARY KEY(kind, node_id)
+            CREATE TABLE nodes(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref_kind TEXT NOT NULL,
+                ref_node_id INTEGER NOT NULL,
+                lat REAL NOT NULL,
+                lon REAL NOT NULL,
+                name TEXT,
+                junction_id INTEGER REFERENCES junctions(id) ON DELETE SET NULL,
+                last_seen INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(ref_kind, ref_node_id)
             )
             """.trimIndent(),
         )
         db.execSQL(
             """
-            CREATE VIEW point_labels AS
-                SELECT kind, node_id, name FROM point_names
-                 WHERE name NOT LIKE '%×%'
-                UNION ALL
-                SELECT pp.kind, pp.node_id, p.name
-                  FROM place_points pp JOIN places p ON p.id = pp.place_id
-                 WHERE p.name NOT LIKE '%×%'
-                   AND NOT EXISTS (
-                    SELECT 1 FROM point_names pn
-                     WHERE pn.kind = pp.kind AND pn.node_id = pp.node_id
-                 )
+            CREATE TABLE junction_nodes(
+                junction_id INTEGER NOT NULL REFERENCES junctions(id) ON DELETE CASCADE,
+                node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+                PRIMARY KEY(node_id)
+            )
             """.trimIndent(),
         )
+
+        // ---- First-class roads ---------------------------------------------
+        db.execSQL(
+            """
+            CREATE TABLE roads(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                source TEXT NOT NULL DEFAULT 'user',
+                osm_name TEXT
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE node_roads(
+                node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+                road_id INTEGER NOT NULL REFERENCES roads(id) ON DELETE CASCADE,
+                PRIMARY KEY(node_id, road_id)
+            )
+            """.trimIndent(),
+        )
+
+        // ---- First-class traversable edges (was segments) ------------------
+        db.execSQL(
+            """
+            CREATE TABLE edges(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                name TEXT,
+                user_name TEXT,
+                identity TEXT NOT NULL,
+                a_lat REAL NOT NULL,
+                a_lon REAL NOT NULL,
+                b_lat REAL NOT NULL,
+                b_lon REAL NOT NULL,
+                length_m REAL NOT NULL,
+                first_seen INTEGER NOT NULL,
+                last_seen INTEGER NOT NULL,
+                from_node_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+                to_node_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+                road_id INTEGER REFERENCES roads(id) ON DELETE SET NULL,
+                UNIQUE(key, mode)
+            )
+            """.trimIndent(),
+        )
+
+        // Effective node label: explicit node name wins, else junction name.
+        db.execSQL(
+            """
+            CREATE VIEW node_labels AS
+                SELECT n.id AS node_id, n.ref_kind, n.ref_node_id,
+                       COALESCE(n.name, j.name) AS name
+                  FROM nodes n
+                  LEFT JOIN junctions j ON j.id = n.junction_id
+                 WHERE COALESCE(n.name, j.name) IS NOT NULL
+                   AND COALESCE(n.name, j.name) NOT LIKE '%×%'
+            """.trimIndent(),
+        )
+
         db.execSQL(
             """
             CREATE TABLE legs(
@@ -154,7 +164,7 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
                 start_ms INTEGER NOT NULL,
                 end_ms INTEGER NOT NULL,
                 distance_m REAL NOT NULL,
-                segment_id INTEGER REFERENCES segments(id) ON DELETE SET NULL,
+                edge_id INTEGER REFERENCES edges(id) ON DELETE SET NULL,
                 direction INTEGER NOT NULL DEFAULT 0,
                 label TEXT,
                 partial INTEGER NOT NULL DEFAULT 0,
@@ -224,10 +234,16 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
         )
 
         db.execSQL("CREATE INDEX idx_points_trip ON points(trip_id, t)")
-        db.execSQL("CREATE INDEX idx_place_points_place ON place_points(place_id)")
+        db.execSQL("CREATE INDEX idx_nodes_ref ON nodes(ref_kind, ref_node_id)")
+        db.execSQL("CREATE INDEX idx_nodes_junction ON nodes(junction_id)")
+        db.execSQL("CREATE INDEX idx_junction_nodes_junction ON junction_nodes(junction_id)")
+        db.execSQL("CREATE INDEX idx_node_roads_road ON node_roads(road_id)")
+        db.execSQL("CREATE INDEX idx_edges_mode ON edges(mode)")
+        db.execSQL("CREATE INDEX idx_edges_from_node ON edges(from_node_id)")
+        db.execSQL("CREATE INDEX idx_edges_to_node ON edges(to_node_id)")
+        db.execSQL("CREATE INDEX idx_edges_road ON edges(road_id)")
         db.execSQL("CREATE INDEX idx_legs_trip ON legs(trip_id, seq)")
-        db.execSQL("CREATE INDEX idx_legs_segment ON legs(segment_id)")
-        db.execSQL("CREATE INDEX idx_segments_mode ON segments(mode)")
+        db.execSQL("CREATE INDEX idx_legs_edge ON legs(edge_id)")
         db.execSQL("CREATE INDEX idx_geo_nodes_cell ON geo_nodes(cell_x, cell_y)")
         db.execSQL("CREATE INDEX idx_osm_way_tiles_tile ON osm_way_tiles(tile)")
         db.execSQL("CREATE INDEX idx_osm_signals_tile ON osm_signals(tile)")
@@ -417,6 +433,360 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
                 """.trimIndent(),
             )
         }
+        if (oldVersion < 8) migrateToV8(db)
+    }
+
+    /**
+     * v8: first-class Node, Road, Edge, Junction.
+     *
+     * Preserves all user data: trips/points/marks/legs, point names, roads,
+     * places, segments, geo nodes. Old JSON import compatibility is not required.
+     */
+    private fun migrateToV8(db: SQLiteDatabase) {
+        db.execSQL("PRAGMA foreign_keys = OFF")
+
+        // ---- new tables ----------------------------------------------------
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS junctions(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                lat REAL NOT NULL,
+                lon REAL NOT NULL,
+                radius_m REAL NOT NULL,
+                created_at INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS nodes(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ref_kind TEXT NOT NULL,
+                ref_node_id INTEGER NOT NULL,
+                lat REAL NOT NULL,
+                lon REAL NOT NULL,
+                name TEXT,
+                junction_id INTEGER REFERENCES junctions(id) ON DELETE SET NULL,
+                last_seen INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(ref_kind, ref_node_id)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS junction_nodes(
+                junction_id INTEGER NOT NULL REFERENCES junctions(id) ON DELETE CASCADE,
+                node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+                PRIMARY KEY(node_id)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS roads(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                source TEXT NOT NULL DEFAULT 'user',
+                osm_name TEXT
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS node_roads(
+                node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+                road_id INTEGER NOT NULL REFERENCES roads(id) ON DELETE CASCADE,
+                PRIMARY KEY(node_id, road_id)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS edges(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                name TEXT,
+                user_name TEXT,
+                identity TEXT NOT NULL,
+                a_lat REAL NOT NULL,
+                a_lon REAL NOT NULL,
+                b_lat REAL NOT NULL,
+                b_lon REAL NOT NULL,
+                length_m REAL NOT NULL,
+                first_seen INTEGER NOT NULL,
+                last_seen INTEGER NOT NULL,
+                from_node_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+                to_node_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+                road_id INTEGER REFERENCES roads(id) ON DELETE SET NULL,
+                UNIQUE(key, mode)
+            )
+            """.trimIndent(),
+        )
+
+        // ---- junctions from places -----------------------------------------
+        db.execSQL(
+            """
+            INSERT INTO junctions(id, name, lat, lon, radius_m, created_at)
+            SELECT id, name, lat, lon, radius_m, created_at FROM places
+            """.trimIndent(),
+        )
+
+        // ---- collect node coordinates --------------------------------------
+        // Best-effort: segment endpoints, geo_nodes, junction centres.
+        data class NodeSeed(
+            var lat: Double,
+            var lon: Double,
+            var lastSeen: Long = 0L,
+            var name: String? = null,
+            var junctionId: Long? = null,
+        )
+        val seeds = LinkedHashMap<String, NodeSeed>() // "kind:refNodeId" -> seed
+
+        fun seed(key: String, lat: Double, lon: Double, lastSeen: Long = 0L): NodeSeed =
+            seeds.getOrPut(key) { NodeSeed(lat, lon, lastSeen) }.also {
+                if (it.lastSeen == 0L || (lastSeen > 0L && lastSeen > it.lastSeen)) {
+                    it.lat = lat; it.lon = lon; it.lastSeen = lastSeen
+                }
+            }
+
+        db.rawQuery(
+            "SELECT from_key, to_key, a_lat, a_lon, b_lat, b_lon, last_seen FROM segments",
+            null,
+        ).use { c ->
+            while (c.moveToNext()) {
+                val fk = c.getString(0); val tk = c.getString(1)
+                val aLat = c.getDouble(2); val aLon = c.getDouble(3)
+                val bLat = c.getDouble(4); val bLon = c.getDouble(5)
+                val seen = c.getLong(6)
+                if (!fk.isNullOrBlank()) seed(fk, aLat, aLon, seen)
+                if (!tk.isNullOrBlank()) seed(tk, bLat, bLon, seen)
+            }
+        }
+        db.rawQuery("SELECT id, lat, lon, last_seen FROM geo_nodes", null).use { c ->
+            while (c.moveToNext()) {
+                seed("geo:${c.getLong(0)}", c.getDouble(1), c.getDouble(2), c.getLong(3))
+            }
+        }
+        db.rawQuery("SELECT kind, node_id, name FROM point_names", null).use { c ->
+            while (c.moveToNext()) {
+                val key = "${c.getString(0)}:${c.getLong(1)}"
+                val name = c.getString(2)
+                val s = seeds.getOrPut(key) { NodeSeed(0.0, 0.0) }
+                if (!name.isNullOrBlank() && !RoadNames.isComposite(name)) s.name = name
+            }
+        }
+        db.rawQuery("SELECT kind, node_id FROM point_roads", null).use { c ->
+            while (c.moveToNext()) {
+                val key = "${c.getString(0)}:${c.getLong(1)}"
+                seeds.getOrPut(key) { NodeSeed(0.0, 0.0) }
+            }
+        }
+        db.rawQuery(
+            "SELECT pp.kind, pp.node_id, pp.place_id, p.lat, p.lon FROM place_points pp JOIN places p ON p.id = pp.place_id",
+            null,
+        ).use { c ->
+            while (c.moveToNext()) {
+                val key = "${c.getString(0)}:${c.getLong(1)}"
+                val placeId = c.getLong(2)
+                val lat = c.getDouble(3); val lon = c.getDouble(4)
+                val s = seeds.getOrPut(key) { NodeSeed(lat, lon) }
+                s.junctionId = placeId
+                if (s.lat == 0.0 && s.lon == 0.0) { s.lat = lat; s.lon = lon }
+            }
+        }
+
+        // ---- insert nodes --------------------------------------------------
+        val nodeIdByRef = HashMap<String, Long>()
+        for ((key, s) in seeds) {
+            val kind = key.substringBefore(':')
+            val refNodeId = key.substringAfter(':').toLongOrNull() ?: continue
+            val cv = ContentValues().apply {
+                put("ref_kind", kind)
+                put("ref_node_id", refNodeId)
+                put("lat", s.lat)
+                put("lon", s.lon)
+                if (s.name != null) put("name", s.name)
+                if (s.junctionId != null) put("junction_id", s.junctionId)
+                put("last_seen", s.lastSeen)
+            }
+            val id = db.insert("nodes", null, cv)
+            if (id > 0) nodeIdByRef[key] = id
+        }
+
+        // ---- junction_nodes ------------------------------------------------
+        db.rawQuery("SELECT place_id, kind, node_id FROM place_points", null).use { c ->
+            while (c.moveToNext()) {
+                val placeId = c.getLong(0)
+                val key = "${c.getString(1)}:${c.getLong(2)}"
+                val nodeId = nodeIdByRef[key] ?: continue
+                db.insertWithOnConflict(
+                    "junction_nodes", null,
+                    ContentValues().apply {
+                        put("junction_id", placeId)
+                        put("node_id", nodeId)
+                    },
+                    SQLiteDatabase.CONFLICT_IGNORE,
+                )
+            }
+        }
+
+        // ---- roads from point_roads text -----------------------------------
+        val roadIdByName = HashMap<String, Long>()
+        fun ensureRoad(name: String, source: String = "user", osmName: String? = null): Long {
+            val trimmed = name.trim()
+            if (trimmed.isEmpty()) return -1L
+            roadIdByName[trimmed]?.let { return it }
+            val existing = db.rawQuery("SELECT id FROM roads WHERE name = ?", arrayOf(trimmed)).use { c ->
+                if (c.moveToFirst()) c.getLong(0) else null
+            }
+            if (existing != null) { roadIdByName[trimmed] = existing; return existing }
+            val id = db.insert("roads", null, ContentValues().apply {
+                put("name", trimmed)
+                put("source", source)
+                if (osmName != null) put("osm_name", osmName)
+            })
+            if (id > 0) roadIdByName[trimmed] = id
+            return id
+        }
+
+        db.rawQuery("SELECT kind, node_id, road FROM point_roads", null).use { c ->
+            while (c.moveToNext()) {
+                val key = "${c.getString(0)}:${c.getLong(1)}"
+                val roadName = c.getString(2) ?: continue
+                val nodeId = nodeIdByRef[key] ?: continue
+                val roadId = ensureRoad(roadName)
+                if (roadId <= 0) continue
+                db.insertWithOnConflict(
+                    "node_roads", null,
+                    ContentValues().apply { put("node_id", nodeId); put("road_id", roadId) },
+                    SQLiteDatabase.CONFLICT_IGNORE,
+                )
+            }
+        }
+
+        // ---- edges from segments -------------------------------------------
+        db.rawQuery("SELECT * FROM segments", null).use { c ->
+            val cols = c.columnNames.toList()
+            fun col(name: String) = cols.indexOf(name)
+            while (c.moveToNext()) {
+                val fromKey = c.getString(col("from_key"))
+                val toKey = c.getString(col("to_key"))
+                val fromNodeId = fromKey?.let { nodeIdByRef[it] }
+                val toNodeId = toKey?.let { nodeIdByRef[it] }
+                val userName = c.getString(col("user_name"))
+                val roadId = userName?.takeIf { it.isNotBlank() }?.let { ensureRoad(it, "user") }?.takeIf { it > 0 }
+                // Also register OSM name as a road source hint if present
+                val osmName = c.getString(col("name"))
+                if (!osmName.isNullOrBlank()) ensureRoad(osmName, "osm", osmName)
+
+                db.insert(
+                    "edges", null,
+                    ContentValues().apply {
+                        put("id", c.getLong(col("id")))
+                        put("key", c.getString(col("key")))
+                        put("mode", c.getString(col("mode")))
+                        put("name", osmName)
+                        put("user_name", userName)
+                        put("identity", c.getString(col("identity")))
+                        put("a_lat", c.getDouble(col("a_lat")))
+                        put("a_lon", c.getDouble(col("a_lon")))
+                        put("b_lat", c.getDouble(col("b_lat")))
+                        put("b_lon", c.getDouble(col("b_lon")))
+                        put("length_m", c.getDouble(col("length_m")))
+                        put("first_seen", c.getLong(col("first_seen")))
+                        put("last_seen", c.getLong(col("last_seen")))
+                        if (fromNodeId != null) put("from_node_id", fromNodeId)
+                        if (toNodeId != null) put("to_node_id", toNodeId)
+                        if (roadId != null) put("road_id", roadId)
+                    },
+                )
+            }
+        }
+
+        // ---- legs: segment_id -> edge_id -----------------------------------
+        db.execSQL("ALTER TABLE legs RENAME TO legs_old")
+        db.execSQL(
+            """
+            CREATE TABLE legs(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+                seq INTEGER NOT NULL,
+                start_ms INTEGER NOT NULL,
+                end_ms INTEGER NOT NULL,
+                distance_m REAL NOT NULL,
+                edge_id INTEGER REFERENCES edges(id) ON DELETE SET NULL,
+                direction INTEGER NOT NULL DEFAULT 0,
+                label TEXT,
+                partial INTEGER NOT NULL DEFAULT 0,
+                polyline TEXT NOT NULL,
+                moving_ms INTEGER NOT NULL DEFAULT 0,
+                stopped_ms INTEGER NOT NULL DEFAULT 0,
+                stop_count INTEGER NOT NULL DEFAULT 0,
+                longest_stop_ms INTEGER NOT NULL DEFAULT 0,
+                signal_stop_count INTEGER NOT NULL DEFAULT 0,
+                signal_wait_ms INTEGER NOT NULL DEFAULT 0
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            INSERT INTO legs(id, trip_id, seq, start_ms, end_ms, distance_m, edge_id,
+                direction, label, partial, polyline, moving_ms, stopped_ms, stop_count,
+                longest_stop_ms, signal_stop_count, signal_wait_ms)
+            SELECT id, trip_id, seq, start_ms, end_ms, distance_m, segment_id,
+                direction, label, partial, polyline, moving_ms, stopped_ms, stop_count,
+                longest_stop_ms, signal_stop_count, signal_wait_ms
+            FROM legs_old
+            """.trimIndent(),
+        )
+        db.execSQL("DROP TABLE legs_old")
+
+        // ---- views, cleanup, indexes ---------------------------------------
+        db.execSQL("DROP VIEW IF EXISTS point_labels")
+        db.execSQL(
+            """
+            CREATE VIEW node_labels AS
+                SELECT n.id AS node_id, n.ref_kind, n.ref_node_id,
+                       COALESCE(n.name, j.name) AS name
+                  FROM nodes n
+                  LEFT JOIN junctions j ON j.id = n.junction_id
+                 WHERE COALESCE(n.name, j.name) IS NOT NULL
+                   AND COALESCE(n.name, j.name) NOT LIKE '%×%'
+            """.trimIndent(),
+        )
+        // Keep a compatibility view for any code still reading point_labels during transition.
+        db.execSQL(
+            """
+            CREATE VIEW point_labels AS
+                SELECT ref_kind AS kind, ref_node_id AS node_id, name
+                  FROM node_labels
+            """.trimIndent(),
+        )
+
+        db.execSQL("DROP TABLE IF EXISTS place_points")
+        db.execSQL("DROP TABLE IF EXISTS places")
+        db.execSQL("DROP TABLE IF EXISTS point_names")
+        db.execSQL("DROP TABLE IF EXISTS point_roads")
+        db.execSQL("DROP TABLE IF EXISTS segments")
+
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_points_trip ON points(trip_id, t)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_nodes_ref ON nodes(ref_kind, ref_node_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_nodes_junction ON nodes(junction_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_junction_nodes_junction ON junction_nodes(junction_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_node_roads_road ON node_roads(road_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_edges_mode ON edges(mode)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_edges_from_node ON edges(from_node_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_edges_to_node ON edges(to_node_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_edges_road ON edges(road_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_legs_trip ON legs(trip_id, seq)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_legs_edge ON legs(edge_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_geo_nodes_cell ON geo_nodes(cell_x, cell_y)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_osm_way_tiles_tile ON osm_way_tiles(tile)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_osm_signals_tile ON osm_signals(tile)")
+
+        db.execSQL("PRAGMA foreign_keys = ON")
     }
 
     private fun insertPointRoads(
@@ -468,6 +838,6 @@ class MapDb(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
 
     companion object {
         const val NAME = "map-of-time.db"
-        const val VERSION = 7
+        const val VERSION = 8
     }
 }
