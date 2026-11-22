@@ -225,7 +225,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     val roadNames: List<String>
         get() = summaries.mapNotNull { it.edge.userName?.trim()?.takeIf(String::isNotBlank) }
             .distinct()
-            .sorted()
+            .sortedWith(java.text.Collator.getInstance(java.util.Locale.CHINA))
 
     /**
      * Names one end of a segment. Every segment through that point changes

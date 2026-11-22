@@ -15,9 +15,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -41,6 +46,8 @@ import com.geno1024.ai.mapoftime.core.Confidence
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.MatchKind
 import com.geno1024.ai.mapoftime.data.RoadNames
+import java.text.Collator
+import java.util.Locale
 
 /** A rounded block with an optional heading; the only container the screens use. */
 @Composable
@@ -360,7 +367,10 @@ fun PointRoadsPicker(
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    val all = (candidates + selected.toList()).distinct()
+    val collator = remember { Collator.getInstance(Locale.CHINA) }
+    val all = remember(candidates, selected, collator) {
+        (candidates + selected.toList()).distinct().sortedWith(collator)
+    }
     if (all.isEmpty()) {
         Text(
             text = stringResource(R.string.point_roads_none),
@@ -560,10 +570,11 @@ fun EdgeNameDialog(
 }
 
 /**
- * Road names already given elsewhere, offered as one-tap chips. A road is many
+ * Road names already given elsewhere, offered as a dropdown. A road is many
  * pieces; typing its name once and reusing it keeps every piece spelled the
  * same. Shared by both places a segment can be named.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RoadNameReuse(
     names: List<String>,
@@ -571,18 +582,36 @@ fun RoadNameReuse(
     onPick: (String) -> Unit,
 ) {
     if (names.isEmpty()) return
-    Text(
-        text = stringResource(R.string.edge_name_reuse),
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        names.forEach { name ->
-            FilterChip(
-                selected = name == current,
-                onClick = { onPick(name) },
-                label = { Text(name) },
-            )
+    val collator = remember { Collator.getInstance(Locale.CHINA) }
+    val sorted = remember(names, collator) { names.distinct().sortedWith(collator) }
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+    ) {
+        OutlinedTextField(
+            value = current.takeIf { it in sorted }.orEmpty(),
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            label = { Text(stringResource(R.string.edge_name_reuse)) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            sorted.forEach { name ->
+                DropdownMenuItem(
+                    text = { Text(name) },
+                    onClick = {
+                        onPick(name)
+                        expanded = false
+                    },
+                    contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                )
+            }
         }
     }
 }
