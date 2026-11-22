@@ -268,6 +268,7 @@ fun TripDetailScreen(
     if (editingSegment && editing != null) {
         LegEditDialog(
             segment = editing,
+            reuse = viewModel.roadNames,
             onDismiss = { editingSegment = false },
             onSave = { name, fromName, toName ->
                 editingSegment = false
@@ -1036,6 +1037,7 @@ private fun LegRow(
 @Composable
 private fun LegEditDialog(
     segment: Segment,
+    reuse: List<String>,
     onDismiss: () -> Unit,
     onSave: (name: String, fromName: String, toName: String) -> Unit,
 ) {
@@ -1056,6 +1058,7 @@ private fun LegEditDialog(
                     label = stringResource(R.string.segment_name),
                     hint = stringResource(R.string.segment_name_hint),
                 )
+                RoadNameReuse(reuse, name) { name = it }
                 if (fromPoint != null) {
                     NameField(
                         value = fromName,

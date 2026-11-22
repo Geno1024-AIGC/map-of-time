@@ -36,7 +36,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
-import com.geno1024.ai.mapoftime.analysis.RoadRuns
 import com.geno1024.ai.mapoftime.core.DayKind
 import com.geno1024.ai.mapoftime.core.DurationStats
 import com.geno1024.ai.mapoftime.core.Geo
@@ -73,7 +72,6 @@ fun SegmentDetailScreen(
     var samples by remember(segmentId) { mutableStateOf<List<TraversalSample>>(emptyList()) }
     var legs by remember(segmentId) { mutableStateOf<List<Leg>>(emptyList()) }
     var renaming by remember { mutableStateOf(false) }
-    var renamingRun by remember { mutableStateOf<List<Long>?>(null) }
     // Same two steps as the network screen: preview the circle, then name it.
     var preview by remember { mutableStateOf<PlaceDraft?>(null) }
     var previewAt by remember { mutableStateOf<com.geno1024.ai.mapoftime.core.LatLon?>(null) }
@@ -129,12 +127,6 @@ fun SegmentDetailScreen(
     val tracks = remember(legs) {
         legs.map { Polyline.decode(it.polyline) }.filter { it.size >= 2 }
     }
-    // One name for the whole stretch: the straight-ish chain this piece belongs
-    // to, stopping at a turn or at a neighbour someone already named.
-    val roadRun = remember(segment, viewModel.summaries) {
-        segment?.let { RoadRuns.contiguous(viewModel.summaries.map { it.segment }, it.id) }
-            ?: emptyList()
-    }
     val fromLabel = stringResource(R.string.segment_from)
     val toLabel = stringResource(R.string.segment_to)
     // Both ends of a piece inside one junction carry the same name; saying
@@ -186,30 +178,12 @@ fun SegmentDetailScreen(
         SegmentNameDialog(
             initial = segment?.userName.orEmpty(),
             osmName = segment?.name,
+            reuse = viewModel.roadNames,
             onDismiss = { renaming = false },
             onSave = { name ->
                 renaming = false
                 scope.launch {
                     viewModel.renameSegment(segmentId, name)
-                    segment = viewModel.segment(segmentId)
-                    legs = viewModel.legsForSegment(segmentId)
-                }
-            },
-        )
-    }
-
-    renamingRun?.let { ids ->
-        SegmentNameDialog(
-            initial = roadRun.firstOrNull { it.id == segmentId }?.userName.orEmpty(),
-            osmName = null,
-            title = stringResource(R.string.segment_name_run_title, ids.size),
-            hint = stringResource(R.string.segment_name_run_hint),
-            clearHint = stringResource(R.string.segment_name_run_clear_hint, ids.size),
-            onDismiss = { renamingRun = null },
-            onSave = { name ->
-                renamingRun = null
-                scope.launch {
-                    viewModel.renameSegments(ids, name)
                     segment = viewModel.segment(segmentId)
                     legs = viewModel.legsForSegment(segmentId)
                 }
@@ -335,25 +309,16 @@ fun SegmentDetailScreen(
                                 )
                             }
                         }
-                        Column {
-                            TextButton(onClick = { renaming = true }) {
-                                Text(
-                                    stringResource(
-                                        if (segment?.userName == null) {
-                                            R.string.segment_name_add
-                                        } else {
-                                            R.string.action_edit
-                                        },
-                                    ),
-                                )
-                            }
-                            TextButton(
-                                onClick = { renamingRun = roadRun.map { it.id } },
-                                enabled = roadRun.size > 1,
-                                contentPadding = PaddingValues(horizontal = 8.dp),
-                            ) {
-                                Text(stringResource(R.string.segment_name_run))
-                            }
+                        TextButton(onClick = { renaming = true }) {
+                            Text(
+                                stringResource(
+                                    if (segment?.userName == null) {
+                                        R.string.segment_name_add
+                                    } else {
+                                        R.string.action_edit
+                                    },
+                                ),
+                            )
                         }
                     }
 

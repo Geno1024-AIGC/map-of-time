@@ -181,10 +181,7 @@
     <string name="segment_name_hint">例如：商场后面的近路</string>
     <string name="segment_name_use">使用「%1$s」</string>
     <string name="segment_name_clear_hint">留空保存即恢复 OSM 名称。</string>
-    <string name="segment_name_run">给整条路命名</string>
-    <string name="segment_name_run_title">给连续的 %1$d 段命名</string>
-    <string name="segment_name_run_hint">例如：新城路</string>
-    <string name="segment_name_run_clear_hint">会同时改这 %1$d 段；留空保存即全部清除。</string>
+    <string name="segment_name_reuse">用过的路名</string>
     <string name="segment_from">起点</string>
     <string name="segment_to">终点</string>
     <string name="segment_from_points">端点：%1$s</string>

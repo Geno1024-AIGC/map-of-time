@@ -456,6 +456,8 @@ fun SegmentNameDialog(
     title: String? = null,
     hint: String? = null,
     clearHint: String? = null,
+    /** Road names already used elsewhere; one tap fills the field. */
+    reuse: List<String> = emptyList(),
 ) {
     var text by remember(initial) { mutableStateOf(initial) }
     AlertDialog(
@@ -476,6 +478,7 @@ fun SegmentNameDialog(
                         Text(stringResource(R.string.segment_name_use, suggestion))
                     }
                 }
+                RoadNameReuse(reuse, text) { text = it }
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = clearHint ?: stringResource(R.string.segment_name_clear_hint),
@@ -495,4 +498,32 @@ fun SegmentNameDialog(
             }
         },
     )
+}
+
+/**
+ * Road names already given elsewhere, offered as one-tap chips. A road is many
+ * pieces; typing its name once and reusing it keeps every piece spelled the
+ * same. Shared by both places a segment can be named.
+ */
+@Composable
+fun RoadNameReuse(
+    names: List<String>,
+    current: String,
+    onPick: (String) -> Unit,
+) {
+    if (names.isEmpty()) return
+    Text(
+        text = stringResource(R.string.segment_name_reuse),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        names.forEach { name ->
+            FilterChip(
+                selected = name == current,
+                onClick = { onPick(name) },
+                label = { Text(name) },
+            )
+        }
+    }
 }

@@ -189,13 +189,20 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
      * Names a segment (or clears the name when [name] is blank) and rewrites the
      * labels of its legs, so every screen shows the new name immediately.
      */
-    suspend fun renameSegment(segmentId: Long, name: String?) = renameSegments(listOf(segmentId), name)
-
-    /** Names a whole stretch of road in one action. */
-    suspend fun renameSegments(segmentIds: List<Long>, name: String?) {
-        withContext(container.dbDispatcher) { container.repository.renameSegments(segmentIds, name) }
+    suspend fun renameSegment(segmentId: Long, name: String?) {
+        withContext(container.dbDispatcher) { container.repository.renameSegment(segmentId, name) }
         refresh()
     }
+
+    /**
+     * Road names already given to some segment. Offered as one-tap chips when
+     * naming another piece of the same road, so a name is typed once, not once
+     * per segment. Derived from what is on disk, never a second stored copy.
+     */
+    val roadNames: List<String>
+        get() = summaries.mapNotNull { it.segment.userName?.trim()?.takeIf(String::isNotBlank) }
+            .distinct()
+            .sorted()
 
     /**
      * Names one end of a segment. Every segment through that point changes

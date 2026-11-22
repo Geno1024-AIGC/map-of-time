@@ -181,10 +181,7 @@
     <string name="segment_name_hint">e.g. the alley behind the mall</string>
     <string name="segment_name_use">Use “%1$s”</string>
     <string name="segment_name_clear_hint">Save it empty to fall back to the OSM name.</string>
-    <string name="segment_name_run">Name the whole road</string>
-    <string name="segment_name_run_title">Name %1$d connected segments</string>
-    <string name="segment_name_run_hint">e.g. Xincheng Road</string>
-    <string name="segment_name_run_clear_hint">Applies to all %1$d segments. Save empty to clear them all.</string>
+    <string name="segment_name_reuse">Used before</string>
     <string name="segment_from">From</string>
     <string name="segment_to">To</string>
     <string name="segment_from_points">Ends: %1$s</string>
