@@ -53,7 +53,7 @@ import com.geno1024.ai.mapoftime.core.Polyline
 import com.geno1024.ai.mapoftime.core.TrackPoint
 import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.MatchKind
-import com.geno1024.ai.mapoftime.data.Segment
+import com.geno1024.ai.mapoftime.data.Edge
 import com.geno1024.ai.mapoftime.data.Trip
 import com.geno1024.ai.mapoftime.data.traversalEndNames
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
@@ -95,8 +95,8 @@ fun TripDetailScreen(
     var message by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableStateOf(0) }
     var selectedLegId by remember(tripId) { mutableStateOf<Long?>(null) }
-    var selectedSegment by remember(tripId) { mutableStateOf<Segment?>(null) }
-    var editingSegment by remember { mutableStateOf(false) }
+    var selectedEdge by remember(tripId) { mutableStateOf<Edge?>(null) }
+    var editingEdge by remember { mutableStateOf(false) }
     var trimming by remember(tripId) { mutableStateOf(false) }
     var cutIndex by remember(tripId) { mutableStateOf<Int?>(null) }
     var trimmingBusy by remember { mutableStateOf(false) }
@@ -113,7 +113,7 @@ fun TripDetailScreen(
         points = viewModel.points(tripId)
         markPositions = viewModel.markPositions(tripId)
         markTimes = viewModel.markTimes(tripId)
-        identities = viewModel.identities(legsValue.mapNotNull { it.segmentId })
+        identities = viewModel.identities(legsValue.mapNotNull { it.edgeId })
         // Re-analysis replaces every leg, so an old selection would point at
         // an id that no longer exists.
         if (legsValue.none { it.id == selectedLegId }) selectedLegId = null
@@ -130,34 +130,34 @@ fun TripDetailScreen(
     val selectedTrack = remember(selectedLeg) {
         selectedLeg?.let { Polyline.decode(it.polyline) }?.takeIf { it.size >= 2 }
     }
-    // Naming the ends needs the segment, not just the leg: the names belong to
+    // Naming the ends needs the edge, not just the leg: the names belong to
     // the two points, and the leg only says which way this trip went.
     LaunchedEffect(selectedLeg, reload) {
-        selectedSegment = selectedLeg?.segmentId?.let { viewModel.segment(it) }
+        selectedEdge = selectedLeg?.edgeId?.let { viewModel.edge(it) }
     }
     val selectedIdentity = remember(selectedLeg, identities) {
         selectedLeg?.let { leg ->
             when {
                 leg.partial -> MatchKind.PARTIAL
-                leg.segmentId == null -> MatchKind.UNMATCHED
-                else -> identities[leg.segmentId] ?: MatchKind.UNMATCHED
+                leg.edgeId == null -> MatchKind.UNMATCHED
+                else -> identities[leg.edgeId] ?: MatchKind.UNMATCHED
             }
         }
     }
     val fromLabel = stringResource(R.string.segment_from)
     val toLabel = stringResource(R.string.segment_to)
-    // The two ends of the selected leg, labelled with the segment's own
+    // The two ends of the selected leg, labelled with the edge's own
     // orientation so "from" and "to" mean the same thing here and in the
-    // naming dialog. A partial leg stops at a junction inside the segment, so
-    // its own ends are not the segment's ends and get no label.
-    val endMarkers = remember(selectedLeg, selectedSegment, selectedTrack, fromLabel, toLabel) {
+    // naming dialog. A partial leg stops at a junction inside the edge, so
+    // its own ends are not the edge's ends and get no label.
+    val endMarkers = remember(selectedLeg, selectedEdge, selectedTrack, fromLabel, toLabel) {
         val leg = selectedLeg
-        val segment = selectedSegment
+        val edge = selectedEdge
         val track = selectedTrack
-        if (leg == null || segment == null || track == null || leg.partial) {
+        if (leg == null || edge == null || track == null || leg.partial) {
             emptyList()
         } else {
-            val (startLabel, endLabel) = traversalEndNames(segment, leg.direction, fromLabel, toLabel)
+            val (startLabel, endLabel) = traversalEndNames(edge, leg.direction, fromLabel, toLabel)
             listOf(
                 MapMarker(track.first(), emphasized = false, label = startLabel),
                 MapMarker(track.last(), emphasized = true, label = endLabel),
@@ -264,10 +264,10 @@ fun TripDetailScreen(
         )
     }
 
-    val editing = selectedSegment
-    if (editingSegment && editing != null) {
+    val editing = selectedEdge
+    if (editingEdge && editing != null) {
         LegEditDialog(
-            segment = editing,
+            edge = editing,
             reuse = viewModel.roadNames,
             fromCandidates = editing.fromPoint?.let(viewModel::pointRoadCandidates).orEmpty(),
             toCandidates = editing.toPoint?.let(viewModel::pointRoadCandidates).orEmpty(),
@@ -275,11 +275,11 @@ fun TripDetailScreen(
                 ?.let { viewModel.roadsAt(listOf(it)) }.orEmpty(),
             initialToRoads = editing.toPoint
                 ?.let { viewModel.roadsAt(listOf(it)) }.orEmpty(),
-            onDismiss = { editingSegment = false },
+            onDismiss = { editingEdge = false },
             onSave = { name, fromName, toName, fromRoads, toRoads ->
-                editingSegment = false
+                editingEdge = false
                 scope.launch {
-                    viewModel.renameSegment(editing.id, name)
+                    viewModel.renameEdge(editing.id, name)
                     editing.fromPoint?.let {
                         viewModel.renamePoint(it, fromName, roads = fromRoads)
                     }
@@ -333,8 +333,8 @@ fun TripDetailScreen(
                         leg = leg,
                         identity = selectedIdentity,
                         onClear = { selectedLegId = null },
-                        onEdit = if (selectedSegment != null) {
-                            { editingSegment = true }
+                        onEdit = if (selectedEdge != null) {
+                            { editingEdge = true }
                         } else {
                             null
                         },
@@ -676,8 +676,8 @@ fun TripDetailScreen(
                         leg = leg,
                         identity = when {
                             leg.partial -> MatchKind.PARTIAL
-                            leg.segmentId == null -> MatchKind.UNMATCHED
-                            else -> identities[leg.segmentId] ?: MatchKind.UNMATCHED
+                            leg.edgeId == null -> MatchKind.UNMATCHED
+                            else -> identities[leg.edgeId] ?: MatchKind.UNMATCHED
                         },
                         selected = leg.id == selectedLegId,
                         onClick = {
@@ -1040,13 +1040,13 @@ private fun LegRow(
 }
 
 /**
- * Everything that names the selected leg's segment: its own label and the two
+ * Everything that names the selected leg's edge: its own label and the two
  * points it runs between. Naming a point here is the same act as on the
- * segment screen — every segment through that point picks the name up.
+ * edge screen — every edge through that point picks the name up.
  */
 @Composable
 private fun LegEditDialog(
-    segment: Segment,
+    edge: Edge,
     reuse: List<String>,
     fromCandidates: List<String> = emptyList(),
     toCandidates: List<String> = emptyList(),
@@ -1061,13 +1061,13 @@ private fun LegEditDialog(
         toRoads: Set<String>,
     ) -> Unit,
 ) {
-    var name by remember(segment.id) { mutableStateOf(segment.userName.orEmpty()) }
-    var fromName by remember(segment.id) { mutableStateOf(segment.fromName.orEmpty()) }
-    var toName by remember(segment.id) { mutableStateOf(segment.toName.orEmpty()) }
-    var fromRoads by remember(segment.id) { mutableStateOf(initialFromRoads) }
-    var toRoads by remember(segment.id) { mutableStateOf(initialToRoads) }
-    val fromPoint = segment.fromPoint
-    val toPoint = segment.toPoint
+    var name by remember(edge.id) { mutableStateOf(edge.userName.orEmpty()) }
+    var fromName by remember(edge.id) { mutableStateOf(edge.fromName.orEmpty()) }
+    var toName by remember(edge.id) { mutableStateOf(edge.toName.orEmpty()) }
+    var fromRoads by remember(edge.id) { mutableStateOf(initialFromRoads) }
+    var toRoads by remember(edge.id) { mutableStateOf(initialToRoads) }
+    val fromPoint = edge.fromPoint
+    val toPoint = edge.toPoint
 
     AlertDialog(
         onDismissRequest = onDismiss,

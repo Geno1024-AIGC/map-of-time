@@ -114,9 +114,9 @@ fun App(viewModel: AppViewModel) {
                         modifier = Modifier.padding(padding),
                     )
 
-                    edgeId != null -> SegmentDetailScreen(
+                    edgeId != null -> EdgeDetailScreen(
                         viewModel = viewModel,
-                        segmentId = edgeId,
+                        edgeId = edgeId,
                         onBack = closeDetail,
                         onOpenNode = openNode,
                         modifier = Modifier.padding(padding),

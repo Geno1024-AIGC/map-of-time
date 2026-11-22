@@ -53,25 +53,25 @@ import com.geno1024.ai.mapoftime.core.samples
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.data.Leg
 import com.geno1024.ai.mapoftime.data.PointRef
-import com.geno1024.ai.mapoftime.data.Segment
+import com.geno1024.ai.mapoftime.data.Edge
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
 import com.geno1024.ai.mapoftime.ui.map.MapRing
 import com.geno1024.ai.mapoftime.ui.map.TrackMap
 import kotlinx.coroutines.launch
 
 @Composable
-fun SegmentDetailScreen(
+fun EdgeDetailScreen(
     viewModel: AppViewModel,
-    segmentId: Long,
+    edgeId: Long,
     onBack: () -> Unit,
     onOpenNode: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
-    var segment by remember(segmentId) { mutableStateOf<Segment?>(null) }
-    var samples by remember(segmentId) { mutableStateOf<List<TraversalSample>>(emptyList()) }
-    var legs by remember(segmentId) { mutableStateOf<List<Leg>>(emptyList()) }
+    var edge by remember(edgeId) { mutableStateOf<Edge?>(null) }
+    var samples by remember(edgeId) { mutableStateOf<List<TraversalSample>>(emptyList()) }
+    var legs by remember(edgeId) { mutableStateOf<List<Leg>>(emptyList()) }
     var renaming by remember { mutableStateOf(false) }
     // Same two steps as the network screen: preview the circle, then name it.
     var preview by remember { mutableStateOf<PlaceDraft?>(null) }
@@ -79,10 +79,10 @@ fun SegmentDetailScreen(
     var previewReach by remember { mutableStateOf(PlaceDrafts.SPAN_M) }
     var namingPlace by remember { mutableStateOf<PlaceDraft?>(null) }
 
-    LaunchedEffect(segmentId) {
-        segment = viewModel.segment(segmentId)
-        samples = viewModel.samples(segmentId)
-        legs = viewModel.legsForSegment(segmentId)
+    LaunchedEffect(edgeId) {
+        edge = viewModel.edge(edgeId)
+        samples = viewModel.samples(edgeId)
+        legs = viewModel.legsForEdge(edgeId)
     }
 
     val stats = remember(samples) { DurationStats.of(samples) }
@@ -132,11 +132,11 @@ fun SegmentDetailScreen(
     val toLabel = stringResource(R.string.segment_to)
     // Both ends of a piece inside one junction carry the same name; saying
     // "X → X" would be noise, so the direction is labelled "inside X" instead.
-    val insideJunction = segment?.let { it.fromName?.takeIf { name -> name == it.toName } }
+    val insideJunction = edge?.let { it.fromName?.takeIf { name -> name == it.toName } }
     // Inside one wide junction both ends share a name, so "X → X" says nothing.
     // The OSM road this little piece belongs to does say something: it tells
     // which arm of the interchange the traversal was on.
-    val insideRoad = (segment?.userName ?: segment?.name)
+    val insideRoad = (edge?.userName ?: edge?.name)
         ?.takeIf { it.isNotBlank() && it != insideJunction }
     val insideText = insideJunction?.let { name ->
         if (insideRoad == null) {
@@ -145,11 +145,11 @@ fun SegmentDetailScreen(
             stringResource(R.string.segment_inside_junction_road, name, insideRoad)
         }
     }
-    val forwardLabel = segment?.forwardName ?: insideText ?: "$fromLabel → $toLabel"
-    val backwardLabel = segment?.backwardName ?: insideText ?: "$toLabel → $fromLabel"
-    val markers = remember(segment, fromLabel, toLabel, preview) {
+    val forwardLabel = edge?.forwardName ?: insideText ?: "$fromLabel → $toLabel"
+    val backwardLabel = edge?.backwardName ?: insideText ?: "$toLabel → $fromLabel"
+    val markers = remember(edge, fromLabel, toLabel, preview) {
         val members = preview?.refs?.mapTo(HashSet()) { it.key } ?: emptySet()
-        segment?.let {
+        edge?.let {
             listOf(
                 MapMarker(
                     at = it.from,
@@ -177,16 +177,16 @@ fun SegmentDetailScreen(
 
     if (renaming) {
         SegmentNameDialog(
-            initial = segment?.userName.orEmpty(),
-            osmName = segment?.name,
+            initial = edge?.userName.orEmpty(),
+            osmName = edge?.name,
             reuse = viewModel.roadNames,
             onDismiss = { renaming = false },
             onSave = { name ->
                 renaming = false
                 scope.launch {
-                    viewModel.renameSegment(segmentId, name)
-                    segment = viewModel.segment(segmentId)
-                    legs = viewModel.legsForSegment(segmentId)
+                    viewModel.renameEdge(edgeId, name)
+                    edge = viewModel.edge(edgeId)
+                    legs = viewModel.legsForEdge(edgeId)
                 }
             },
         )
@@ -198,8 +198,8 @@ fun SegmentDetailScreen(
         PlaceNameDialog(
             initial = viewModel.placeName(draft.existingPlaceId) ?: draft.seed.key.let { key ->
                 when (key) {
-                    segment?.fromKey -> segment?.fromName
-                    segment?.toKey -> segment?.toName
+                    edge?.fromKey -> edge?.fromName
+                    edge?.toKey -> edge?.toName
                     else -> null
                 }
             }.orEmpty(),
@@ -223,8 +223,8 @@ fun SegmentDetailScreen(
                         clearMemberNames = takeOverNames,
                         roads = roads,
                     )
-                    segment = viewModel.segment(segmentId)
-                    legs = viewModel.legsForSegment(segmentId)
+                    edge = viewModel.edge(edgeId)
+                    legs = viewModel.legsForEdge(edgeId)
                 }
             },
             onSavePointOnly = { name, roads ->
@@ -232,8 +232,8 @@ fun SegmentDetailScreen(
                 preview = null
                 scope.launch {
                     viewModel.renamePoint(draft.seed, name, roads = roads)
-                    segment = viewModel.segment(segmentId)
-                    legs = viewModel.legsForSegment(segmentId)
+                    edge = viewModel.edge(edgeId)
+                    legs = viewModel.legsForEdge(edgeId)
                 }
             },
         )
@@ -241,8 +241,8 @@ fun SegmentDetailScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         ScreenHeader(
-            title = segment?.displayName ?: segment?.key ?: stringResource(R.string.segments_title),
-            subtitle = segment?.let {
+            title = edge?.displayName ?: edge?.key ?: stringResource(R.string.segments_title),
+            subtitle = edge?.let {
                 val distance = stats.medianDistanceM.takeIf { d -> d > 0 } ?: it.lengthM
                 modeLabel(it.mode) + " · " + formatDistance(distance)
             },
@@ -296,20 +296,20 @@ fun SegmentDetailScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
-                                text = segment?.displayName ?: "—",
+                                text = edge?.displayName ?: "—",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                             )
-                            val osmName = segment?.name
-                            if (segment?.userName != null && osmName != null) {
+                            val osmName = edge?.name
+                            if (edge?.userName != null && osmName != null) {
                                 Text(
                                     text = stringResource(R.string.segment_osm_name, osmName),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                            val pair = segment?.pointName
-                            if (segment?.userName != null && pair != null) {
+                            val pair = edge?.pointName
+                            if (edge?.userName != null && pair != null) {
                                 Text(
                                     text = stringResource(R.string.segment_from_points, pair),
                                     style = MaterialTheme.typography.labelSmall,
@@ -320,7 +320,7 @@ fun SegmentDetailScreen(
                         TextButton(onClick = { renaming = true }) {
                             Text(
                                 stringResource(
-                                    if (segment?.userName == null) {
+                                    if (edge?.userName == null) {
                                         R.string.segment_name_add
                                     } else {
                                         R.string.action_edit
@@ -330,16 +330,16 @@ fun SegmentDetailScreen(
                         }
                     }
 
-                    val fromPoint = segment?.fromPoint
-                    val toPoint = segment?.toPoint
+                    val fromPoint = edge?.fromPoint
+                    val toPoint = edge?.toPoint
                     if (fromPoint != null && toPoint != null) {
                         ThinDivider()
                         EndpointRow(
                             label = stringResource(R.string.segment_from),
-                            name = segment?.fromName,
+                            name = edge?.fromName,
                             note = placeNote(viewModel, fromPoint),
                             onName = {
-                                previewAt = segment?.from
+                                previewAt = edge?.from
                                 previewReach = PlaceDrafts.SPAN_M
                                 preview = viewModel.placeDraft(fromPoint, previewAt, previewReach)
                             },
@@ -347,10 +347,10 @@ fun SegmentDetailScreen(
                         )
                         EndpointRow(
                             label = stringResource(R.string.segment_to),
-                            name = segment?.toName,
+                            name = edge?.toName,
                             note = placeNote(viewModel, toPoint),
                             onName = {
-                                previewAt = segment?.to
+                                previewAt = edge?.to
                                 previewReach = PlaceDrafts.SPAN_M
                                 preview = viewModel.placeDraft(toPoint, previewAt, previewReach)
                             },
@@ -362,8 +362,8 @@ fun SegmentDetailScreen(
 
             item {
                 SectionCard(title = stringResource(R.string.segment_stats_title)) {
-                    if (segment != null) {
-                        MatchBadge(segment!!.identity)
+                    if (edge != null) {
+                        MatchBadge(edge!!.identity)
                         Spacer(Modifier.height(10.dp))
                     }
                     // A divided road has two carriageways between the same
@@ -464,7 +464,7 @@ fun SegmentDetailScreen(
                         stringResource(R.string.segment_distance),
                         formatDistance(stats.medianDistanceM),
                     )
-                    segment?.let {
+                    edge?.let {
                         KeyValueRow(
                             stringResource(R.string.segment_first_seen),
                             formatDateTime(it.firstSeen),
@@ -835,7 +835,7 @@ private fun placeNote(viewModel: AppViewModel, ref: PointRef?): String? {
 }
 
 /**
- * One end of the segment. It has two jobs: name the point, and jump to where
+ * One end of the edge. It has two jobs: name the point, and jump to where
  * that point sits in the network. The latter is the reverse of tapping a link
  * in a network node's card, so points and lines can be traced in both directions.
  */
