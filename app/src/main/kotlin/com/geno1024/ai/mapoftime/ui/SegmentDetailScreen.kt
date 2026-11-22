@@ -64,6 +64,7 @@ fun SegmentDetailScreen(
     viewModel: AppViewModel,
     segmentId: Long,
     onBack: () -> Unit,
+    onOpenNode: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
@@ -335,6 +336,7 @@ fun SegmentDetailScreen(
                                 previewReach = PlaceDrafts.SPAN_M
                                 preview = viewModel.placeDraft(fromPoint, previewAt, previewReach)
                             },
+                            onOpenNetwork = { onOpenNode(fromPoint.key) },
                         )
                         EndpointRow(
                             label = stringResource(R.string.segment_to),
@@ -345,6 +347,7 @@ fun SegmentDetailScreen(
                                 previewReach = PlaceDrafts.SPAN_M
                                 preview = viewModel.placeDraft(toPoint, previewAt, previewReach)
                             },
+                            onOpenNetwork = { onOpenNode(toPoint.key) },
                         )
                     }
                 }
@@ -824,9 +827,19 @@ private fun placeNote(viewModel: AppViewModel, ref: PointRef?): String? {
     }
 }
 
-/** One end of the segment, with the name the user gave it and a way to change it. */
+/**
+ * One end of the segment. It has two jobs: name the point, and jump to where
+ * that point sits in the network. The latter is the reverse of tapping a link
+ * in a network node's card, so points and lines can be traced in both directions.
+ */
 @Composable
-private fun EndpointRow(label: String, name: String?, note: String?, onName: () -> Unit) {
+private fun EndpointRow(
+    label: String,
+    name: String?,
+    note: String?,
+    onName: () -> Unit,
+    onOpenNetwork: () -> Unit,
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(
@@ -846,12 +859,20 @@ private fun EndpointRow(label: String, name: String?, note: String?, onName: () 
                 )
             }
         }
-        TextButton(onClick = onName) {
-            Text(
-                stringResource(
-                    if (name == null) R.string.segment_name_add else R.string.action_edit,
-                ),
-            )
+        Column(horizontalAlignment = Alignment.End) {
+            TextButton(onClick = onName) {
+                Text(
+                    stringResource(
+                        if (name == null) R.string.segment_name_add else R.string.action_edit,
+                    ),
+                )
+            }
+            TextButton(
+                onClick = onOpenNetwork,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text(stringResource(R.string.segment_open_in_network))
+            }
         }
     }
 }

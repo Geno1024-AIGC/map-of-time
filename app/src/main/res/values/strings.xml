@@ -184,6 +184,7 @@
     <string name="segment_name_reuse">Used before</string>
     <string name="segment_from">From</string>
     <string name="segment_to">To</string>
+    <string name="segment_open_in_network">View in network</string>
     <string name="segment_from_points">Ends: %1$s</string>
     <string name="point_name_hint">e.g. north gate</string>
     <string name="point_unnamed">Unnamed</string>

@@ -45,11 +45,20 @@ private enum class Tab(val labelRes: Int, val glyph: String) {
 fun App(viewModel: AppViewModel) {
     var tab by rememberSaveable { mutableStateOf(Tab.RECORD.name) }
     var detail by rememberSaveable { mutableStateOf<String?>(null) }
+    // A segment endpoint can ask the network tab to preselect its node. It is a
+    // one-shot request: NetworkScreen consumes it, so coming back later restores
+    // whatever selection the user made there instead of snapping to it again.
+    var networkNode by rememberSaveable { mutableStateOf<String?>(null) }
     val stateHolder = rememberSaveableStateHolder()
 
     // Announced by TalkBack in place of the unlabelled dot.
     val updateBadge = stringResource(R.string.update_badge)
     val closeDetail = { detail = null }
+    val openNode: (String) -> Unit = { key ->
+        networkNode = key
+        tab = Tab.NETWORK.name
+        detail = null
+    }
     BackHandler(enabled = detail != null) { detail = null }
 
     Surface(color = MaterialTheme.colorScheme.background) {
@@ -109,6 +118,7 @@ fun App(viewModel: AppViewModel) {
                         viewModel = viewModel,
                         segmentId = segmentId,
                         onBack = closeDetail,
+                        onOpenNode = openNode,
                         modifier = Modifier.padding(padding),
                     )
 
@@ -127,6 +137,8 @@ fun App(viewModel: AppViewModel) {
                         Tab.NETWORK -> NetworkScreen(
                             viewModel = viewModel,
                             onOpenSegment = { id -> detail = "segment:$id" },
+                            requestedNode = networkNode,
+                            onNodeRequestHandled = { networkNode = null },
                             modifier = Modifier.padding(padding),
                         )
 

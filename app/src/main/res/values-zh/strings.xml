@@ -184,6 +184,7 @@
     <string name="segment_name_reuse">用过的路名</string>
     <string name="segment_from">起点</string>
     <string name="segment_to">终点</string>
+    <string name="segment_open_in_network">在路网中查看</string>
     <string name="segment_from_points">端点：%1$s</string>
     <string name="point_name_hint">例如：小区北门</string>
     <string name="point_unnamed">未命名</string>

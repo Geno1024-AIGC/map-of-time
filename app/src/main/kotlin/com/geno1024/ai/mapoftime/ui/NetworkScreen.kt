@@ -56,6 +56,9 @@ import kotlinx.coroutines.launch
 fun NetworkScreen(
     viewModel: AppViewModel,
     onOpenSegment: (Long) -> Unit,
+    /** One-shot request from a segment endpoint: preselect this node. */
+    requestedNode: String? = null,
+    onNodeRequestHandled: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val settings by viewModel.settings.state.collectAsStateWithLifecycle()
@@ -76,12 +79,28 @@ fun NetworkScreen(
     // Points the user added or removed by tapping the map while reviewing.
     var previewManual by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var namingPlace by remember { mutableStateOf<PlaceDraft?>(null) }
+    // Zoom to a node only when we were sent here from a segment. Ordinary taps
+    // keep the whole network framed, so the next junction stays within reach.
+    var focusNode by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     // Drawn as a dot always; used by the camera only when there is no network
     // to frame yet, because this tab is about the roads, not about the phone.
     val here = rememberHere()
 
     LaunchedEffect(Unit) { viewModel.refresh() }
+
+    LaunchedEffect(requestedNode) {
+        if (requestedNode == null) return@LaunchedEffect
+        // A filter left over from an earlier visit could hide the very node we
+        // were sent to; clear it so the jump always lands somewhere visible.
+        modeFilter = null
+        selectedKey = requestedNode
+        preview = null
+        previewAt = null
+        previewManual = emptyMap()
+        focusNode = true
+        onNodeRequestHandled()
+    }
 
     val graph = remember(viewModel.summaries, modeFilter) {
         NetworkGraphs.build(
@@ -134,9 +153,14 @@ fun NetworkScreen(
     // would be a few pixels on a 250 dp map.
     // Leave room around the circle: judging whether it swallowed the next
     // crossing needs to see that crossing too, not just the claim.
-    val focusBounds = remember(preview) {
+    // When arriving from a segment, look at that node instead of the whole city.
+    val focusBounds = remember(preview, focusNode, selected) {
         preview?.let { draft ->
             Geo.bounds(listOf(draft.center))?.expanded(draft.adoptRadius() + 60.0)
+        } ?: if (focusNode) {
+            selected?.at?.let { Geo.bounds(listOf(it))?.expanded(80.0) }
+        } else {
+            null
         }
     }
     // Normally a tap selects a node. While reviewing a junction it is a pick
@@ -148,6 +172,7 @@ fun NetworkScreen(
         val draft = preview
         if (draft == null || key == null) {
             selectedKey = key
+            focusNode = false
             preview = null
         } else if (key != draft.seed.key) {
             val included = draft.refs.any { it.key == key }
@@ -204,7 +229,13 @@ fun NetworkScreen(
         )
 
         Column(Modifier.padding(horizontal = 16.dp)) {
-            ModeFilter(selected = modeFilter, onSelect = { modeFilter = it })
+            ModeFilter(
+                selected = modeFilter,
+                onSelect = {
+                    modeFilter = it
+                    focusNode = false
+                },
+            )
             Spacer(Modifier.height(8.dp))
             Box(Modifier.fillMaxWidth().height(250.dp)) {
                 TrackMap(
@@ -281,6 +312,7 @@ fun NetworkScreen(
                         onOpenSegment = onOpenSegment,
                         onNamePlace = {
                             val ref = PointRef.parse(selected.key)
+                            focusNode = false
                             if (ref != null) {
                                 // Show the proposal on the map first; naming it
                                 // is the next tap, once the circle looks right.
