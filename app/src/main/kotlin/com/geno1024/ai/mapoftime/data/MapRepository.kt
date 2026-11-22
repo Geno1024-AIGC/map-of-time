@@ -1006,6 +1006,30 @@ class MapRepository(private val helper: MapDb) {
             }
         }
 
+    fun renameRoad(id: Long, name: String): Boolean = db.transaction {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return@transaction false
+        val old = db.rawQuery("SELECT name FROM roads WHERE id = ?", arrayOf(id.toString())).use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        } ?: return@transaction false
+        db.update("roads", ContentValues().apply { put("name", trimmed) }, "id = ?", arrayOf(id.toString()))
+        db.execSQL(
+            "UPDATE edges SET user_name = ? WHERE road_id = ? AND user_name = ?",
+            arrayOf<Any>(trimmed, id, old),
+        )
+        true
+    }
+
+    fun deleteRoad(id: Long): Boolean = db.transaction {
+        val name = db.rawQuery("SELECT name FROM roads WHERE id = ?", arrayOf(id.toString())).use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        } ?: return@transaction false
+        db.execSQL("UPDATE edges SET road_id = NULL WHERE road_id = ?", arrayOf(id))
+        db.execSQL("UPDATE edges SET user_name = NULL WHERE user_name = ? AND road_id IS NULL", arrayOf(name))
+        db.execSQL("DELETE FROM node_roads WHERE road_id = ?", arrayOf(id))
+        db.delete("roads", "id = ?", arrayOf(id.toString())) > 0
+    }
+
     fun nodes(): List<Node> =
         db.rawQuery(
             "SELECT id, ref_kind, ref_node_id, lat, lon, name, junction_id FROM nodes ORDER BY id",

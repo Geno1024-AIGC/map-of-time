@@ -302,6 +302,12 @@
     <string name="settings_danger_road_names_done">Deleted %1$d road names</string>
     <string name="settings_danger_trips_done">Deleted %1$d trips</string>
     <string name="settings_danger_all_done">All data cleared</string>
+    <string name="settings_roads_title">Roads</string>
+    <string name="settings_roads_empty">No roads yet. Road names you type on edges or confirm at points appear here.</string>
+    <string name="settings_roads_rename">Rename</string>
+    <string name="settings_roads_delete">Delete</string>
+    <string name="settings_roads_rename_title">Rename road</string>
+    <string name="settings_roads_delete_confirm">Delete road “%1$s”? Edges keep their geometry, but this road link is removed.</string>
     <string name="settings_attribution">Map data © OpenStreetMap contributors</string>
     <plurals name="samples_count">
         <item quantity="one">%1$d sample</item>

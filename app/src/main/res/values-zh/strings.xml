@@ -302,6 +302,12 @@
     <string name="settings_danger_road_names_done">已删除 %1$d 个路名</string>
     <string name="settings_danger_trips_done">已删除 %1$d 个行程</string>
     <string name="settings_danger_all_done">全部数据已清空</string>
+    <string name="settings_roads_title">道路</string>
+    <string name="settings_roads_empty">还没有道路。在边上填写或在点上确认的路名会出现在这里。</string>
+    <string name="settings_roads_rename">重命名</string>
+    <string name="settings_roads_delete">删除</string>
+    <string name="settings_roads_rename_title">重命名道路</string>
+    <string name="settings_roads_delete_confirm">删除道路“%1$s”？边的几何和统计保留，但这条道路关联会被移除。</string>
     <string name="settings_attribution">地图数据 © OpenStreetMap 贡献者</string>
     <plurals name="samples_count">
         <item quantity="other">%1$d 次样本</item>

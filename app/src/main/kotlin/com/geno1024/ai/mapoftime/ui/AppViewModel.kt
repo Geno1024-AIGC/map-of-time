@@ -556,6 +556,20 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
+    fun renameRoad(id: Long, name: String) {
+        viewModelScope.launch {
+            withContext(container.dbDispatcher) { container.repository.renameRoad(id, name) }
+            refresh()
+        }
+    }
+
+    fun deleteRoad(id: Long) {
+        viewModelScope.launch {
+            withContext(container.dbDispatcher) { container.repository.deleteRoad(id) }
+            refresh()
+        }
+    }
+
     fun clearTrips(onDone: (Int) -> Unit) {
         viewModelScope.launch {
             val removed = withContext(container.dbDispatcher) { container.repository.clearTrips() }

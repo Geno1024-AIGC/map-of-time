@@ -420,6 +420,12 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 }
             }
 
+            RoadsCard(
+                roads = viewModel.roads,
+                onRename = viewModel::renameRoad,
+                onDelete = viewModel::deleteRoad,
+            )
+
             // The only card with a network call of its own. The Danger Zone
             // follows it so the destructive actions stay at the very bottom.
             UpdateCard(
@@ -1021,6 +1027,82 @@ private fun FieldError(text: String) {
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.error,
     )
+}
+
+@Composable
+private fun RoadsCard(
+    roads: List<com.geno1024.ai.mapoftime.data.Road>,
+    onRename: (Long, String) -> Unit,
+    onDelete: (Long) -> Unit,
+) {
+    var renaming by remember { mutableStateOf<com.geno1024.ai.mapoftime.data.Road?>(null) }
+    var renameText by remember { mutableStateOf("") }
+    var deleting by remember { mutableStateOf<com.geno1024.ai.mapoftime.data.Road?>(null) }
+
+    renaming?.let { road ->
+        AlertDialog(
+            onDismissRequest = { renaming = null },
+            title = { Text(stringResource(R.string.settings_roads_rename_title)) },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onRename(road.id, renameText)
+                    renaming = null
+                }) { Text(stringResource(R.string.settings_roads_rename)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { renaming = null }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    }
+
+    deleting?.let { road ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text(stringResource(R.string.settings_roads_delete)) },
+            text = { Text(stringResource(R.string.settings_roads_delete_confirm, road.name)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete(road.id)
+                    deleting = null
+                }) { Text(stringResource(R.string.settings_roads_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    }
+
+    SectionCard(title = stringResource(R.string.settings_roads_title)) {
+        if (roads.isEmpty()) {
+            Text(
+                text = stringResource(R.string.settings_roads_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            roads.forEach { road ->
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(road.name, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                    TextButton(onClick = { renameText = road.name; renaming = road }) {
+                        Text(stringResource(R.string.settings_roads_rename))
+                    }
+                    TextButton(onClick = { deleting = road }) {
+                        Text(stringResource(R.string.settings_roads_delete))
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
