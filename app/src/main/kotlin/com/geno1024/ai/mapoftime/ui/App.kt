@@ -99,6 +99,9 @@ fun App(viewModel: AppViewModel) {
                 ?.removePrefix("trip:")?.toLongOrNull()
             val edgeId = route?.takeIf { it.startsWith("edge:") }
                 ?.substringAfter(':')?.toLongOrNull()
+            val legRoute = route?.takeIf { it.startsWith("tripLeg:") }?.removePrefix("tripLeg:")
+            val legTripId = legRoute?.substringBefore(':')?.toLongOrNull()
+            val legId = legRoute?.substringAfter(':')?.toLongOrNull()
 
             // Each tab and each detail gets its own bucket. A detail never
             // shares a key with the list it was opened from, so saving one
@@ -110,6 +113,16 @@ fun App(viewModel: AppViewModel) {
                         viewModel = viewModel,
                         tripId = tripId,
                         onBack = closeDetail,
+                        onEditLeg = { tId, lId -> detail = "tripLeg:$tId:$lId" },
+                        modifier = Modifier.padding(padding),
+                    )
+
+                    legTripId != null && legId != null -> LegEditScreen(
+                        viewModel = viewModel,
+                        tripId = legTripId,
+                        legId = legId,
+                        onBack = closeDetail,
+                        onOpenNode = openNode,
                         modifier = Modifier.padding(padding),
                     )
 

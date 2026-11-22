@@ -67,6 +67,7 @@ fun TripDetailScreen(
     viewModel: AppViewModel,
     tripId: Long,
     onBack: () -> Unit,
+    onEditLeg: (Long, Long) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -97,7 +98,6 @@ fun TripDetailScreen(
     var reload by remember { mutableStateOf(0) }
     var selectedLegId by remember(tripId) { mutableStateOf<Long?>(null) }
     var selectedEdge by remember(tripId) { mutableStateOf<Edge?>(null) }
-    var editingEdge by remember { mutableStateOf(false) }
     var trimming by remember(tripId) { mutableStateOf(false) }
     var cutIndex by remember(tripId) { mutableStateOf<Int?>(null) }
     var trimmingBusy by remember { mutableStateOf(false) }
@@ -265,33 +265,6 @@ fun TripDetailScreen(
         )
     }
 
-    val editing = selectedEdge
-    if (editingEdge && editing != null) {
-        LegEditDialog(
-            edge = editing,
-            reuse = viewModel.roadNames,
-            fromCandidates = editing.fromPoint?.let(viewModel::pointRoadCandidates).orEmpty(),
-            toCandidates = editing.toPoint?.let(viewModel::pointRoadCandidates).orEmpty(),
-            initialFromRoads = editing.fromPoint
-                ?.let { viewModel.roadsAt(listOf(it)) }.orEmpty(),
-            initialToRoads = editing.toPoint
-                ?.let { viewModel.roadsAt(listOf(it)) }.orEmpty(),
-            onDismiss = { editingEdge = false },
-            onSave = { name, fromName, toName, fromRoads, toRoads ->
-                editingEdge = false
-                scope.launch {
-                    viewModel.renameEdge(editing.id, name)
-                    editing.fromPoint?.let {
-                        viewModel.renamePoint(it, fromName, roads = fromRoads)
-                    }
-                    editing.toPoint?.let {
-                        viewModel.renamePoint(it, toName, roads = toRoads)
-                    }
-                    reload += 1
-                }
-            },
-        )
-    }
 
     Column(modifier = modifier.fillMaxSize()) {
         ScreenHeader(
@@ -335,7 +308,7 @@ fun TripDetailScreen(
                         identity = selectedIdentity,
                         onClear = { selectedLegId = null },
                         onEdit = if (selectedEdge != null) {
-                            { editingEdge = true }
+                            { onEditLeg(tripId, leg.id) }
                         } else {
                             null
                         },
@@ -1040,118 +1013,3 @@ private fun LegRow(
     }
 }
 
-/**
- * Everything that names the selected leg's edge: its own label and the two
- * points it runs between. Naming a point here is the same act as on the
- * edge screen — every edge through that point picks the name up.
- */
-@Composable
-private fun LegEditDialog(
-    edge: Edge,
-    reuse: List<String>,
-    fromCandidates: List<String> = emptyList(),
-    toCandidates: List<String> = emptyList(),
-    initialFromRoads: Set<String> = emptySet(),
-    initialToRoads: Set<String> = emptySet(),
-    onDismiss: () -> Unit,
-    onSave: (
-        name: String,
-        fromName: String,
-        toName: String,
-        fromRoads: Set<String>,
-        toRoads: Set<String>,
-    ) -> Unit,
-) {
-    var name by remember(edge.id) { mutableStateOf(edge.userName.orEmpty()) }
-    var fromName by remember(edge.id) { mutableStateOf(edge.fromName.orEmpty()) }
-    var toName by remember(edge.id) { mutableStateOf(edge.toName.orEmpty()) }
-    var fromRoads by remember(edge.id) { mutableStateOf(initialFromRoads) }
-    var toRoads by remember(edge.id) { mutableStateOf(initialToRoads) }
-    val fromPoint = edge.fromPoint
-    val toPoint = edge.toPoint
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.leg_edit_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                NameField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = stringResource(R.string.edge_name),
-                    hint = stringResource(R.string.edge_name_hint),
-                )
-                RoadNameReuse(reuse, name) { name = it }
-                if (fromPoint != null) {
-                    NameField(
-                        value = fromName,
-                        onValueChange = { fromName = it },
-                        label = stringResource(R.string.edge_from),
-                        hint = stringResource(R.string.point_name_hint),
-                    )
-                    PointRoadsPicker(fromCandidates, fromRoads) { road ->
-                        fromRoads = if (road in fromRoads) fromRoads - road else fromRoads + road
-                    }
-                    RoadNames.join(fromRoads)?.let { derived ->
-                        Text(
-                            text = stringResource(R.string.point_derived_name, derived),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (fromName.trim().isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                if (toPoint != null) {
-                    NameField(
-                        value = toName,
-                        onValueChange = { toName = it },
-                        label = stringResource(R.string.edge_to),
-                        hint = stringResource(R.string.point_name_hint),
-                    )
-                    PointRoadsPicker(toCandidates, toRoads) { road ->
-                        toRoads = if (road in toRoads) toRoads - road else toRoads + road
-                    }
-                    RoadNames.join(toRoads)?.let { derived ->
-                        Text(
-                            text = stringResource(R.string.point_derived_name, derived),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (toName.trim().isEmpty()) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-                Text(
-                    text = stringResource(
-                        if (fromPoint == null || toPoint == null) {
-                            R.string.leg_edit_no_ends
-                        } else {
-                            R.string.leg_edit_hint
-                        },
-                    ),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(name, fromName, toName, fromRoads, toRoads) }) {
-                Text(stringResource(R.string.action_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.action_cancel))
-            }
-        },
-    )
-}
-
-@Composable
-private fun NameField(value: String, onValueChange: (String) -> Unit, label: String, hint: String) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        placeholder = { Text(hint) },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-    )
-}

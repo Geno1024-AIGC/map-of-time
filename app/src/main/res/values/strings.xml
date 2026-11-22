@@ -116,8 +116,15 @@
     <string name="trip_legs_hint">Tap a leg to see it on the map, and to name its ends</string>
     <string name="leg_unnamed">Unnamed piece of road</string>
     <string name="leg_edit_title">Edit this piece</string>
+    <string name="leg_edit_page_title">Edit leg</string>
     <string name="leg_edit_hint">Save a name empty to clear it. A point\'s name is shared by every edge through it.</string>
     <string name="leg_edit_no_ends">This piece has no stable ends yet — analyse the trip again to name them.</string>
+    <string name="leg_edit_impact_title">Impact</string>
+    <string name="leg_edit_impact_edge">This edge has %1$d samples; edits apply to the shared edge.</string>
+    <string name="leg_edit_impact_point">%1$s is shared by %2$d edges.</string>
+    <string name="leg_edit_impact_point_shared">Shared by %1$d edges</string>
+    <string name="leg_edit_endpoints_title">Endpoints</string>
+    <string name="point_roads_selected">Crossing roads: %1$s</string>
     <string name="leg_window">%1$s – %2$s</string>
     <string name="leg_time_short">Time %1$s</string>
     <string name="leg_wait_short">Wait %1$s</string>
