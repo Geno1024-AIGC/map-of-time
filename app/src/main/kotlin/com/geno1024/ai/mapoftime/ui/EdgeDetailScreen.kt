@@ -179,7 +179,7 @@ fun EdgeDetailScreen(
         SegmentNameDialog(
             initial = edge?.userName.orEmpty(),
             osmName = edge?.name,
-            reuse = viewModel.roadNames,
+            reuse = viewModel.roads.map { it.name }.distinct(),
             onDismiss = { renaming = false },
             onSave = { name ->
                 renaming = false
@@ -312,6 +312,14 @@ fun EdgeDetailScreen(
                             if (edge?.userName != null && pair != null) {
                                 Text(
                                     text = stringResource(R.string.segment_from_points, pair),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            val linkedRoad = edge?.roadId?.let { id -> viewModel.roads.firstOrNull { it.id == id }?.name }
+                            if (linkedRoad != null) {
+                                Text(
+                                    text = stringResource(R.string.edge_linked_road, linkedRoad),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
