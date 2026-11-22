@@ -496,19 +496,6 @@ fun PlaceNameDialog(
  * the name from point-naming suggestions, so the dialog says so instead of
  * disabling the button.
  */
-@Deprecated("Use EdgeNameDialog", ReplaceWith("EdgeNameDialog(initial, osmName, onDismiss, onSave, title, hint, clearHint, reuse)"))
-@Composable
-fun SegmentNameDialog(
-    initial: String,
-    osmName: String?,
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit,
-    title: String? = null,
-    hint: String? = null,
-    clearHint: String? = null,
-    reuse: List<String> = emptyList(),
-) = EdgeNameDialog(initial, osmName, onDismiss, onSave, title, hint, clearHint, reuse)
-
 @Composable
 fun EdgeNameDialog(
     initial: String,

@@ -199,8 +199,6 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         container.repository.edge(id)
     }
 
-    suspend fun segment(id: Long): Edge? = edge(id)
-
     /**
      * Names an edge (or clears the road-name input when [name] is blank) and
      * rewrites the labels of its legs, so every screen shows the new name.
@@ -214,8 +212,6 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         withContext(container.dbDispatcher) { container.repository.setEdgeRoad(edgeId, roadId) }
         refresh()
     }
-
-    suspend fun renameSegment(segmentId: Long, name: String?) = renameEdge(segmentId, name)
 
     /**
      * Road names already given to some edge. Offered as one-tap chips when
@@ -257,7 +253,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     /** The same inference over every point a junction covers. */
     fun pointRoadCandidatesFor(refs: Collection<PointRef>): List<String> {
         val keys = refs.map { it.key }.toSet()
-        val fromSegments = summaries.map { it.segment }
+        val fromSegments = summaries.map { it.edge }
             .filter { it.fromKey in keys || it.toKey in keys }
             .mapNotNull { it.userName?.trim()?.takeIf(String::isNotBlank) }
         val neighbours = refs.flatMap { ref ->
@@ -333,7 +329,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         // drops the bearing and leaves just the crossing caption.
         val centre = context?.center ?: place?.at ?: at
         val placeName = context?.existingPlaceId?.let(::placeName) ?: place?.name
-        val touching = summaries.map { it.segment }
+        val touching = summaries.map { it.edge }
             .filter { it.fromKey == key || it.toKey == key }
             // A caption describes one traveller's roads: a car must not inherit
             // the footway name just because a zebra shares the same point.
@@ -377,7 +373,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             // single-point draft's values would leave adoption too narrow.
             val coords = HashMap<String, LatLon>()
             for (summary in summaries) {
-                val segment = summary.segment
+                val segment = summary.edge
                 segment.fromKey?.let { coords.putIfAbsent(it, segment.from) }
                 segment.toKey?.let { coords.putIfAbsent(it, segment.to) }
             }
@@ -422,7 +418,6 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         container.repository.legsForEdge(edgeId)
     }
 
-    suspend fun legsForSegment(segmentId: Long): List<Leg> = legsForEdge(segmentId)
 
     suspend fun identities(ids: List<Long>): Map<Long, MatchKind> = withContext(container.dbDispatcher) {
         container.repository.edgeIdentities(ids)
@@ -688,7 +683,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         val edgeArray = JSONArray()
         val edgeKeys = HashMap<Long, String>()
         for (summary in summaries) {
-            val edge = summary.segment
+            val edge = summary.edge
             edgeKeys[edge.id] = edge.key
             val samples = repository.samples(edge.id)
             val sampleArray = JSONArray()
@@ -730,7 +725,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
         root.put("edges", edgeArray)
 
-        val referencedNodeKeys = summaries.flatMapTo(HashSet()) { listOf(it.segment.fromKey, it.segment.toKey) }
+        val referencedNodeKeys = summaries.flatMapTo(HashSet()) { listOf(it.edge.fromKey, it.edge.toKey) }
         val nodeArray = JSONArray()
         for (node in nodes) {
             if (node.name == null && node.junctionId == null && node.ref.key !in referencedNodeKeys) continue

@@ -251,7 +251,7 @@ class TripAnalyzer(
         val fromKey = PointRef(fromKind, fromNode).key
         val toKey = PointRef(toKind, toNode).key
 
-        val existing = repository.segmentByKey(key, mode)
+        val existing = repository.edgeByKey(key, mode)
         val direction = when {
             existing == null -> 1
             Geo.distanceMeters(geometry.first(), existing.from) <=

@@ -61,8 +61,7 @@ data class Leg(
 ) {
     val durationMs: Long get() = (endMs - startMs).coerceAtLeast(0)
     val hasWait: Boolean get() = stoppedMs > 0
-    /** Compatibility for code still speaking in segment terms. */
-    val segmentId: Long? get() = edgeId
+
 }
 
 /**
@@ -248,8 +247,6 @@ data class Edge(
     val displayName: String get() = preferredLabel ?: key
 }
 
-/** Compatibility alias while the codebase migrates from Segment to Edge. */
-typealias Segment = Edge
 
 /** A locally discovered corner, used when OSM data is unavailable. */
 data class GeoNode(val id: Long, val at: LatLon, val lastSeen: Long)
@@ -270,6 +267,4 @@ data class PendingLeg(
     val longestStopMs: Long,
     val signalStopCount: Int = 0,
     val signalWaitMs: Long = 0,
-) {
-    val segmentId: Long? get() = edgeId
-}
+)

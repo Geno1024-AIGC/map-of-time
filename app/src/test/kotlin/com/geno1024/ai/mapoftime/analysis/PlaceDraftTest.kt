@@ -5,7 +5,7 @@ import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.MatchKind
 import com.geno1024.ai.mapoftime.data.Place
 import com.geno1024.ai.mapoftime.data.PointRef
-import com.geno1024.ai.mapoftime.data.Segment
+import com.geno1024.ai.mapoftime.data.Edge
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -29,10 +29,10 @@ class PlaceDraftTest {
         return ref
     }
 
-    private fun segment(from: PointRef, to: PointRef, lengthM: Double = 30.0): Segment {
+    private fun segment(from: PointRef, to: PointRef, lengthM: Double = 30.0): Edge {
         val a = coords.getValue(from.key)
         val b = coords.getValue(to.key)
-        return Segment(
+        return Edge(
             id = nextId++,
             key = "${from.key}-${to.key}",
             mode = TripMode.DRIVE,
@@ -55,11 +55,11 @@ class PlaceDraftTest {
      * refuge at each corner. That is the shape the user sees in OSM, and the
      * reason naming one point at a time never finishes.
      */
-    private fun wideCrossing(offsetEastM: Double = 0.0): Pair<List<PointRef>, List<Segment>> {
+    private fun wideCrossing(offsetEastM: Double = 0.0): Pair<List<PointRef>, List<Edge>> {
         val columns = listOf(-45.0, -15.0, 15.0, 45.0).map { it + offsetEastM }
         val rows = listOf(-30.0, 0.0, 30.0)
         val grid = rows.map { north -> columns.map { east -> point(east, north) } }
-        val segments = ArrayList<Segment>()
+        val segments = ArrayList<Edge>()
         for (r in rows.indices) {
             for (c in columns.indices) {
                 if (c + 1 < columns.size) segments += segment(grid[r][c], grid[r][c + 1])

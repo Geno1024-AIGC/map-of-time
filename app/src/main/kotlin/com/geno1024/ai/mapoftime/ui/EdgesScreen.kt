@@ -46,7 +46,7 @@ import com.geno1024.ai.mapoftime.core.trafficDayOf
 private enum class EdgeSort { RECENT, SAMPLES, SLOWEST, NAME }
 
 @Composable
-fun SegmentsScreen(
+fun EdgesScreen(
     viewModel: AppViewModel,
     onOpenEdge: (Long) -> Unit,
     modifier: Modifier = Modifier,
@@ -79,18 +79,18 @@ fun SegmentsScreen(
     val summaries = remember(viewModel.summaries, modeFilter, sort, query) {
         val text = query.trim()
         val filtered = viewModel.summaries
-            .filter { modeFilter == null || it.segment.mode == modeFilter }
+            .filter { modeFilter == null || it.edge.mode == modeFilter }
             .filter {
                 text.isEmpty() ||
                     it.displayName.contains(text, ignoreCase = true) ||
-                    it.segment.key.contains(text, ignoreCase = true)
+                    it.edge.key.contains(text, ignoreCase = true)
             }
         when (sort) {
             // Most used first: the segments that actually accumulate samples.
             EdgeSort.SAMPLES -> filtered.sortedWith(
                 compareByDescending<EdgeSummary> { it.sampleCount }.thenBy { it.displayName },
             )
-            EdgeSort.RECENT -> filtered.sortedByDescending { it.segment.lastSeen }
+            EdgeSort.RECENT -> filtered.sortedByDescending { it.edge.lastSeen }
             // Slowest first: the question is almost always "where do I lose time".
             EdgeSort.SLOWEST -> filtered.sortedByDescending { it.combined.medianMs }
             EdgeSort.NAME -> filtered.sortedBy { it.displayName.lowercase() }
@@ -140,7 +140,7 @@ fun SegmentsScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            items(summaries, key = { it.segment.id }) { summary ->
+            items(summaries, key = { it.edge.id }) { summary ->
                 EdgeCard(
                     summary = summary,
                     now = now,

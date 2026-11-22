@@ -3,7 +3,7 @@ package com.geno1024.ai.mapoftime.analysis
 import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.MatchKind
-import com.geno1024.ai.mapoftime.data.Segment
+import com.geno1024.ai.mapoftime.data.Edge
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -18,7 +18,7 @@ class PointDetailsTest {
         centre.lon + eastM * metre / 0.855,
     )
 
-    private fun road(name: String?): Segment = Segment(
+    private fun road(name: String?): Edge = Edge(
         id = 1,
         key = "osm:1-osm:2",
         mode = TripMode.DRIVE,
@@ -129,5 +129,5 @@ class PointDetailsTest {
         assertEquals("人民路 × 建国路 × 解放路 × 中山路", detail.label)
     }
 
-    private fun userRoad(name: String): Segment = road(null).copy(name = null, userName = name)
+    private fun userRoad(name: String): Edge = road(null).copy(name = null, userName = name)
 }

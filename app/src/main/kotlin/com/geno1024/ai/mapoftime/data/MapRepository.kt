@@ -117,7 +117,7 @@ class MapRepository(private val helper: MapDb) {
 
     fun deleteTrip(id: Long) {
         db.delete("trips", "id = ?", arrayOf(id.toString()))
-        deleteOrphanSegments()
+        deleteOrphanEdges()
     }
 
     /** Importing twice must not double every sample, so identity is mode + start + end. */
@@ -383,8 +383,6 @@ class MapRepository(private val helper: MapDb) {
         db.rawQuery("SELECT * FROM legs WHERE trip_id = ? ORDER BY seq", arrayOf(tripId.toString()))
             .use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toLeg()) } }
 
-    fun legsForSegment(segmentId: Long): List<Leg> = legsForEdge(segmentId)
-
     fun legsForEdge(edgeId: Long): List<Leg> =
         db.rawQuery(
             "SELECT * FROM legs WHERE edge_id = ? ORDER BY start_ms",
@@ -392,8 +390,6 @@ class MapRepository(private val helper: MapDb) {
         ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toLeg()) } }
 
     /** Identity of many edges at once, for badging a trip's leg list. */
-    fun segmentIdentities(ids: List<Long>): Map<Long, MatchKind> = edgeIdentities(ids)
-
     fun edgeIdentities(ids: List<Long>): Map<Long, MatchKind> {
         if (ids.isEmpty()) return emptyMap()
         val placeholders = ids.joinToString(",") { "?" }
@@ -431,34 +427,16 @@ class MapRepository(private val helper: MapDb) {
     // Compatibility alias while callers migrate.
     private val segmentSelect: String get() = edgeSelect
 
-    fun segment(id: Long): Segment? = edge(id)
-
     fun edge(id: Long): Edge? =
         db.rawQuery("$edgeSelect WHERE e.id = ?", arrayOf(id.toString())).use { cursor ->
             if (cursor.moveToFirst()) cursor.toEdge() else null
         }
-
-    fun segmentByKey(key: String, mode: TripMode): Segment? = edgeByKey(key, mode)
 
     fun edgeByKey(key: String, mode: TripMode): Edge? =
         db.rawQuery(
             "$edgeSelect WHERE e.key = ? AND e.mode = ?",
             arrayOf(key, mode.id),
         ).use { cursor -> if (cursor.moveToFirst()) cursor.toEdge() else null }
-
-    fun insertSegment(
-        key: String,
-        mode: TripMode,
-        name: String?,
-        identity: MatchKind,
-        from: LatLon,
-        to: LatLon,
-        lengthM: Double,
-        seenAt: Long,
-        userName: String? = null,
-        fromKey: String? = null,
-        toKey: String? = null,
-    ): Long = insertEdge(key, mode, name, identity, from, to, lengthM, seenAt, userName, fromKey, toKey)
 
     fun insertEdge(
         key: String,
@@ -516,8 +494,6 @@ class MapRepository(private val helper: MapDb) {
      * Gives an edge a user road name, or clears it. Legs carry a label copy for
      * display/export, so they are rewritten in the same transaction.
      */
-    fun renameSegment(id: Long, name: String?) = renameEdge(id, name)
-
     fun renameEdge(id: Long, name: String?) {
         val trimmed = name?.trim()?.takeIf { it.isNotEmpty() }
         db.transaction {
@@ -682,8 +658,6 @@ class MapRepository(private val helper: MapDb) {
             relabelEdgesTouching(listOf(ref.key))
         }
     }
-
-    private fun relabelSegmentsTouching(keys: Collection<String>) = relabelEdgesTouching(keys)
 
     private fun relabelEdgesTouching(keys: Collection<String>) {
         if (keys.isEmpty()) return
@@ -903,21 +877,19 @@ class MapRepository(private val helper: MapDb) {
         }
     }
 
-    fun segments(mode: TripMode? = null): List<Segment> = edges(mode)
-
     fun edges(mode: TripMode? = null): List<Edge> {
         val (where, args) = if (mode == null) "" to emptyArray<String>() else "WHERE e.mode = ?" to arrayOf(mode.id)
         return db.rawQuery("$edgeSelect $where ORDER BY e.last_seen DESC", args)
             .use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toEdge()) } }
     }
 
-    fun samples(segmentId: Long, includePartial: Boolean = false): List<TraversalSample> =
+    fun samples(edgeId: Long, includePartial: Boolean = false): List<TraversalSample> =
         db.rawQuery(
             "SELECT end_ms, start_ms, distance_m, direction, moving_ms, stopped_ms, stop_count, " +
                 "signal_wait_ms, signal_stop_count FROM legs " +
                 "WHERE edge_id = ?" + if (includePartial) "" else " AND partial = 0" +
                 " ORDER BY start_ms",
-            arrayOf(segmentId.toString()),
+            arrayOf(edgeId.toString()),
         ).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
@@ -1136,8 +1108,6 @@ class MapRepository(private val helper: MapDb) {
         db.execSQL("DELETE FROM edges WHERE id NOT IN (SELECT edge_id FROM legs WHERE edge_id IS NOT NULL)")
     }
 
-    private fun deleteOrphanSegments() = deleteOrphanEdges()
-
     // -------------------------------------------------------------- export
 
     fun allSampleRows(): List<ExportSample> =
@@ -1321,8 +1291,6 @@ class MapRepository(private val helper: MapDb) {
             roadId = getLongOrNull(getColumnIndexOrThrow("road_id")),
         )
     }
-
-    private fun Cursor.toSegment(): Segment = toEdge()
 
     private fun Cursor.getLongOrNull(index: Int): Long? = if (isNull(index)) null else getLong(index)
 

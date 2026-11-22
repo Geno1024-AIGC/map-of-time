@@ -26,14 +26,14 @@ private enum class Tab(val labelRes: Int, val glyph: String) {
     RECORD(R.string.nav_record, "◉"),
     TRIPS(R.string.nav_trips, "≡"),
     NETWORK(R.string.nav_network, "⌗"),
-    SEGMENTS(R.string.nav_edges, "⌁"),
+    EDGES(R.string.nav_edges, "⌁"),
     SETTINGS(R.string.nav_settings, "⚙"),
 }
 
 /**
  * Top-level navigation: four tabs plus a one-level detail stack.
  *
- * A detail route is stored as a string (`trip:7`, `segment:12`) so it survives
+ * A detail route is stored as a string (`trip:7`, `edge:12`) so it survives
  * a rotation without needing a custom `Saver` for a sealed hierarchy.
  *
  * There is no NavHost, so opening a detail disposes the list screen. A
@@ -98,7 +98,7 @@ fun App(viewModel: AppViewModel) {
             val route = detail
             val tripId = route?.takeIf { it.startsWith("trip:") }
                 ?.removePrefix("trip:")?.toLongOrNull()
-            val edgeId = route?.takeIf { it.startsWith("edge:") || it.startsWith("segment:") }
+            val edgeId = route?.takeIf { it.startsWith("edge:") }
                 ?.substringAfter(':')?.toLongOrNull()
 
             // Each tab and each detail gets its own bucket. A detail never
@@ -142,7 +142,7 @@ fun App(viewModel: AppViewModel) {
                             modifier = Modifier.padding(padding),
                         )
 
-                        Tab.SEGMENTS -> SegmentsScreen(
+                        Tab.EDGES -> EdgesScreen(
                             viewModel = viewModel,
                             onOpenEdge = { id -> detail = "edge:$id" },
                             modifier = Modifier.padding(padding),

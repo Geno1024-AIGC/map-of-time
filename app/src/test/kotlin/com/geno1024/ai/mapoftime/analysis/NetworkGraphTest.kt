@@ -22,12 +22,12 @@ class NetworkGraphTest {
         toName: String? = null,
         forwardMs: Long = 60_000,
         backwardMs: Long = 0,
-    ): SegmentSummary {
+    ): EdgeSummary {
         val samples = buildList {
             add(TraversalSample(forwardMs, 100.0, 1, 0))
             if (backwardMs > 0) add(TraversalSample(backwardMs, 100.0, -1, 1_000))
         }
-        return SegmentSummary(
+        return EdgeSummary(
             edge = Edge(
                 id = nextId++,
                 key = "${fromKey ?: from}-${toKey ?: to}",

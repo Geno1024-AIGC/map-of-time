@@ -26,8 +26,4 @@ data class EdgeSummary(
     val backwardFridayRush: BucketTake = BucketTake.NONE,
 ) {
     val sampleCount: Int get() = combined.count
-    /** Compatibility while callers migrate from segment terminology. */
-    val segment: Edge get() = edge
 }
-
-typealias SegmentSummary = EdgeSummary

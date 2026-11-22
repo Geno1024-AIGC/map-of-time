@@ -11,7 +11,7 @@ class SegmentNameTest {
         userName: String? = null,
         fromName: String? = null,
         toName: String? = null,
-    ) = Segment(
+    ) = Edge(
         id = 1,
         key = "geo:1-2",
         mode = TripMode.WALK,
@@ -56,7 +56,7 @@ class SegmentNameTest {
     }
 
     @Test
-    fun twoNamedEndsNameTheSegment() {
+    fun twoNamedEndsNameTheEdge() {
         assertEquals("north gate × metro", segment(null, fromName = "north gate", toName = "metro").displayName)
     }
 
