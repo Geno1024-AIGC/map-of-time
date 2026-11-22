@@ -44,7 +44,7 @@ private enum class Tab(val labelRes: Int, val glyph: String) {
 fun App(viewModel: AppViewModel) {
     var tab by rememberSaveable { mutableStateOf(Tab.RECORD.name) }
     var detail by rememberSaveable { mutableStateOf<String?>(null) }
-    var returnDetail by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailStack by rememberSaveable { mutableStateOf<ArrayList<String>>(arrayListOf()) }
     // An edge endpoint can ask the network tab to preselect its node. It is a
     // one-shot request: NetworkScreen consumes it, so coming back later restores
     // whatever selection the user made there instead of snapping to it again.
@@ -53,21 +53,26 @@ fun App(viewModel: AppViewModel) {
 
     // Announced by TalkBack in place of the unlabelled dot.
     val updateBadge = stringResource(R.string.update_badge)
-    val closeDetail = {
-        detail = null
-        returnDetail = null
+    fun pushDetail(route: String) {
+        val current = detail
+        detailStack = ArrayList(detailStack).apply { if (current != null) add(current) }
+        detail = route
     }
+    fun popDetail() {
+        val stack = ArrayList(detailStack)
+        detail = stack.removeLastOrNull()
+        detailStack = stack
+    }
+    val closeDetail = { popDetail() }
     val openNode: (String) -> Unit = { key ->
-        returnDetail = detail
+        val current = detail
+        detailStack = ArrayList(detailStack).apply { if (current != null) add(current) }
         networkNode = key
         tab = Tab.NETWORK.name
         detail = null
     }
-    BackHandler(enabled = detail != null) { detail = null }
-    BackHandler(enabled = detail == null && returnDetail != null) {
-        detail = returnDetail
-        returnDetail = null
-    }
+    BackHandler(enabled = detail != null) { popDetail() }
+    BackHandler(enabled = detail == null && detailStack.isNotEmpty()) { popDetail() }
 
     Surface(color = MaterialTheme.colorScheme.background) {
         Scaffold(
@@ -80,7 +85,7 @@ fun App(viewModel: AppViewModel) {
                             selected = selected,
                             onClick = {
                                 detail = null
-                                returnDetail = null
+                                detailStack = arrayListOf()
                                 tab = entry.name
                             },
                             icon = {
@@ -123,7 +128,7 @@ fun App(viewModel: AppViewModel) {
                         viewModel = viewModel,
                         tripId = tripId,
                         onBack = closeDetail,
-                        onEditLeg = { tId, lId -> detail = "tripLeg:$tId:$lId" },
+                        onEditLeg = { tId, lId -> pushDetail("tripLeg:$tId:$lId") },
                         modifier = Modifier.padding(padding),
                     )
 
