@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -202,7 +203,7 @@ fun EdgeDetailScreen(
             onDismissRequest = { bindingRoad = false },
             title = { Text(stringResource(R.string.edge_bind_road_title)) },
             text = {
-                LazyColumn {
+                LazyColumn(modifier = Modifier.heightIn(max = 360.dp)) {
                     item {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),

@@ -730,12 +730,10 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
         root.put("edges", edgeArray)
 
+        val referencedNodeKeys = summaries.flatMapTo(HashSet()) { listOf(it.segment.fromKey, it.segment.toKey) }
         val nodeArray = JSONArray()
         for (node in nodes) {
-            if (node.name == null && node.junctionId == null) {
-                // Keep export small; unnamed ungrouped nodes can be reconstructed from edges.
-                val touched = edgeKeys.isNotEmpty() // no-op, just keep logic simple
-            }
+            if (node.name == null && node.junctionId == null && node.ref.key !in referencedNodeKeys) continue
             nodeArray.put(
                 JSONObject().apply {
                     put("kind", node.ref.kind)
