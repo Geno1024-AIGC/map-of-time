@@ -68,13 +68,14 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalDate
 
-/** The four irreversible actions in the Danger Zone, each with its own confirm. */
+/** Irreversible actions in the Danger Zone, each with its own confirm. */
 private enum class DangerAction {
-    POINT_NAMES, PLACES, TRIPS, ALL;
+    POINT_NAMES, PLACES, ROAD_NAMES, TRIPS, ALL;
 
     fun title(): Int = when (this) {
         POINT_NAMES -> R.string.settings_danger_point_names
         PLACES -> R.string.settings_danger_places
+        ROAD_NAMES -> R.string.settings_danger_road_names
         TRIPS -> R.string.settings_danger_trips
         ALL -> R.string.settings_danger_all
     }
@@ -82,6 +83,7 @@ private enum class DangerAction {
     fun confirm(): Int = when (this) {
         POINT_NAMES -> R.string.settings_danger_point_names_confirm
         PLACES -> R.string.settings_danger_places_confirm
+        ROAD_NAMES -> R.string.settings_danger_road_names_confirm
         TRIPS -> R.string.settings_danger_trips_confirm
         ALL -> R.string.settings_danger_all_confirm
     }
@@ -89,6 +91,7 @@ private enum class DangerAction {
     fun count(counts: DangerCounts): Int = when (this) {
         POINT_NAMES -> counts.pointNames
         PLACES -> counts.places
+        ROAD_NAMES -> counts.roadNames
         TRIPS -> counts.trips
         ALL -> 0
     }
@@ -118,6 +121,7 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     val importDoneFormat = stringResource(R.string.settings_import_done)
     val dangerPointDoneFormat = stringResource(R.string.settings_danger_point_names_done)
     val dangerPlacesDoneFormat = stringResource(R.string.settings_danger_places_done)
+    val dangerRoadNamesDoneFormat = stringResource(R.string.settings_danger_road_names_done)
     val dangerTripsDoneFormat = stringResource(R.string.settings_danger_trips_done)
     val dangerAllDoneText = stringResource(R.string.settings_danger_all_done)
 
@@ -487,6 +491,10 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                                 onClick = { confirmDanger = DangerAction.PLACES },
                             )
                             DangerButton(
+                                text = "${stringResource(DangerAction.ROAD_NAMES.title())} (${dangerCounts.roadNames})",
+                                onClick = { confirmDanger = DangerAction.ROAD_NAMES },
+                            )
+                            DangerButton(
                                 text = "${stringResource(DangerAction.TRIPS.title())} (${dangerCounts.trips})",
                                 onClick = { confirmDanger = DangerAction.TRIPS },
                             )
@@ -531,6 +539,10 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                                 }
                                 DangerAction.PLACES -> viewModel.clearPlaces { removed ->
                                     dangerMessage = String.format(dangerPlacesDoneFormat, removed)
+                                    reloadDangerCounts()
+                                }
+                                DangerAction.ROAD_NAMES -> viewModel.clearRoadNames { removed ->
+                                    dangerMessage = String.format(dangerRoadNamesDoneFormat, removed)
                                     reloadDangerCounts()
                                 }
                                 DangerAction.TRIPS -> viewModel.clearTrips { removed ->

@@ -1018,12 +1018,18 @@ class MapRepository(private val helper: MapDb) {
     fun dangerCounts(): DangerCounts = DangerCounts(
         pointNames = count("point_names"),
         places = count("places"),
+        roadNames = count("point_roads") + countWhere("segments", "user_name IS NOT NULL"),
         trips = count("trips"),
     )
 
     /** Table names here are fixed literals owned by this class, never user input. */
     private fun count(table: String): Int =
         db.rawQuery("SELECT COUNT(*) FROM $table", null).use { cursor ->
+            if (cursor.moveToFirst()) cursor.getInt(0) else 0
+        }
+
+    private fun countWhere(table: String, where: String): Int =
+        db.rawQuery("SELECT COUNT(*) FROM $table WHERE $where", null).use { cursor ->
             if (cursor.moveToFirst()) cursor.getInt(0) else 0
         }
 
@@ -1053,6 +1059,23 @@ class MapRepository(private val helper: MapDb) {
             // place_points goes with it through ON DELETE CASCADE.
             db.delete("places", null, null)
             relabelSegmentsTouching(keys.map { it.key })
+        }
+        return removed
+    }
+
+    /**
+     * Forgets every road name: the structured roads on points and the road
+     * names typed on segments. Segment display names are point pairs and do not
+     * change, but the names stop appearing as naming suggestions/captions.
+     */
+    fun clearRoadNames(): Int {
+        val pointRoads = count("point_roads")
+        val segmentRoads = countWhere("segments", "user_name IS NOT NULL")
+        val removed = pointRoads + segmentRoads
+        if (removed == 0) return 0
+        db.transaction {
+            db.delete("point_roads", null, null)
+            db.execSQL("UPDATE segments SET user_name = NULL WHERE user_name IS NOT NULL")
         }
         return removed
     }

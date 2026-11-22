@@ -289,14 +289,17 @@
     <string name="settings_danger_warning">Irreversible — there is no undo for these.</string>
     <string name="settings_danger_point_names">Delete all point names</string>
     <string name="settings_danger_places">Delete all junction names</string>
+    <string name="settings_danger_road_names">Delete all road names</string>
     <string name="settings_danger_trips">Delete all trips</string>
     <string name="settings_danger_all">Delete everything</string>
     <string name="settings_danger_point_names_confirm">Delete all %1$d point names? Junction names stay, and cached leg labels are refreshed.</string>
     <string name="settings_danger_places_confirm">Dissolve all %1$d named junctions? Single-point names stay.</string>
+    <string name="settings_danger_road_names_confirm">Delete all %1$d road names? This clears road lists chosen on points and road names typed on segments; point names and segment labels stay.</string>
     <string name="settings_danger_trips_confirm">Delete all %1$d trips, along with their raw fixes, legs and samples?</string>
     <string name="settings_danger_all_confirm">Delete every trip, sample, name, local endpoint cluster and cached road data? Settings and the app update are kept.</string>
     <string name="settings_danger_point_names_done">Deleted %1$d point names</string>
     <string name="settings_danger_places_done">Dissolved %1$d junctions</string>
+    <string name="settings_danger_road_names_done">Deleted %1$d road names</string>
     <string name="settings_danger_trips_done">Deleted %1$d trips</string>
     <string name="settings_danger_all_done">All data cleared</string>
     <string name="settings_attribution">Map data © OpenStreetMap contributors</string>

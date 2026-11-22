@@ -98,6 +98,7 @@ data class NamedPoint(val ref: PointRef, val name: String)
 data class DangerCounts(
     val pointNames: Int = 0,
     val places: Int = 0,
+    val roadNames: Int = 0,
     val trips: Int = 0,
 )
 
