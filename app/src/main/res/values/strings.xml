@@ -43,24 +43,24 @@
     <string name="place_preview_hint">The dashed circle is the ground this junction claims. Nothing is saved until you name it. If it is a big interchange, tap Wider.</string>
     <string name="place_overridden">%1$d points already have their own names</string>
     <string name="place_overridden_hint">Their own name wins over the junction\'s. Turn this on to let the junction name cover them.</string>
-    <string name="point_roads_hint">Roads at this point (suggested from nearby segments — tap to confirm)</string>
-    <string name="point_roads_none">No road names to suggest yet. Type a road name on a segment first.</string>
+    <string name="point_roads_hint">Roads at this point (suggested from nearby edges — tap to confirm)</string>
+    <string name="point_roads_none">No road names to suggest yet. Type a road name on an edge first.</string>
     <string name="place_name_action">Name junction</string>
     <string name="place_member_count">%1$d points share this name</string>
     <string name="segment_inside_junction">inside %1$s</string>
     <string name="segment_inside_junction_road">inside %1$s · %2$s</string>
-    <string name="nav_segments">Segments</string>
+    <string name="nav_segments">Edges</string>
     <string name="nav_settings">Settings</string>
 
     <string name="map_lock_camera">Lock view</string>
     <string name="map_unlock_camera">Unlock view</string>
     <string name="network_title">Network</string>
-    <string name="network_summary">%1$d junctions · %2$d segments</string>
-    <string name="network_summary_parts">%1$d junctions · %2$d segments · %3$d unconnected clusters</string>
-    <string name="network_hint">Tap a junction to see the segments leaving it</string>
+    <string name="network_summary">%1$d junctions · %2$d edges</string>
+    <string name="network_summary_parts">%1$d junctions · %2$d edges · %3$d unconnected clusters</string>
+    <string name="network_hint">Tap a junction to see the edges leaving it</string>
     <string name="network_pick_node">Tap a dot on the map to see what leaves that junction.</string>
     <string name="network_node_unnamed">Unnamed junction</string>
-    <string name="network_degree">%1$d segments</string>
+    <string name="network_degree">%1$d edges</string>
     <string name="network_other_unnamed">unnamed end</string>
     <string name="network_out_time">Away %1$s</string>
     <string name="network_back_time">Back %1$s</string>
@@ -112,7 +112,7 @@
     <string name="trip_legs_hint">Tap a leg to see it on the map, and to name its ends</string>
     <string name="leg_unnamed">Unnamed piece of road</string>
     <string name="leg_edit_title">Edit this piece</string>
-    <string name="leg_edit_hint">Save a name empty to clear it. A point\'s name is shared by every segment through it.</string>
+    <string name="leg_edit_hint">Save a name empty to clear it. A point\'s name is shared by every edge through it.</string>
     <string name="leg_edit_no_ends">This piece has no stable ends yet — analyse the trip again to name them.</string>
     <string name="leg_window">%1$s – %2$s</string>
     <string name="leg_time_short">Time %1$s</string>
@@ -149,10 +149,10 @@
     <string name="osm_unavailable">request failed</string>
     <string name="osm_no_data">no map data</string>
 
-    <string name="segments_title">Segments</string>
-    <string name="segments_empty_title">No segments yet</string>
-    <string name="segments_empty_body">A segment is the piece of road between two crossings. It appears once a trip has been analyzed.</string>
-    <string name="segments_no_match_title">No matching segment</string>
+    <string name="segments_title">Edges</string>
+    <string name="segments_empty_title">No edges yet</string>
+    <string name="segments_empty_body">An edge is the piece of road between two crossings. It appears once a trip has been analyzed.</string>
+    <string name="segments_no_match_title">No matching edge</string>
     <string name="segments_no_match_body">Try another name, or clear the search and the mode filter.</string>
     <string name="segments_search">Search by name or key</string>
     <string name="segments_sort_samples">Most samples</string>
@@ -182,7 +182,7 @@
     <string name="segment_name_add">Add road name</string>
     <string name="segment_name_hint">e.g. Xinhua Road</string>
     <string name="segment_name_use">Use “%1$s”</string>
-    <string name="segment_name_clear_hint">Save empty to drop this name from point-naming suggestions. The segment is displayed by its two ends.</string>
+    <string name="segment_name_clear_hint">Save empty to drop this name from point-naming suggestions. The edge is displayed by its two ends.</string>
     <string name="segment_name_reuse">Used before</string>
     <string name="segment_from">From</string>
     <string name="segment_to">To</string>
@@ -236,7 +236,7 @@
     <string name="settings_cache_days">Road data cache</string>
     <string name="settings_snap">Junction snap radius</string>
     <string name="settings_snap_value">%1$d m</string>
-    <string name="settings_partial">Include partial segments</string>
+    <string name="settings_partial">Include partial edges</string>
     <string name="settings_partial_desc">Count pieces whose start or end is not a real crossing.</string>
     <string name="settings_clear_cache">Clear road cache</string>
     <string name="settings_cleared">Cache cleared</string>
@@ -294,7 +294,7 @@
     <string name="settings_danger_all">Delete everything</string>
     <string name="settings_danger_point_names_confirm">Delete all %1$d point names? Junction names stay, and cached leg labels are refreshed.</string>
     <string name="settings_danger_places_confirm">Dissolve all %1$d named junctions? Single-point names stay.</string>
-    <string name="settings_danger_road_names_confirm">Delete all %1$d road names? This clears road lists chosen on points and road names typed on segments; point names and segment labels stay.</string>
+    <string name="settings_danger_road_names_confirm">Delete all %1$d road names? This clears road lists chosen on points and road names typed on edges; point names and edge labels stay.</string>
     <string name="settings_danger_trips_confirm">Delete all %1$d trips, along with their raw fixes, legs and samples?</string>
     <string name="settings_danger_all_confirm">Delete every trip, sample, name, local endpoint cluster and cached road data? Settings and the app update are kept.</string>
     <string name="settings_danger_point_names_done">Deleted %1$d point names</string>
