@@ -26,7 +26,7 @@ private enum class Tab(val labelRes: Int, val glyph: String) {
     RECORD(R.string.nav_record, "◉"),
     TRIPS(R.string.nav_trips, "≡"),
     NETWORK(R.string.nav_network, "⌗"),
-    SEGMENTS(R.string.nav_segments, "⌁"),
+    SEGMENTS(R.string.nav_edges, "⌁"),
     SETTINGS(R.string.nav_settings, "⚙"),
 }
 

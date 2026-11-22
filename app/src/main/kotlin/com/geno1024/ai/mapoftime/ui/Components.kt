@@ -496,8 +496,21 @@ fun PlaceNameDialog(
  * the name from point-naming suggestions, so the dialog says so instead of
  * disabling the button.
  */
+@Deprecated("Use EdgeNameDialog", ReplaceWith("EdgeNameDialog(initial, osmName, onDismiss, onSave, title, hint, clearHint, reuse)"))
 @Composable
 fun SegmentNameDialog(
+    initial: String,
+    osmName: String?,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    title: String? = null,
+    hint: String? = null,
+    clearHint: String? = null,
+    reuse: List<String> = emptyList(),
+) = EdgeNameDialog(initial, osmName, onDismiss, onSave, title, hint, clearHint, reuse)
+
+@Composable
+fun EdgeNameDialog(
     initial: String,
     osmName: String?,
     onDismiss: () -> Unit,
@@ -511,7 +524,7 @@ fun SegmentNameDialog(
     var text by remember(initial) { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title ?: stringResource(R.string.segment_name)) },
+        title = { Text(title ?: stringResource(R.string.edge_name)) },
         text = {
             Column {
                 OutlinedTextField(
@@ -519,18 +532,18 @@ fun SegmentNameDialog(
                     onValueChange = { text = it },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text(hint ?: stringResource(R.string.segment_name_hint)) },
+                    label = { Text(hint ?: stringResource(R.string.edge_name_hint)) },
                 )
                 val suggestion = osmName?.takeIf { it.isNotBlank() && it != text }
                 if (suggestion != null) {
                     TextButton(onClick = { text = suggestion }) {
-                        Text(stringResource(R.string.segment_name_use, suggestion))
+                        Text(stringResource(R.string.edge_name_use, suggestion))
                     }
                 }
                 RoadNameReuse(reuse, text) { text = it }
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = clearHint ?: stringResource(R.string.segment_name_clear_hint),
+                    text = clearHint ?: stringResource(R.string.edge_name_clear_hint),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -562,7 +575,7 @@ fun RoadNameReuse(
 ) {
     if (names.isEmpty()) return
     Text(
-        text = stringResource(R.string.segment_name_reuse),
+        text = stringResource(R.string.edge_name_reuse),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

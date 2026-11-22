@@ -132,8 +132,8 @@ fun EdgeDetailScreen(
     val tracks = remember(legs) {
         legs.map { Polyline.decode(it.polyline) }.filter { it.size >= 2 }
     }
-    val fromLabel = stringResource(R.string.segment_from)
-    val toLabel = stringResource(R.string.segment_to)
+    val fromLabel = stringResource(R.string.edge_from)
+    val toLabel = stringResource(R.string.edge_to)
     // Both ends of a piece inside one junction carry the same name; saying
     // "X → X" would be noise, so the direction is labelled "inside X" instead.
     val insideJunction = edge?.let { it.fromName?.takeIf { name -> name == it.toName } }
@@ -144,9 +144,9 @@ fun EdgeDetailScreen(
         ?.takeIf { it.isNotBlank() && it != insideJunction }
     val insideText = insideJunction?.let { name ->
         if (insideRoad == null) {
-            stringResource(R.string.segment_inside_junction, name)
+            stringResource(R.string.edge_inside_junction, name)
         } else {
-            stringResource(R.string.segment_inside_junction_road, name, insideRoad)
+            stringResource(R.string.edge_inside_junction_road, name, insideRoad)
         }
     }
     val forwardLabel = edge?.forwardName ?: insideText ?: "$fromLabel → $toLabel"
@@ -180,7 +180,7 @@ fun EdgeDetailScreen(
     }
 
     if (renaming) {
-        SegmentNameDialog(
+        EdgeNameDialog(
             initial = edge?.userName.orEmpty(),
             osmName = edge?.name,
             reuse = viewModel.roads.map { it.name }.distinct(),
@@ -298,7 +298,7 @@ fun EdgeDetailScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         ScreenHeader(
-            title = edge?.displayName ?: edge?.key ?: stringResource(R.string.segments_title),
+            title = edge?.displayName ?: edge?.key ?: stringResource(R.string.edges_title),
             subtitle = edge?.let {
                 val distance = stats.medianDistanceM.takeIf { d -> d > 0 } ?: it.lengthM
                 modeLabel(it.mode) + " · " + formatDistance(distance)
@@ -348,7 +348,7 @@ fun EdgeDetailScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                text = stringResource(R.string.segment_name),
+                                text = stringResource(R.string.edge_name),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -360,7 +360,7 @@ fun EdgeDetailScreen(
                             val osmName = edge?.name
                             if (edge?.userName != null && osmName != null) {
                                 Text(
-                                    text = stringResource(R.string.segment_osm_name, osmName),
+                                    text = stringResource(R.string.edge_osm_name, osmName),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -368,7 +368,7 @@ fun EdgeDetailScreen(
                             val pair = edge?.pointName
                             if (edge?.userName != null && pair != null) {
                                 Text(
-                                    text = stringResource(R.string.segment_from_points, pair),
+                                    text = stringResource(R.string.edge_from_points, pair),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -387,7 +387,7 @@ fun EdgeDetailScreen(
                                 Text(
                                     stringResource(
                                         if (edge?.userName == null) {
-                                            R.string.segment_name_add
+                                            R.string.edge_name_add
                                         } else {
                                             R.string.action_edit
                                         },
@@ -405,7 +405,7 @@ fun EdgeDetailScreen(
                     if (fromPoint != null && toPoint != null) {
                         ThinDivider()
                         EndpointRow(
-                            label = stringResource(R.string.segment_from),
+                            label = stringResource(R.string.edge_from),
                             name = edge?.fromName,
                             note = placeNote(viewModel, fromPoint),
                             onName = {
@@ -416,7 +416,7 @@ fun EdgeDetailScreen(
                             onOpenNetwork = { onOpenNode(fromPoint.key) },
                         )
                         EndpointRow(
-                            label = stringResource(R.string.segment_to),
+                            label = stringResource(R.string.edge_to),
                             name = edge?.toName,
                             note = placeNote(viewModel, toPoint),
                             onName = {
@@ -431,7 +431,7 @@ fun EdgeDetailScreen(
             }
 
             item {
-                SectionCard(title = stringResource(R.string.segment_stats_title)) {
+                SectionCard(title = stringResource(R.string.edge_stats_title)) {
                     if (edge != null) {
                         MatchBadge(edge!!.identity)
                         Spacer(Modifier.height(10.dp))
@@ -463,84 +463,84 @@ fun EdgeDetailScreen(
                     Spacer(Modifier.height(12.dp))
                     if (stats.count > 0) {
                         KeyValueRow(
-                            stringResource(R.string.segment_moving_time),
+                            stringResource(R.string.edge_moving_time),
                             formatSeconds(stats.medianMovingMs),
                         )
                         KeyValueRow(
-                            stringResource(R.string.segment_waiting_time),
+                            stringResource(R.string.edge_waiting_time),
                             formatSeconds(stats.medianStoppedMs),
                         )
                         if (stats.waitedSamples > 0) {
                             KeyValueRow(
-                                stringResource(R.string.segment_waited_in),
+                                stringResource(R.string.edge_waited_in),
                                 stringResource(
-                                    R.string.segment_waited_in_value,
+                                    R.string.edge_waited_in_value,
                                     stats.waitedSamples,
                                     stats.count,
                                 ),
                             )
                             KeyValueRow(
-                                stringResource(R.string.segment_wait_when_stopped),
+                                stringResource(R.string.edge_wait_when_stopped),
                                 formatSeconds(stats.medianWaitedMs),
                             )
                         }
                         if (stats.signalWaitedSamples > 0) {
                             KeyValueRow(
-                                stringResource(R.string.segment_signal_wait),
+                                stringResource(R.string.edge_signal_wait),
                                 formatSeconds(stats.medianSignalWaitMs),
                             )
                             KeyValueRow(
-                                stringResource(R.string.segment_signal_waited_in),
+                                stringResource(R.string.edge_signal_waited_in),
                                 stringResource(
-                                    R.string.segment_waited_in_value,
+                                    R.string.edge_waited_in_value,
                                     stats.signalWaitedSamples,
                                     stats.count,
                                 ),
                             )
                             KeyValueRow(
-                                stringResource(R.string.segment_signal_when_stopped),
+                                stringResource(R.string.edge_signal_when_stopped),
                                 formatSeconds(stats.medianSignalWaitedMs),
                             )
                         }
                         Spacer(Modifier.height(8.dp))
                     }
                     KeyValueRow(
-                        stringResource(R.string.segment_p25_p75),
+                        stringResource(R.string.edge_p25_p75),
                         if (stats.count == 0) "—" else
                             formatSeconds(stats.p25Ms) + " – " + formatSeconds(stats.p75Ms),
                     )
                     KeyValueRow(
-                        stringResource(R.string.segment_range),
+                        stringResource(R.string.edge_range),
                         if (stats.count == 0) "—" else
                             formatSeconds(stats.minMs) + " – " + formatSeconds(stats.maxMs),
                     )
                     KeyValueRow(
-                        stringResource(R.string.segment_trimmed_mean),
+                        stringResource(R.string.edge_trimmed_mean),
                         if (stats.count == 0) "—" else formatSeconds(stats.trimmedMeanMs),
                     )
                     KeyValueRow(
-                        stringResource(R.string.segment_mad),
+                        stringResource(R.string.edge_mad),
                         if (stats.count == 0) "—" else formatSeconds(stats.medianAbsoluteDeviationMs),
                     )
                     KeyValueRow(
-                        stringResource(R.string.segment_outliers),
+                        stringResource(R.string.edge_outliers),
                         "${stats.outlierCount} / ${stats.count}",
                     )
                     KeyValueRow(
-                        stringResource(R.string.segment_pace),
+                        stringResource(R.string.edge_pace),
                         formatPace(stats.typicalPaceSecondsPerKm),
                     )
                     KeyValueRow(
-                        stringResource(R.string.segment_distance),
+                        stringResource(R.string.edge_distance),
                         formatDistance(stats.medianDistanceM),
                     )
                     edge?.let {
                         KeyValueRow(
-                            stringResource(R.string.segment_first_seen),
+                            stringResource(R.string.edge_first_seen),
                             formatDateTime(it.firstSeen),
                         )
                         KeyValueRow(
-                            stringResource(R.string.segment_last_seen),
+                            stringResource(R.string.edge_last_seen),
                             formatDateTime(it.lastSeen),
                         )
                     }
@@ -549,7 +549,7 @@ fun EdgeDetailScreen(
 
             if (samples.size >= 2) {
                 item {
-                    SectionCard(title = stringResource(R.string.segment_directions)) {
+                    SectionCard(title = stringResource(R.string.edge_directions)) {
                         DirectionRow(
                             label = forwardLabel,
                             stats = forward,
@@ -566,8 +566,8 @@ fun EdgeDetailScreen(
 
                 item {
                     SectionCard(
-                        title = stringResource(R.string.segment_by_day),
-                        subtitle = stringResource(R.string.segment_by_day_hint),
+                        title = stringResource(R.string.edge_by_day),
+                        subtitle = stringResource(R.string.edge_by_day_hint),
                     ) {
                         TrafficMatrix(byContext)
                         if (fridayStats.count > 0) {
@@ -611,8 +611,8 @@ fun EdgeDetailScreen(
                 if (byHoliday.isNotEmpty()) {
                     item {
                         SectionCard(
-                            title = stringResource(R.string.segment_by_holiday),
-                            subtitle = stringResource(R.string.segment_by_holiday_hint),
+                            title = stringResource(R.string.edge_by_holiday),
+                            subtitle = stringResource(R.string.edge_by_holiday_hint),
                         ) {
                             for (phase in HolidayPhase.entries) {
                                 if (phase == HolidayPhase.NONE) continue
@@ -658,7 +658,7 @@ fun EdgeDetailScreen(
                 }
 
                 item {
-                    SectionCard(title = stringResource(R.string.segment_by_time)) {
+                    SectionCard(title = stringResource(R.string.edge_by_time)) {
                         TimeBucket.ordered.forEach { bucket ->
                             val bucketStats = byBucket.getValue(bucket)
                             KeyValueRow(
@@ -679,7 +679,7 @@ fun EdgeDetailScreen(
                 }
 
                 item {
-                    SectionCard(title = stringResource(R.string.segment_samples_title)) {
+                    SectionCard(title = stringResource(R.string.edge_samples_title)) {
                         DurationBars(samples = samples, stats = stats)
                     }
                 }
@@ -687,7 +687,7 @@ fun EdgeDetailScreen(
 
             item {
                 Text(
-                    text = stringResource(R.string.segment_samples_title),
+                    text = stringResource(R.string.edge_samples_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(start = 4.dp, top = 4.dp),
@@ -877,7 +877,7 @@ private fun SampleRow(sample: TraversalSample, stats: DurationStats) {
                 )
                 if (outlier) {
                     Pill(
-                        text = stringResource(R.string.segment_outliers),
+                        text = stringResource(R.string.edge_outliers),
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
@@ -888,7 +888,7 @@ private fun SampleRow(sample: TraversalSample, stats: DurationStats) {
 
 @Composable
 private fun TraversalSample.directionLabel(): String =
-    stringResource(if (direction > 0) R.string.segment_forward else R.string.segment_backward)
+    stringResource(if (direction > 0) R.string.edge_forward else R.string.edge_backward)
 
 /**
  * How many points already share this end's name, so a junction name is visibly
@@ -940,7 +940,7 @@ private fun EndpointRow(
             TextButton(onClick = onName) {
                 Text(
                     stringResource(
-                        if (name == null) R.string.segment_name_add else R.string.action_edit,
+                        if (name == null) R.string.edge_name_add else R.string.action_edit,
                     ),
                 )
             }
@@ -948,7 +948,7 @@ private fun EndpointRow(
                 onClick = onOpenNetwork,
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
             ) {
-                Text(stringResource(R.string.segment_open_in_network))
+                Text(stringResource(R.string.edge_open_in_network))
             }
         }
     }

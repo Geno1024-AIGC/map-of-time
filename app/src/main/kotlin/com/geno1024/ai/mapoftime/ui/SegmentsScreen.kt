@@ -99,7 +99,7 @@ fun SegmentsScreen(
 
     Column(modifier.fillMaxSize()) {
         ScreenHeader(
-            title = stringResource(R.string.segments_title),
+            title = stringResource(R.string.edges_title),
             subtitle = if (summaries.isEmpty()) null else summaries.size.toString(),
         )
 
@@ -109,16 +109,16 @@ fun SegmentsScreen(
                 onValueChange = { query = it },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                placeholder = { Text(stringResource(R.string.segments_search)) },
+                placeholder = { Text(stringResource(R.string.edges_search)) },
             )
             Spacer(Modifier.height(8.dp))
             ModeFilter(selected = modeFilter, onSelect = { modeFilter = it })
             Spacer(Modifier.height(8.dp))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SortChip(EdgeSort.SAMPLES, sort, R.string.segments_sort_samples) { sort = it }
-                SortChip(EdgeSort.RECENT, sort, R.string.segments_sort_recent) { sort = it }
-                SortChip(EdgeSort.SLOWEST, sort, R.string.segments_sort_slowest) { sort = it }
-                SortChip(EdgeSort.NAME, sort, R.string.segments_sort_name) { sort = it }
+                SortChip(EdgeSort.SAMPLES, sort, R.string.edges_sort_samples) { sort = it }
+                SortChip(EdgeSort.RECENT, sort, R.string.edges_sort_recent) { sort = it }
+                SortChip(EdgeSort.SLOWEST, sort, R.string.edges_sort_slowest) { sort = it }
+                SortChip(EdgeSort.NAME, sort, R.string.edges_sort_name) { sort = it }
             }
             Spacer(Modifier.height(12.dp))
         }
@@ -126,10 +126,10 @@ fun SegmentsScreen(
         if (summaries.isEmpty()) {
             EmptyState(
                 title = stringResource(
-                    if (viewModel.summaries.isEmpty()) R.string.segments_empty_title else R.string.segments_no_match_title,
+                    if (viewModel.summaries.isEmpty()) R.string.edges_empty_title else R.string.edges_no_match_title,
                 ),
                 body = stringResource(
-                    if (viewModel.summaries.isEmpty()) R.string.segments_empty_body else R.string.segments_no_match_body,
+                    if (viewModel.summaries.isEmpty()) R.string.edges_empty_body else R.string.edges_no_match_body,
                 ),
             )
             return@Column
@@ -219,8 +219,8 @@ private fun EdgeCard(
         Spacer(Modifier.height(10.dp))
         if (divided) {
             Row(verticalAlignment = Alignment.Bottom) {
-                val from = stringResource(R.string.segment_from)
-                val to = stringResource(R.string.segment_to)
+                val from = stringResource(R.string.edge_from)
+                val to = stringResource(R.string.edge_to)
                 DirectionTime(
                     label = edge.forwardName ?: "$from → $to",
                     ms = forwardNow?.medianMs ?: summary.forward.typicalMs,

@@ -144,8 +144,8 @@ fun TripDetailScreen(
             }
         }
     }
-    val fromLabel = stringResource(R.string.segment_from)
-    val toLabel = stringResource(R.string.segment_to)
+    val fromLabel = stringResource(R.string.edge_from)
+    val toLabel = stringResource(R.string.edge_to)
     // The two ends of the selected leg, labelled with the edge's own
     // orientation so "from" and "to" mean the same thing here and in the
     // naming dialog. A partial leg stops at a junction inside the edge, so
@@ -964,7 +964,7 @@ private fun LegOverlay(
                         formatClock(leg.startMs),
                         formatClock(leg.endMs),
                     ) + " · " + stringResource(
-                        if (leg.direction > 0) R.string.segment_forward else R.string.segment_backward,
+                        if (leg.direction > 0) R.string.edge_forward else R.string.edge_backward,
                     ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1077,15 +1077,15 @@ private fun LegEditDialog(
                 NameField(
                     value = name,
                     onValueChange = { name = it },
-                    label = stringResource(R.string.segment_name),
-                    hint = stringResource(R.string.segment_name_hint),
+                    label = stringResource(R.string.edge_name),
+                    hint = stringResource(R.string.edge_name_hint),
                 )
                 RoadNameReuse(reuse, name) { name = it }
                 if (fromPoint != null) {
                     NameField(
                         value = fromName,
                         onValueChange = { fromName = it },
-                        label = stringResource(R.string.segment_from),
+                        label = stringResource(R.string.edge_from),
                         hint = stringResource(R.string.point_name_hint),
                     )
                     PointRoadsPicker(fromCandidates, fromRoads) { road ->
@@ -1096,7 +1096,7 @@ private fun LegEditDialog(
                     NameField(
                         value = toName,
                         onValueChange = { toName = it },
-                        label = stringResource(R.string.segment_to),
+                        label = stringResource(R.string.edge_to),
                         hint = stringResource(R.string.point_name_hint),
                     )
                     PointRoadsPicker(toCandidates, toRoads) { road ->
