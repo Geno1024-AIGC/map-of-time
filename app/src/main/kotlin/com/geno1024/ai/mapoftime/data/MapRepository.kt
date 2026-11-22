@@ -777,16 +777,18 @@ class MapRepository(private val helper: MapDb) {
         var placeId = id
         db.transaction {
             val previous = if (id == null) emptyList() else placePoints(id)
-            if (RoadNames.isComposite(trimmed)) {
+            val effectiveName = trimmed ?: roads?.let(RoadNames::join)
+            if (RoadNames.isComposite(effectiveName)) {
                 if (id != null) db.delete("junctions", "id = ?", arrayOf(id.toString()))
-                setPointRoads(previous + members, RoadNames.split(trimmed))
+                setPointRoads(previous + members, RoadNames.split(effectiveName))
                 relabelEdgesTouching((previous + members).map { it.key })
                 placeId = null
                 return@transaction
             }
             if (trimmed == null) {
                 if (id != null) db.delete("junctions", "id = ?", arrayOf(id.toString()))
-                relabelEdgesTouching(previous.map { it.key })
+                if (roads != null) setPointRoads(previous + members, roads)
+                relabelEdgesTouching((previous + members).map { it.key })
                 placeId = null
                 return@transaction
             }
