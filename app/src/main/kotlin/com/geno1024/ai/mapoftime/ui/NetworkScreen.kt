@@ -1,6 +1,8 @@
 package com.geno1024.ai.mapoftime.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -289,20 +291,6 @@ fun NetworkScreen(
                     onClick = { viewMode = NetworkView.LIST },
                     label = { Text(stringResource(R.string.network_view_list)) },
                 )
-                if (viewMode == NetworkView.GRAPH) {
-                    FilterChip(
-                        selected = showNodes,
-                        onClick = { showNodes = !showNodes },
-                        label = { Text(stringResource(R.string.network_show_nodes)) },
-                    )
-                    if (showNodes) {
-                        FilterChip(
-                            selected = showNodeLabels,
-                            onClick = { showNodeLabels = !showNodeLabels },
-                            label = { Text(stringResource(R.string.network_show_node_labels)) },
-                        )
-                    }
-                }
             }
             Spacer(Modifier.height(8.dp))
             ModeFilter(
@@ -369,6 +357,23 @@ fun NetworkScreen(
                         focusBounds = focusBounds,
                         here = here,
                     )
+                    Column(
+                        modifier = Modifier.align(Alignment.TopStart).padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        MapOverlayToggle(
+                            selected = showNodes,
+                            onClick = { showNodes = !showNodes },
+                            label = stringResource(R.string.network_show_nodes),
+                        )
+                        if (showNodes) {
+                            MapOverlayToggle(
+                                selected = showNodeLabels,
+                                onClick = { showNodeLabels = !showNodeLabels },
+                                label = stringResource(R.string.network_show_node_labels),
+                            )
+                        }
+                    }
                 }
                 preview?.let { draft ->
                     Text(
@@ -667,6 +672,30 @@ private fun DirectionTime(label: String, ms: Long, modifier: Modifier = Modifier
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun MapOverlayToggle(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: String,
+) {
+    val colors = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .background(
+                color = if (selected) colors.primary else colors.surface.copy(alpha = 0.82f),
+                shape = RoundedCornerShape(10.dp),
+            )
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) colors.onPrimary else colors.onSurface,
         )
     }
 }
