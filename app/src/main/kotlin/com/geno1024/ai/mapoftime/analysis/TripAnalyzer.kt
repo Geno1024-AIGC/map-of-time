@@ -16,6 +16,7 @@ import com.geno1024.ai.mapoftime.data.PendingLeg
 import com.geno1024.ai.mapoftime.data.PointRef
 import com.geno1024.ai.mapoftime.data.SettingsSnapshot
 import com.geno1024.ai.mapoftime.data.TripStatus
+import com.geno1024.ai.mapoftime.data.edgeEndpointPairLabel
 import com.geno1024.ai.mapoftime.data.pointPairName
 import com.geno1024.ai.mapoftime.osm.JunctionSplitter
 import com.geno1024.ai.mapoftime.osm.MatchedPiece
@@ -279,7 +280,7 @@ class TripAnalyzer(
                 edgeId = edgeId,
                 direction = direction,
                 label = existing?.preferredLabel
-                    ?: pointPairName(pointNames[fromKey], pointNames[toKey])
+                    ?: edgeEndpointPairLabel(fromKey, pointNames[fromKey], toKey, pointNames[toKey])
                     ?: piece.label,
                 partial = partial,
                 polyline = Polyline.encode(geometry),

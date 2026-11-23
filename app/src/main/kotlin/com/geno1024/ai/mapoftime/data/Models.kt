@@ -270,11 +270,10 @@ data class Edge(
     val endpointPairDisplay: String? get() = edgeEndpointPairLabel(fromKey, fromName, toKey, toName)
 
     /**
-     * An edge is named by its two ends. [userName] is a road name the user
-     * typed as inference input for the points it touches — it no longer
-     * overrides the point pair.
+     * An edge is named by its two ends. Prefer the endpoint pair display (including
+     * partial name/key), then fall back to the road/OSM name.
      */
-    val preferredLabel: String? get() = pointName ?: name
+    val preferredLabel: String? get() = endpointPairDisplay ?: name
 
     /** "A → B" for the forward direction (+1), when both ends are named. */
     val forwardName: String? get() = directionalName(fromName, toName)

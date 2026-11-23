@@ -986,7 +986,7 @@ private fun LegRow(
             )
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = leg.label ?: formatClock(leg.startMs),
+                    text = leg.label ?: stringResource(R.string.leg_unnamed),
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
                 )
