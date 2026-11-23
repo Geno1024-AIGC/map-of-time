@@ -99,7 +99,7 @@ class RoadGraph(ways: List<OsmWay>) {
         traveler: Traveler = Traveler.WALK,
     ): OsmJunction? {
         val index = if (traveler == Traveler.VEHICLE) vehicleJunctionIndex else junctionIndex
-        return index.nearest(point, maxMeters) { Geo.distanceMeters(point, it.at) }
+        return index.nearest(point, maxMeters) { Geo.distanceMeters(point, it.at) }?.first
     }
 
     /** Most frequent road label around [points], by point count. */
@@ -109,10 +109,9 @@ class RoadGraph(ways: List<OsmWay>) {
         var distanceSum = 0.0
         var matched = 0
         for (point in points) {
-            val best = segmentIndex.nearest(point, maxMeters) {
+            val (best, distance) = segmentIndex.nearest(point, maxMeters) {
                 Geo.distanceToSegment(point, it.a, it.b)
             } ?: continue
-            val distance = Geo.distanceToSegment(point, best.a, best.b)
             votes[best.label] = (votes[best.label] ?: 0) + 1
             distanceSum += distance
             matched++
@@ -165,8 +164,27 @@ class GridIndex<T>(private val cellMeters: Double) {
         return out
     }
 
-    fun nearest(point: LatLon, maxMeters: Double, distanceOf: (T) -> Double): T? =
-        around(point, maxMeters).minByOrNull(distanceOf)?.takeIf { distanceOf(it) <= maxMeters }
+    fun nearest(point: LatLon, maxMeters: Double, distanceOf: (T) -> Double): Pair<T, Double>? {
+        val (x, y) = Mercator.toMeters(point)
+        val reach = kotlin.math.ceil(maxMeters / cellMeters).toInt()
+        val cx = floor(x / cellMeters).toInt()
+        val cy = floor(y / cellMeters).toInt()
+        var best: T? = null
+        var bestDistance = Double.MAX_VALUE
+        for (dx in -reach..reach) {
+            for (dy in -reach..reach) {
+                val bucket = cells[pack(cx + dx, cy + dy)] ?: continue
+                for (candidate in bucket) {
+                    val distance = distanceOf(candidate)
+                    if (distance < bestDistance) {
+                        best = candidate
+                        bestDistance = distance
+                    }
+                }
+            }
+        }
+        return best?.takeIf { bestDistance <= maxMeters }?.let { it to bestDistance }
+    }
 
     private fun key(at: LatLon): Long {
         val (x, y) = Mercator.toMeters(at)

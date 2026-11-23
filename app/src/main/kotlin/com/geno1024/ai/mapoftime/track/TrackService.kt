@@ -191,6 +191,8 @@ class TrackService : Service(), LocationListener {
     }
 
     private fun stop() {
+        val state = Recorder.state.value
+        if (state.phase == RecordingPhase.PROCESSING) return
         if (!recording) {
             Recorder.reset()
             stopSelf()
@@ -201,21 +203,25 @@ class TrackService : Service(), LocationListener {
         val curvedTrip = tripId
         val fixes = seq
 
-        Recorder.publish(
-            Recorder.state.value.copy(phase = RecordingPhase.PROCESSING),
-        )
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        val processingState = state.copy(phase = RecordingPhase.PROCESSING)
+        Recorder.publish(processingState)
+        val manager = getSystemService(android.app.NotificationManager::class.java)
+        manager?.notify(RecordingNotification.id(), RecordingNotification.build(this, processingState))
 
         container.scope.launch {
-            withContext(container.dbDispatcher) {
-                container.repository.updateProgress(curvedTrip, liveDistance.meters, fixes)
-                if (fixes >= 2) {
-                    runCatching { container.analyzer.analyze(curvedTrip) }
-                } else {
-                    container.repository.finishTrip(curvedTrip, System.currentTimeMillis())
+            try {
+                withContext(container.dbDispatcher) {
+                    container.repository.updateProgress(curvedTrip, liveDistance.meters, fixes)
+                    if (fixes >= 2) {
+                        runCatching { container.analyzer.analyze(curvedTrip) }
+                    } else {
+                        container.repository.finishTrip(curvedTrip, System.currentTimeMillis())
+                    }
                 }
+            } finally {
                 Recorder.reset()
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
             }
         }
     }

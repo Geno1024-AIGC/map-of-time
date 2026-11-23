@@ -182,11 +182,22 @@ object Segmenter {
         instant[0] = instant.getOrElse(1) { 0.0 }
         val out = DoubleArray(points.size)
         for (i in points.indices) {
-            val window = instant.copyOfRange((i - 1).coerceAtLeast(0), (i + 2).coerceAtMost(points.size))
-            out[i] = window.sorted()[window.size / 2]
+            val lo = (i - 1).coerceAtLeast(0)
+            val hi = (i + 2).coerceAtMost(points.size)
+            out[i] = when (hi - lo) {
+                1 -> instant[lo]
+                2 -> maxOf(instant[lo], instant[lo + 1]) // original: sorted()[1]
+                else -> median3(instant[lo], instant[lo + 1], instant[lo + 2])
+            }
         }
         return out
     }
+
+    private fun median3(a: Double, b: Double, c: Double): Double =
+        when {
+            a > b -> if (b >= c) b else if (a <= c) a else c
+            else -> if (a >= c) a else if (b <= c) b else c
+        }
 
     /** Standstills long enough to be a break rather than part of the journey. */
     private fun findPauses(
@@ -371,11 +382,12 @@ object Segmenter {
 
     private fun isTooShort(slice: TrackSlice, points: List<TrackPoint>, profile: ModeProfile): Boolean {
         if (slice.size < 2) return true
+        val duration = points[slice.to - 1].t - points[slice.from].t
+        if (duration < profile.minLegMs) return true
         val meters = Geo.pathLengthMeters(
             points.subList(slice.from, slice.to).map { it.at },
             minStep = 0.5,
         )
-        val duration = points[slice.to - 1].t - points[slice.from].t
-        return meters < profile.minLegMeters || duration < profile.minLegMs
+        return meters < profile.minLegMeters
     }
 }

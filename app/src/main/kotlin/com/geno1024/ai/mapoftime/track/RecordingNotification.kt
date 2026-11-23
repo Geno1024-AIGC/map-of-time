@@ -37,6 +37,21 @@ object RecordingNotification {
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentIntent(open)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+
+        if (state.phase == RecordingPhase.PROCESSING) {
+            return builder
+                .setContentTitle(context.getString(R.string.notification_processing_title, state.mode.label(context)))
+                .setContentText(context.getString(R.string.notification_processing_text))
+                .setProgress(0, 0, true)
+                .build()
+        }
+
         val stop = PendingIntent.getService(
             context,
             1,
@@ -49,22 +64,15 @@ object RecordingNotification {
             Intent(context, TrackService::class.java).setAction(TrackService.ACTION_MARK),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-
         val text = context.resources.getQuantityString(
             R.plurals.notification_recording_text,
             state.pointCount,
             formatDistance(state.distanceM),
             state.pointCount,
         )
-
-        return NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)
+        return builder
             .setContentTitle(context.getString(R.string.notification_recording_title, state.mode.label(context)))
             .setContentText(text)
-            .setContentIntent(open)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .addAction(0, context.getString(R.string.action_mark), mark)
             .addAction(0, context.getString(R.string.action_stop), stop)
             .build()

@@ -11,6 +11,8 @@
     <string name="notification_channel_recording">Trip recording</string>
     <string name="notification_channel_recording_desc">Keeps sampling while a trip is being recorded.</string>
     <string name="notification_recording_title">Recording · %1$s</string>
+    <string name="notification_processing_title">Processing trip · %1$s</string>
+    <string name="notification_processing_text">Splitting the trip into legs…</string>
     <string name="action_mark">Split here</string>
     <string name="action_stop">Stop</string>
     <string name="action_cancel">Cancel</string>

@@ -11,6 +11,8 @@
     <string name="notification_channel_recording">行程记录</string>
     <string name="notification_channel_recording_desc">记录行程时保持定位采样。</string>
     <string name="notification_recording_title">正在记录 · %1$s</string>
+    <string name="notification_processing_title">正在处理行程 · %1$s</string>
+    <string name="notification_processing_text">正在切分路段…</string>
     <string name="action_mark">在此切段</string>
     <string name="action_stop">停止</string>
     <string name="action_cancel">取消</string>
