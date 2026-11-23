@@ -418,7 +418,9 @@ fun PlaceNameDialog(
     var text by remember(initial) { mutableStateOf(initial) }
     var roads by remember(initialRoads) { mutableStateOf(initialRoads) }
     var takeOverNames by remember { mutableStateOf(false) }
-    var uturnRoad by remember { mutableStateOf<String?>(null) }
+    var uturnRoad by remember(initialRoads, initialKind) {
+        mutableStateOf(initialRoads.firstOrNull()?.takeIf { initialKind == PlaceKind.UTURN })
+    }
     var uturnExpanded by remember { mutableStateOf(false) }
     val collator = remember { Collator.getInstance(Locale.CHINA) }
     val roadOptions = remember(roadCandidates, roads, collator) {
@@ -440,7 +442,12 @@ fun PlaceNameDialog(
                     PlaceKind.entries.forEach { option ->
                         FilterChip(
                             selected = kind == option,
-                            onClick = { kind = option },
+                            onClick = {
+                                kind = option
+                                if (option == PlaceKind.UTURN && uturnRoad == null) {
+                                    uturnRoad = roads.firstOrNull()
+                                }
+                            },
                             label = {
                                 Text(
                                     stringResource(
