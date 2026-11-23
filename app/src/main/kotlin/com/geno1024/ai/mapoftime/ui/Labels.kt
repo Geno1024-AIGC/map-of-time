@@ -10,5 +10,6 @@ fun TripMode.label(context: Context): String = context.getString(
         TripMode.BIKE -> R.string.mode_bike
         TripMode.EBIKE -> R.string.mode_ebike
         TripMode.DRIVE -> R.string.mode_drive
+        TripMode.BUS -> R.string.mode_bus
     },
 )

@@ -6,6 +6,7 @@
     <string name="mode_bike">Bike</string>
     <string name="mode_ebike">E-bike</string>
     <string name="mode_drive">Drive</string>
+    <string name="mode_bus">Bus</string>
 
     <string name="notification_channel_recording">Trip recording</string>
     <string name="notification_channel_recording_desc">Keeps sampling while a trip is being recorded.</string>

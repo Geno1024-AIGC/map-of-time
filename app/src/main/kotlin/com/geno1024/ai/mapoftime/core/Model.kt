@@ -9,6 +9,7 @@ enum class TripMode(val id: String) {
     BIKE("bike"),
     EBIKE("ebike"),
     DRIVE("drive"),
+    BUS("bus"),
     ;
 
     /**
@@ -50,6 +51,15 @@ enum class TripMode(val id: String) {
             maxSpeedMps = 55.0,
             stopSpeedMps = 1.2,
             stopAsPartOfLegMs = 150_000,
+            turnDegrees = 50.0,
+            minLegMeters = 60.0,
+            minLegMs = 10_000,
+            minLegForSplitMeters = 20.0,
+        )
+        BUS -> ModeProfile(
+            maxSpeedMps = 28.0,
+            stopSpeedMps = 1.2,
+            stopAsPartOfLegMs = 180_000,
             turnDegrees = 50.0,
             minLegMeters = 60.0,
             minLegMs = 10_000,

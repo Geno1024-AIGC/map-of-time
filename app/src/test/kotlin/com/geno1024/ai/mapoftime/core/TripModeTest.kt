@@ -6,10 +6,10 @@ import org.junit.Test
 
 class TripModeTest {
     @Test
-    fun fourModesHaveTheirOwnStoredId() {
-        assertEquals(4, TripMode.entries.size)
+    fun modesHaveTheirOwnStoredId() {
+        assertEquals(5, TripMode.entries.size)
         assertEquals(
-            listOf("walk", "bike", "ebike", "drive"),
+            listOf("walk", "bike", "ebike", "drive", "bus"),
             TripMode.entries.map { it.id },
         )
     }
