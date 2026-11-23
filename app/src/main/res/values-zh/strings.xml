@@ -73,6 +73,7 @@
     <string name="network_summary_parts">%1$d 个节点 · %2$d 段 · %3$d 个互不相连的片区</string>
     <string name="network_hint">点节点查看连接，点边可编辑</string>
     <string name="network_show_nodes">标注点</string>
+    <string name="network_show_node_labels">节点标签</string>
     <string name="network_view_graph">图</string>
     <string name="network_view_list">列表</string>
     <string name="network_pick_node">在地图上点一个点，查看从那里出发的边。</string>

@@ -102,6 +102,7 @@ fun NetworkScreen(
         mutableStateOf(NetworkView.GRAPH)
     }
     var showNodes by rememberSaveable { mutableStateOf(true) }
+    var showNodeLabels by rememberSaveable { mutableStateOf(true) }
     var edgeSort by rememberSaveable(stateSaver = enumNameSaver(EdgeSort.entries.toTypedArray())) {
         mutableStateOf(EdgeSort.SAMPLES)
     }
@@ -165,7 +166,7 @@ fun NetworkScreen(
     // While picking points for one junction, the dots need to be tellable
     // apart: a bare "X" on all twenty of them is useless. Their auto-derived
     // side + road caption goes on the map, without asking for a single name.
-    val markers = remember(graph, selectedKey, previewKeys, preview, viewModel.summaries, viewModel.places, showNodes) {
+    val markers = remember(graph, selectedKey, previewKeys, preview, viewModel.summaries, viewModel.places, showNodes, showNodeLabels) {
         if (!showNodes) emptyList()
         else graph.nodes.map { node ->
             // Only the draft's own points get a preview-relative caption; a
@@ -181,7 +182,7 @@ fun NetworkScreen(
                 emphasized = node.key == selectedKey || node.key in previewKeys,
                 // Only names: a wall of node ids would hide the map. The
                 // selected node still needs one even when it is unnamed.
-                label = caption ?: if (node.key == selectedKey) node.name ?: node.key else node.name,
+                label = if (!showNodeLabels) null else caption ?: if (node.key == selectedKey) node.name ?: node.key else node.name,
             )
         }
     }
@@ -294,6 +295,13 @@ fun NetworkScreen(
                         onClick = { showNodes = !showNodes },
                         label = { Text(stringResource(R.string.network_show_nodes)) },
                     )
+                    if (showNodes) {
+                        FilterChip(
+                            selected = showNodeLabels,
+                            onClick = { showNodeLabels = !showNodeLabels },
+                            label = { Text(stringResource(R.string.network_show_node_labels)) },
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))

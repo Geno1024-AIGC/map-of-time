@@ -73,6 +73,7 @@
     <string name="network_summary_parts">%1$d junctions · %2$d edges · %3$d unconnected clusters</string>
     <string name="network_hint">Tap a node to see connections, tap an edge to edit.</string>
     <string name="network_show_nodes">Show nodes</string>
+    <string name="network_show_node_labels">Node labels</string>
     <string name="network_view_graph">Graph</string>
     <string name="network_view_list">List</string>
     <string name="network_pick_node">Tap a dot on the map to see what leaves that junction.</string>
