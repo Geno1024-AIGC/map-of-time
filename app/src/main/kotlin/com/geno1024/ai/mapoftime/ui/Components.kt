@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -591,56 +592,92 @@ fun PlaceNameDialog(
 }
 
 /**
- * Asks for the road name of one segment. Shared by the segment screen and the
- * trip's leg overlay, which both offer the same action.
- *
- * This name is inference input for the points the segment touches; the segment
- * itself is displayed by its two atomic end names. Saving an empty field drops
- * the name from point-naming suggestions, so the dialog says so instead of
- * disabling the button.
+ * Edits road names for one edge. An edge may travel along multiple roads, so
+ * this allows selecting multiple existing roads and adding new names.
  */
 @Composable
 fun EdgeNameDialog(
-    initial: String,
+    initialNames: List<String>,
     osmName: String?,
+    allRoadNames: List<String> = emptyList(),
     onDismiss: () -> Unit,
-    onSave: (String) -> Unit,
-    title: String? = null,
-    hint: String? = null,
-    clearHint: String? = null,
-    /** Road names already used elsewhere; one tap fills the field. */
-    reuse: List<String> = emptyList(),
+    onSave: (List<String>) -> Unit,
 ) {
-    var text by remember(initial) { mutableStateOf(initial) }
+    val collator = remember { Collator.getInstance(Locale.CHINA) }
+    var selected by remember(initialNames) { mutableStateOf(initialNames.toSet()) }
+    var draft by remember { mutableStateOf("") }
+    val options = remember(allRoadNames, selected, collator) {
+        (allRoadNames + selected).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+            .sortedWith(collator)
+    }
+
+    fun addName(raw: String) {
+        val name = raw.trim()
+        if (name.isNotEmpty()) selected = selected + name
+        draft = ""
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title ?: stringResource(R.string.edge_name)) },
+        title = { Text(stringResource(R.string.edge_name)) },
         text = {
-            Column {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    label = { Text(hint ?: stringResource(R.string.edge_name_hint)) },
-                )
-                val suggestion = osmName?.takeIf { it.isNotBlank() && it != text }
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = draft,
+                        onValueChange = { draft = it },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.edge_name_hint)) },
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(
+                        onClick = { addName(draft) },
+                        enabled = draft.trim().isNotEmpty(),
+                    ) { Text(stringResource(R.string.action_add)) }
+                }
+                val suggestion = osmName?.trim()?.takeIf { it.isNotEmpty() && it !in selected }
                 if (suggestion != null) {
-                    TextButton(onClick = { text = suggestion }) {
+                    TextButton(onClick = { selected = selected + suggestion }) {
                         Text(stringResource(R.string.edge_name_use, suggestion))
                     }
                 }
-                RoadNameReuse(reuse, text) { text = it }
-                Spacer(Modifier.height(4.dp))
+                if (options.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.edge_bind_road_none),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        options.forEach { road ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    checked = road in selected,
+                                    onCheckedChange = { checked ->
+                                        selected = if (checked) selected + road else selected - road
+                                    },
+                                )
+                                Text(road)
+                            }
+                        }
+                    }
+                }
                 Text(
-                    text = clearHint ?: stringResource(R.string.edge_name_clear_hint),
+                    text = stringResource(R.string.edge_name_clear_hint),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(text) }) {
+            TextButton(onClick = { onSave(selected.toList().sortedWith(collator)) }) {
                 Text(stringResource(R.string.action_save))
             }
         },

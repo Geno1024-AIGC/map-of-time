@@ -218,6 +218,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         refresh()
     }
 
+    suspend fun setEdgeRoadNames(edgeId: Long, names: Collection<String>) {
+        withContext(container.dbDispatcher) { container.repository.setEdgeRoadNames(edgeId, names) }
+        refresh()
+    }
+
     /**
      * Road names already given to some edge. Offered as one-tap chips when
      * naming another piece of the same road, so a name is typed once, not once

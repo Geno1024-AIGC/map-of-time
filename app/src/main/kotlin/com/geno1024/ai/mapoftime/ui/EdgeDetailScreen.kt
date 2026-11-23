@@ -181,15 +181,16 @@ fun EdgeDetailScreen(
     }
 
     if (renaming) {
+        val edgeRoadNames = edge?.roadIds.orEmpty().mapNotNull { id -> viewModel.roads.firstOrNull { it.id == id }?.name }
         EdgeNameDialog(
-            initial = edge?.userName.orEmpty(),
+            initialNames = edgeRoadNames,
             osmName = edge?.name,
-            reuse = viewModel.roads.map { it.name }.distinct(),
+            allRoadNames = viewModel.roads.map { it.name }.distinct(),
             onDismiss = { renaming = false },
-            onSave = { name ->
+            onSave = { names ->
                 renaming = false
                 scope.launch {
-                    viewModel.renameEdge(edgeId, name)
+                    viewModel.setEdgeRoadNames(edgeId, names)
                     edge = viewModel.edge(edgeId)
                     legs = viewModel.legsForEdge(edgeId)
                 }
@@ -382,7 +383,7 @@ fun EdgeDetailScreen(
                             TextButton(onClick = { renaming = true }) {
                                 Text(
                                     stringResource(
-                                        if (edge?.userName == null) {
+                                        if (edge?.roadIds.isNullOrEmpty()) {
                                             R.string.edge_name_add
                                         } else {
                                             R.string.action_edit

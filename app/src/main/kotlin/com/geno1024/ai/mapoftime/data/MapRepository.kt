@@ -556,6 +556,32 @@ class MapRepository(private val helper: MapDb) {
         }
     }
 
+    fun setEdgeRoadNames(id: Long, names: Collection<String>) {
+        db.transaction {
+            val ids = names.map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+                .mapNotNull { name -> ensureRoad(name, "user").takeIf { rid -> rid > 0 } }
+            replaceEdgeRoads(id, ids)
+            val primaryName = ids.firstOrNull()?.let { rid -> roadName(rid) }
+            db.update(
+                "edges",
+                ContentValues().apply {
+                    if (primaryName != null) {
+                        put("user_name", primaryName)
+                        put("road_id", ids.first())
+                    } else {
+                        putNull("user_name")
+                        putNull("road_id")
+                    }
+                },
+                "id = ?",
+                arrayOf(id.toString()),
+            )
+            relabelEdge(id)
+        }
+    }
+
     fun setEdgeRoad(id: Long, roadId: Long?) = setEdgeRoads(id, listOfNotNull(roadId))
 
     private fun replaceEdgeRoads(edgeId: Long, roadIds: Collection<Long>) {

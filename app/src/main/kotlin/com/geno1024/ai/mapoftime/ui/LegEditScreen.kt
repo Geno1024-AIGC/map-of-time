@@ -99,14 +99,16 @@ fun LegEditScreen(
 
     val renamingEdge = edge
     if (renaming && renamingEdge != null) {
+        val edgeRoadNames = renamingEdge.roadIds.mapNotNull { id -> viewModel.roads.firstOrNull { it.id == id }?.name }
         EdgeNameDialog(
-            initial = renamingEdge.userName.orEmpty(),
-            reuse = viewModel.roadNames,
+            initialNames = edgeRoadNames,
+            osmName = renamingEdge.name,
+            allRoadNames = viewModel.roads.map { it.name }.distinct(),
             onDismiss = { renaming = false },
-            onSave = { name ->
+            onSave = { names ->
                 renaming = false
                 scope.launch {
-                    viewModel.renameEdge(renamingEdge.id, name)
+                    viewModel.setEdgeRoadNames(renamingEdge.id, names)
                     edge = viewModel.edge(renamingEdge.id)
                     reload += 1
                 }
@@ -233,10 +235,11 @@ fun LegEditScreen(
             item {
                 SectionCard(title = stringResource(R.string.edge_name)) {
                     val current = edge
+                    val roadNames = current?.roadIds.orEmpty().mapNotNull { id -> viewModel.roads.firstOrNull { it.id == id }?.name }
                     Text(
-                        text = current?.userName ?: stringResource(R.string.edge_name_add),
+                        text = if (roadNames.isEmpty()) stringResource(R.string.edge_name_add) else roadNames.joinToString("、"),
                         style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (current?.userName != null) FontWeight.SemiBold else FontWeight.Normal,
+                        fontWeight = if (roadNames.isNotEmpty()) FontWeight.SemiBold else FontWeight.Normal,
                     )
                     Text(
                         text = stringResource(R.string.edge_name_clear_hint),
@@ -244,7 +247,7 @@ fun LegEditScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     TextButton(onClick = { renaming = true }, enabled = current != null) {
-                        Text(stringResource(if (current?.userName == null) R.string.edge_name_add else R.string.action_edit))
+                        Text(stringResource(if (roadNames.isEmpty()) R.string.edge_name_add else R.string.action_edit))
                     }
                 }
             }
@@ -398,31 +401,4 @@ private fun EdgeRoadsDialog(
     )
 }
 
-@Composable
-private fun EdgeNameDialog(
-    initial: String,
-    reuse: List<String>,
-    onDismiss: () -> Unit,
-    onSave: (String) -> Unit,
-) {
-    var name by remember { mutableStateOf(initial) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.edge_name)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.edge_name)) },
-                    placeholder = { Text(stringResource(R.string.edge_name_hint)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                RoadNameReuse(reuse, name) { name = it }
-            }
-        },
-        confirmButton = { TextButton(onClick = { onSave(name) }) { Text(stringResource(R.string.action_save)) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
-    )
-}
+
