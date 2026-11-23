@@ -98,6 +98,7 @@ fun TripDetailScreen(
     var reload by remember { mutableStateOf(0) }
     var selectedLegId by remember(tripId) { mutableStateOf<Long?>(null) }
     var selectedEdge by remember(tripId) { mutableStateOf<Edge?>(null) }
+    var edgesById by remember(tripId) { mutableStateOf<Map<Long, Edge>>(emptyMap()) }
     var trimming by remember(tripId) { mutableStateOf(false) }
     var cutIndex by remember(tripId) { mutableStateOf<Int?>(null) }
     var trimmingBusy by remember { mutableStateOf(false) }
@@ -114,7 +115,9 @@ fun TripDetailScreen(
         points = viewModel.points(tripId)
         markPositions = viewModel.markPositions(tripId)
         markTimes = viewModel.markTimes(tripId)
-        identities = viewModel.identities(legsValue.mapNotNull { it.edgeId })
+        val edgeIds = legsValue.mapNotNull { it.edgeId }.distinct()
+        identities = viewModel.identities(edgeIds)
+        edgesById = edgeIds.mapNotNull { id -> viewModel.edge(id)?.let { id to it } }.toMap()
         // Re-analysis replaces every leg, so an old selection would point at
         // an id that no longer exists.
         if (legsValue.none { it.id == selectedLegId }) selectedLegId = null
@@ -306,6 +309,7 @@ fun TripDetailScreen(
                     LegOverlay(
                         leg = leg,
                         identity = selectedIdentity,
+                        edgeLabel = selectedEdge?.endpointPairDisplay,
                         onClear = { selectedLegId = null },
                         onEdit = if (selectedEdge != null) {
                             { onEditLeg(tripId, leg.id) }
@@ -653,6 +657,7 @@ fun TripDetailScreen(
                             leg.edgeId == null -> MatchKind.UNMATCHED
                             else -> identities[leg.edgeId] ?: MatchKind.UNMATCHED
                         },
+                        edgeLabel = leg.edgeId?.let { edgesById[it]?.endpointPairDisplay },
                         selected = leg.id == selectedLegId,
                         onClick = {
                             selectedLegId = if (selectedLegId == leg.id) null else leg.id
@@ -885,6 +890,7 @@ internal fun stepScrubIndex(points: List<TrackPoint>, from: Int, direction: Int)
 private fun LegOverlay(
     leg: Leg,
     identity: MatchKind?,
+    edgeLabel: String?,
     onClear: () -> Unit,
     onEdit: (() -> Unit)?,
     modifier: Modifier = Modifier,
@@ -902,7 +908,7 @@ private fun LegOverlay(
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = leg.label ?: stringResource(R.string.leg_unnamed),
+                        text = leg.label ?: edgeLabel ?: stringResource(R.string.leg_unnamed),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -967,6 +973,7 @@ private fun LegRow(
     index: Int,
     leg: Leg,
     identity: MatchKind,
+    edgeLabel: String?,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
@@ -986,7 +993,7 @@ private fun LegRow(
             )
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = leg.label ?: stringResource(R.string.leg_unnamed),
+                    text = leg.label ?: edgeLabel ?: stringResource(R.string.leg_unnamed),
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
                 )
