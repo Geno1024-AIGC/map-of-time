@@ -125,7 +125,7 @@
     <string name="trip_note_hint">天气、载重、为什么这次特别慢…</string>
     <string name="trip_legs_title">分段</string>
     <string name="trip_legs_hint">点一段，在地图上查看这一段，也能给它两端的点命名</string>
-    <string name="leg_unnamed">未命名边</string>
+    <string name="leg_unnamed">未命名点 - 未命名点</string>
     <string name="leg_edit_title">编辑这一小段</string>
     <string name="leg_edit_page_title">编辑分段</string>
     <string name="leg_edit_hint">留空保存即取消命名；点的名字会用于经过它的所有边。</string>
