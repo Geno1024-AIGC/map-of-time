@@ -101,6 +101,7 @@ fun NetworkScreen(
     var viewMode by rememberSaveable(stateSaver = enumNameSaver(NetworkView.entries.toTypedArray())) {
         mutableStateOf(NetworkView.GRAPH)
     }
+    var showNodes by rememberSaveable { mutableStateOf(true) }
     var edgeSort by rememberSaveable(stateSaver = enumNameSaver(EdgeSort.entries.toTypedArray())) {
         mutableStateOf(EdgeSort.SAMPLES)
     }
@@ -164,8 +165,9 @@ fun NetworkScreen(
     // While picking points for one junction, the dots need to be tellable
     // apart: a bare "X" on all twenty of them is useless. Their auto-derived
     // side + road caption goes on the map, without asking for a single name.
-    val markers = remember(graph, selectedKey, previewKeys, preview, viewModel.summaries, viewModel.places) {
-        graph.nodes.map { node ->
+    val markers = remember(graph, selectedKey, previewKeys, preview, viewModel.summaries, viewModel.places, showNodes) {
+        if (!showNodes) emptyList()
+        else graph.nodes.map { node ->
             // Only the draft's own points get a preview-relative caption; a
             // far node in another junction has no business being described by
             // this preview's centre.
@@ -286,6 +288,13 @@ fun NetworkScreen(
                     onClick = { viewMode = NetworkView.LIST },
                     label = { Text(stringResource(R.string.network_view_list)) },
                 )
+                if (viewMode == NetworkView.GRAPH) {
+                    FilterChip(
+                        selected = showNodes,
+                        onClick = { showNodes = !showNodes },
+                        label = { Text(stringResource(R.string.network_show_nodes)) },
+                    )
+                }
             }
             Spacer(Modifier.height(8.dp))
             ModeFilter(
@@ -344,6 +353,9 @@ fun NetworkScreen(
                         customTileUrl = settings.customTileUrl,
                         customTilesGcj02 = settings.customTilesGcj02,
                         onMarkerTap = onMapTap,
+                        onTrackTap = { index ->
+                            if (preview == null) graph.edges.getOrNull(index)?.let { onOpenEdge(it.edge.id) }
+                        },
                         emptyHint = stringResource(R.string.network_empty_title),
                         rings = rings,
                         focusBounds = focusBounds,

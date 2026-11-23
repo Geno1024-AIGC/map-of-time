@@ -129,6 +129,8 @@ fun TrackMap(
      * projection (or the GCJ-02 shift) themselves.
      */
     onMarkerTap: ((Int) -> Unit)? = null,
+    /** Called with the index into [tracks] when a tap lands near a track. */
+    onTrackTap: ((Int) -> Unit)? = null,
     /** Circles of ground claimed by junctions, drawn under the markers. */
     rings: List<MapRing> = emptyList(),
     /**
@@ -322,21 +324,49 @@ fun TrackMap(
                             }
                         }
                     }
-                    .pointerInput(displayMarkers, onMarkerTap, center, zoom, size) {
+                    .pointerInput(displayMarkers, displayTracks, onMarkerTap, onTrackTap, center, zoom, size) {
+                        fun distanceToSegment(p: Offset, a: Offset, b: Offset): Float {
+                            val ab = b - a
+                            val ap = p - a
+                            val abLen2 = ab.x * ab.x + ab.y * ab.y
+                            val t = if (abLen2 <= 0f) 0f else ((ap.x * ab.x + ap.y * ab.y) / abLen2).coerceIn(0f, 1f)
+                            return (p - (a + ab * t)).getDistance()
+                        }
                         detectTapGestures(
                             onTap = { tap ->
-                                val handler = onMarkerTap ?: return@detectTapGestures
+                                val markerHandler = onMarkerTap
+                                val trackHandler = onTrackTap
+                                if (markerHandler == null && trackHandler == null) return@detectTapGestures
                                 val reach = 22.dp.toPx()
-                                var bestIndex = -1
-                                var bestDistance = Float.MAX_VALUE
-                                displayMarkers.forEachIndexed { index, marker ->
-                                    val distance = (projectMarker(marker.at) - tap).getDistance()
-                                    if (distance < bestDistance) {
-                                        bestDistance = distance
-                                        bestIndex = index
+                                if (markerHandler != null) {
+                                    var bestIndex = -1
+                                    var bestDistance = Float.MAX_VALUE
+                                    displayMarkers.forEachIndexed { index, marker ->
+                                        val distance = (projectMarker(marker.at) - tap).getDistance()
+                                        if (distance < bestDistance) {
+                                            bestDistance = distance
+                                            bestIndex = index
+                                        }
+                                    }
+                                    if (bestIndex >= 0 && bestDistance <= reach) {
+                                        markerHandler(bestIndex)
+                                        return@detectTapGestures
                                     }
                                 }
-                                if (bestIndex >= 0 && bestDistance <= reach) handler(bestIndex)
+                                if (trackHandler != null) {
+                                    var bestIndex = -1
+                                    var bestDistance = Float.MAX_VALUE
+                                    displayTracks.forEachIndexed { index, track ->
+                                        for (i in 0 until track.size - 1) {
+                                            val distance = distanceToSegment(tap, projectMarker(track[i]), projectMarker(track[i + 1]))
+                                            if (distance < bestDistance) {
+                                                bestDistance = distance
+                                                bestIndex = index
+                                            }
+                                        }
+                                    }
+                                    if (bestIndex >= 0 && bestDistance <= reach) trackHandler(bestIndex)
+                                }
                             },
                             onDoubleTap = { tap ->
                                 val targetZoom = (zoom + 1f).coerceAtMost(maxZoom.toFloat())
