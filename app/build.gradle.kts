@@ -47,6 +47,23 @@ android {
 
     val signingStoreFile = signingSecret("keystore.storeFile", "KEYSTORE_STORE_FILE")
     val signingStorePassword = signingSecret("keystore.storePassword", "KEYSTORE_STORE_PASSWORD")
+    // A release artifact must carry the shared key. Local debug/test builds
+    // stay usable without it, but a packaging build has to fail loudly instead
+    // of silently producing an APK that cannot replace the installed one.
+    val wantsRelease = gradle.startParameter.taskNames.any { raw ->
+        val task = raw.substringAfterLast(':')
+        setOf("assemble", "bundle", "package", "install").any {
+            task.startsWith(it, ignoreCase = true)
+        } && task.contains("Release", ignoreCase = true)
+    }
+    if (wantsRelease) {
+        require(signingStoreFile != null) {
+            "KEYSTORE_STORE_FILE / keystore.storeFile is required for a release build"
+        }
+        require(signingStorePassword != null) {
+            "KEYSTORE_STORE_PASSWORD / keystore.storePassword is required for a release build"
+        }
+    }
 
     signingConfigs {
         if (signingStoreFile != null && signingStorePassword != null) {
