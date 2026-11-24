@@ -35,7 +35,6 @@ data class Stamp(
 
 object Versioning {
     private const val NO_HEAD = "00000000"
-    private const val DEFAULT_URL = "http://build-count.invalid"
 
     /** `build` is an aggregate and exists everywhere; as a prefix it also hits `buildEnvironment`. */
     private val PACKAGING_EXACT = setOf("build")
@@ -234,10 +233,19 @@ object Versioning {
             ?: error("build-count service returned no total: $json")
     }
 
-    private fun url(root: File, project: Project): String =
-        "${setting(root, "BUILD_COUNT_URL") ?: DEFAULT_URL}" +
-            "/projects/${segment(project.rootProject.name)}" +
+    /**
+     * The deployment lives in the environment or `local.properties`, never in
+     * the repository: publishing the address invites counts from strangers.
+     */
+    private fun url(root: File, project: Project): String {
+        val base = setting(root, "BUILD_COUNT_URL")
+            ?: error(
+                "BUILD_COUNT_URL is required to count a packaging build: set the " +
+                    "environment variable or put it in ${File(root, "local.properties").path}",
+            )
+        return "$base/projects/${segment(project.rootProject.name)}" +
             "/modules/${segment(moduleName(project))}"
+    }
 
     /**
      * Environment first, then `local.properties`: CI only has the environment,

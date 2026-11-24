@@ -110,10 +110,11 @@ jobs:
           KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_KEY_PASSWORD }}
           KEYSTORE_KEY_ALIAS: ${{ secrets.KEYSTORE_KEY_ALIAS }}
           BUILD_COUNT_TOKEN: ${{ secrets.BUILD_COUNT_TOKEN }}
+          BUILD_COUNT_URL: ${{ secrets.BUILD_COUNT_URL }}
         run: |
           set -euo pipefail
-          if [ -z "${BUILD_COUNT_TOKEN:-}" ]; then
-            echo "::error::BUILD_COUNT_TOKEN is not available; packaging builds must be counted."
+          if [ -z "${BUILD_COUNT_TOKEN:-}" ] || [ -z "${BUILD_COUNT_URL:-}" ]; then
+            echo "::error::BUILD_COUNT_TOKEN and BUILD_COUNT_URL must be available; packaging builds must be counted."
             exit 1
           fi
           ./gradlew assembleRelease

@@ -287,7 +287,7 @@ PR 不读任何 secret，因此 fork 的 PR 也能完整跑测试与 lint；PR �
 - CI 不做离线兜底：runner 的磁盘随 job 销毁，留不下待补报日志，所以 `GITHUB_ACTIONS=true` 时连不上就是失败。
 - `sha8` = `HEAD` 前 8 位，用于回溯。
 - `versionCode = env`。
-- 本地打包需要 `BUILD_COUNT_TOKEN`：读环境变量，读不到就读仓库根目录 `local.properties` 里的同名键（该文件已在 `.gitignore` 中）；`BUILD_COUNT_URL` 同理，缺省 `http://build-count.invalid`。CI 没有 `local.properties`，从仓库 secret 读取同名 token。
+- 本地打包需要 `BUILD_COUNT_TOKEN` 与 `BUILD_COUNT_URL`：先读环境变量，读不到就读仓库根目录 `local.properties` 里的同名键（该文件已在 `.gitignore` 中）。两者都是必填——服务地址不写进仓库，否则等于把它公开给愿意刷计数的人。CI 同样从仓库 secret 读取这两项。
 
 ## 目录
 
