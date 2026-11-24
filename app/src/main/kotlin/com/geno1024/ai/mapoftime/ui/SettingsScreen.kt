@@ -660,11 +660,16 @@ private fun UpdateCard(
                     )
                 }
                 Spacer(Modifier.height(10.dp))
-                Button(
-                    onClick = { viewModel.downloadUpdate() },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.update_download))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { viewModel.downloadUpdate() },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text(stringResource(R.string.update_download))
+                    }
+                    TextButton(onClick = { viewModel.dismissUpdate() }) {
+                        Text(stringResource(R.string.update_ignore))
+                    }
                 }
             }
 

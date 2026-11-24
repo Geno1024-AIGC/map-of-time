@@ -1,5 +1,6 @@
 package com.geno1024.ai.mapoftime.update
 
+import org.json.JSONArray
 import org.json.JSONObject
 import java.time.OffsetDateTime
 
@@ -25,9 +26,29 @@ data class ReleaseInfo(
         /** Long release notes would only be truncated on screen anyway. */
         private const val MAX_NOTES = 2_000
 
-        fun parse(json: String): ReleaseInfo? {
-            val root = runCatching { JSONObject(json) }.getOrNull() ?: return null
+        /** One release, parsed from a recorded response. No APK means no update. */
+        fun parse(json: String): ReleaseInfo? =
+            runCatching { parseOne(JSONObject(json)) }.getOrNull()
 
+        /**
+         * Reads the `/releases` list. Only the requested channel is considered:
+         * the rolling canary is a prerelease, so normal releases never answer a
+         * canary check. A release without an APK is skipped; an APK whose stamp
+         * cannot be read is a hard `VERSION` error, never "newest wins".
+         */
+        fun parseList(json: String, prerelease: Boolean = true): List<ReleaseInfo> {
+            val array = runCatching { JSONArray(json) }.getOrNull()
+                ?: throw UpdateException(UpdateError.UNREADABLE)
+            return buildList {
+                for (i in 0 until array.length()) {
+                    val root = array.optJSONObject(i) ?: continue
+                    if (root.optBoolean("prerelease") != prerelease) continue
+                    parseOne(root)?.let(::add)
+                }
+            }
+        }
+
+        private fun parseOne(root: JSONObject): ReleaseInfo? {
             val assets = root.optJSONArray("assets") ?: return null
             var asset: ReleaseAsset? = null
             for (i in 0 until assets.length()) {
@@ -47,11 +68,15 @@ data class ReleaseInfo(
             }
             val chosen = asset ?: return null
 
-            // The file name carries the stamp; the release title does too, so
-            // either one is a valid fallback.
-            val version = AppVersion.parse(chosen.name)
-                ?: AppVersion.parse(root.optString("name"))
-                ?: return null
+            // The version comes from the built artifact. Release title first,
+            // then the tag, then the asset name; each is a text stamp, and an
+            // unreadable stamp must be reported instead of guessed.
+            val version = listOf(
+                root.optString("name"),
+                root.optString("tag_name"),
+                chosen.name,
+            ).firstNotNullOfOrNull { AppVersion.parse(it) }
+                ?: throw UpdateException(UpdateError.VERSION)
 
             return ReleaseInfo(
                 version = version,

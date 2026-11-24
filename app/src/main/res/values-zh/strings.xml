@@ -294,6 +294,7 @@
     <string name="update_notes">更新内容</string>
     <string name="update_published">发布于 %1$s</string>
     <string name="update_download">下载并安装</string>
+    <string name="update_ignore">忽略此版本</string>
     <string name="update_source">APK 下载源</string>
     <string name="update_source_custom">自定义镜像前缀（留空为 GitHub）</string>
     <string name="update_downloading">正在下载… %1$d%%</string>

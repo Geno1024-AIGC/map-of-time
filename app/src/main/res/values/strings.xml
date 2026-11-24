@@ -294,6 +294,7 @@
     <string name="update_notes">What changed</string>
     <string name="update_published">Published %1$s</string>
     <string name="update_download">Download and install</string>
+    <string name="update_ignore">Ignore this version</string>
     <string name="update_source">APK download source</string>
     <string name="update_source_custom">Custom mirror prefix (blank = GitHub)</string>
     <string name="update_downloading">Downloading… %1$d%%</string>

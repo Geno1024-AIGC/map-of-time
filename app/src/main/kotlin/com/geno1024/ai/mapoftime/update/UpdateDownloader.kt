@@ -19,11 +19,20 @@ import java.net.URL
  *
  * Release metadata is always read from the GitHub API. Only this file transfer
  * may use a mirror: the chosen source is tried first, then the presets in order,
- * so one dead domain cannot block an update.
+ * so one dead domain cannot block an update. The asset name is allow-listed
+ * before it becomes a file name (or a URL segment in other callers).
  */
 class UpdateDownloader(
     private val userAgent: String = UpdateChecker.USER_AGENT,
 ) {
+    /** A GitHub asset name becomes a file name, so only a strict allow-list is safe. */
+    private val safeNamePattern = Regex("""[A-Za-z0-9._-]{1,124}\.apk""", RegexOption.IGNORE_CASE)
+    private val FALLBACK_NAME = "map-of-time-update.apk"
+
+    /** Rejects path separators, spaces and overlong names with a fixed file name. */
+    internal fun safeAssetName(raw: String): String =
+        raw.takeIf { safeNamePattern.matches(it) } ?: FALLBACK_NAME
+
     suspend fun download(
         asset: ReleaseAsset,
         directory: File,
@@ -34,11 +43,12 @@ class UpdateDownloader(
         // An older APK would only sit in the cache; the release is a rolling tag.
         directory.listFiles()?.forEach { it.delete() }
 
+        val payload = asset.copy(name = safeAssetName(asset.name))
         val candidates = mirrors.distinctBy { it.prefix }.ifEmpty { listOf(Mirrors.DIRECT) }
         var failure: Throwable? = null
         for (mirror in candidates) {
             try {
-                return@withContext fetch(mirror.wrap(asset.downloadUrl), asset, directory, onProgress)
+                return@withContext fetch(mirror.wrap(payload.downloadUrl), payload, directory, onProgress)
             } catch (e: UpdateException) {
                 failure = e
             } catch (e: IOException) {
@@ -63,7 +73,11 @@ class UpdateDownloader(
             if (connection.responseCode != HttpURLConnection.HTTP_OK) {
                 throw UpdateException(UpdateError.DOWNLOAD)
             }
-            val expected = connection.contentLengthLong.takeIf { it > 0 } ?: asset.sizeBytes
+            // The API's asset size is the authority; a mirror's Content-Length
+            // is only a fallback for progress when the API omitted it.
+            val expected = asset.sizeBytes.takeIf { it > 0 }
+                ?: connection.contentLengthLong.takeIf { it > 0 }
+                ?: 0L
             connection.inputStream.use { input ->
                 writeAtomically(input, target, expected, onProgress)
             }

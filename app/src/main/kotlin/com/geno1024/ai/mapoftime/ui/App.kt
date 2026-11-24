@@ -87,6 +87,7 @@ fun App(viewModel: AppViewModel) {
                                 detail = null
                                 detailStack = arrayListOf()
                                 tab = entry.name
+                                if (entry == Tab.SETTINGS) viewModel.recheckIfStale()
                             },
                             icon = {
                                 // The update lives in Settings, so point there.

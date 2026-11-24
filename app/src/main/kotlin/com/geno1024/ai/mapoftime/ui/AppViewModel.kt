@@ -94,10 +94,14 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     var update by mutableStateOf<UpdateState>(UpdateState.Idle)
         private set
 
+    /** An ignored build stays installable in Settings but stops nagging on the tab. */
     val hasUpdate: Boolean
-        get() = update is UpdateState.Available ||
-            update is UpdateState.Downloading ||
-            update is UpdateState.Ready
+        get() = when (val state = update) {
+            is UpdateState.Available ->
+                state.release.version.base != settings.state.value.dismissedVersion
+            is UpdateState.Downloading, is UpdateState.Ready -> true
+            else -> false
+        }
 
     private val updateChecker = UpdateChecker()
     private val updateDownloader = UpdateDownloader()
@@ -614,10 +618,23 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     // ---- In-app update -----------------------------------------------------
 
     /**
-     * Asks GitHub for the rolling canary release and compares its commit count
-     * with the installed build. A manual tap always fetches; the automatic
-     * check respects the interval so opening the app does not burn the hourly
-     * anonymous quota.
+     * Entering the update page rechecks only when the last check is stale;
+     * the metadata itself always comes from the GitHub Releases API.
+     */
+    fun recheckIfStale() {
+        checkForUpdate(manual = false)
+    }
+
+    /** Silence the reminder without hiding the build from the settings card. */
+    fun dismissUpdate() {
+        val available = update as? UpdateState.Available ?: return
+        settings.update { it.copy(dismissedVersion = available.release.version.base) }
+    }
+
+    /**
+     * Asks the GitHub release list for a newer canary and compares `env` with
+     * the installed build. A manual tap always fetches; automatic checks
+     * respect [AUTO_CHECK_INTERVAL_MS] so the anonymous quota lasts.
      */
     fun checkForUpdate(manual: Boolean = false) {
         val current = update
@@ -629,9 +646,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         }
         viewModelScope.launch {
             update = UpdateState.Checking
+            // Throttle from the attempt, not from a success: a failing endpoint
+            // must not be hammered on every visit to the settings page.
+            settings.update { it.copy(lastUpdateCheckAt = System.currentTimeMillis()) }
             update = try {
                 val release = updateChecker.latest()
-                settings.update { it.copy(lastUpdateCheckAt = System.currentTimeMillis()) }
                 when (val newer = isNewerThanInstalled(release)) {
                     // A stamp we cannot read is an error, never "up to date":
                     // silently treating it as old would hide every release.
@@ -836,8 +855,8 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     private companion object {
-        /** Six hours: frequent enough to notice a canary, quiet enough for the API. */
-        const val AUTO_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
+        /** 30 minutes: frequent enough to notice a canary, quiet enough for the API. */
+        const val AUTO_CHECK_INTERVAL_MS = 30 * 60 * 1000L
     }
 }
 

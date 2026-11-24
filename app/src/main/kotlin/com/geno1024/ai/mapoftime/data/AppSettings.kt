@@ -37,6 +37,8 @@ data class SettingsSnapshot(
     val lastUpdateCheckAt: Long = 0L,
     /** Preferred APK download proxy; empty means direct GitHub. */
     val updateMirrorPrefix: String = "",
+    /** A version the user said "don't nag again"; it stays installable. */
+    val dismissedVersion: String = "",
     /** Days off the user added on top of the shipped calendar. */
     val customHolidays: List<HolidayBlock> = emptyList(),
     /** Weekends the user works, e.g. someone else's 调休. */
@@ -74,6 +76,7 @@ class AppSettings(context: Context) {
             putBoolean(KEY_PARTIAL, next.includePartial)
             putLong(KEY_LAST_UPDATE_CHECK, next.lastUpdateCheckAt)
             putString(KEY_UPDATE_MIRROR, next.updateMirrorPrefix)
+            putString(KEY_DISMISSED_VERSION, next.dismissedVersion)
             putString(KEY_CUSTOM_HOLIDAYS, formatHolidayBlocks(next.customHolidays))
             putString(KEY_CUSTOM_WORKDAYS, formatHolidayDates(next.customWorkdays))
         }
@@ -101,6 +104,7 @@ class AppSettings(context: Context) {
             updateMirrorPrefix = Mirrors.resolve(
                 prefs.getString(KEY_UPDATE_MIRROR, "").orEmpty(),
             ).prefix,
+            dismissedVersion = prefs.getString(KEY_DISMISSED_VERSION, "").orEmpty(),
             // A stored value that no longer parses is dropped rather than
             // half-applied: the shipped calendar is a better answer than a
             // calendar with a hole in it.
@@ -123,6 +127,7 @@ class AppSettings(context: Context) {
         const val KEY_PARTIAL = "include_partial"
         const val KEY_LAST_UPDATE_CHECK = "last_update_check"
         const val KEY_UPDATE_MIRROR = "update_mirror_prefix"
+        const val KEY_DISMISSED_VERSION = "dismissed_version"
         const val KEY_CUSTOM_HOLIDAYS = "custom_holidays"
         const val KEY_CUSTOM_WORKDAYS = "custom_workdays"
     }

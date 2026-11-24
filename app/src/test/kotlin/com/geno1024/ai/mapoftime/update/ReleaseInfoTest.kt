@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 class ReleaseInfoTest {
@@ -61,5 +62,52 @@ class ReleaseInfoTest {
         val info = ReleaseInfo.parse(noDate)!!
         assertEquals(0L, info.publishedAt)
         assertFalse(info.asset.downloadUrl.isBlank())
+    }
+
+    private fun listOfReleases(vararg items: String): String =
+        items.joinToString(prefix = "[", postfix = "]")
+
+    @Test
+    fun theReleaseListKeepsOnlyTheRequestedChannel() {
+        val stable = release.replace("\"prerelease\": true", "\"prerelease\": false")
+        val list = listOfReleases(release, stable)
+
+        assertEquals(1, ReleaseInfo.parseList(list).size)
+        assertTrue(ReleaseInfo.parseList(list, prerelease = false).single().version.env == 37)
+    }
+
+    @Test
+    fun theTitleWinsAndTheTagIsTheFallback() {
+        val byTitle = release.replace(
+            "Map of Time 0.1.37.7.82fdc33a canary",
+            "Map of Time 9.8.7.6.abcdef12 canary",
+        )
+        assertEquals(
+            AppVersion(9, 8, 7, 6, "abcdef12"),
+            ReleaseInfo.parseList(listOfReleases(byTitle)).single().version,
+        )
+
+        val byTag = release.replace(
+            "\"tag_name\": \"canary\"",
+            "\"tag_name\": \"0.1.88.9.1234abcd\"",
+        ).replace("\"name\": \"Map of Time 0.1.37.7.82fdc33a canary\"", "\"name\": \"canary\"")
+        assertEquals(
+            AppVersion(0, 1, 88, 9, "1234abcd"),
+            ReleaseInfo.parseList(listOfReleases(byTag)).single().version,
+        )
+    }
+
+    @Test
+    fun anUnreadableStampIsAnExplicitVersionError() {
+        val broken = release.replace("Map of Time 0.1.37.7.82fdc33a canary", "no stamp here")
+            .replace("\"tag_name\": \"canary\"", "\"tag_name\": \"nightly\"")
+            .replace("map-of-time-0.1.37.7.82fdc33a-build13-82fdc33a.apk", "map-of-time.apk")
+        try {
+            ReleaseInfo.parseList(listOfReleases(broken))
+            fail("an APK with no readable stamp must not be offered as an update")
+        } catch (e: UpdateException) {
+            assertEquals(UpdateError.VERSION, e.error)
+        }
+        assertNull(ReleaseInfo.parse(broken))
     }
 }

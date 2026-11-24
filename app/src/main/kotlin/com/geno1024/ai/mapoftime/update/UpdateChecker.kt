@@ -25,15 +25,17 @@ class UpdateException(
 ) : IOException(cause)
 
 /**
- * Reads the rolling `canary` release of this repository.
+ * Reads the release list from GitHub's API — the single source of update
+ * metadata. Mirrors never serve this request; they only carry APK bytes.
  *
  * One request, no credentials: the unauthenticated GitHub API allows 60 calls
- * per hour per address, and the app checks at most every few hours. A missing
- * release is reported as `null` so the caller can tell the user why nothing
- * was found instead of silently saying "no update".
+ * per hour per address, and the app checks at most every 30 minutes. The
+ * rolling canary is a prerelease, so the channel filter is applied here;
+ * candidates are ordered by `env` alone, never by publish time or `pack`.
  */
 class UpdateChecker(
-    private val endpoint: String = RELEASE_URL,
+    private val endpoint: String = RELEASES_URL,
+    private val prerelease: Boolean = true,
     private val userAgent: String = USER_AGENT,
 ) {
     suspend fun latest(): ReleaseInfo = withContext(Dispatchers.IO) { fetch() }
@@ -51,13 +53,16 @@ class UpdateChecker(
             return when (val code = connection.responseCode) {
                 HttpURLConnection.HTTP_OK -> {
                     val body = connection.inputStream.bufferedReader().use { it.readText() }
-                    ReleaseInfo.parse(body) ?: throw UpdateException(UpdateError.UNREADABLE)
+                    val releases = ReleaseInfo.parseList(body, prerelease)
+                    if (releases.isEmpty()) throw UpdateException(UpdateError.UNREADABLE)
+                    // `env` is the only ordering authority; publish time and
+                    // pack never vote. Equal stamps are the same build.
+                    releases.maxBy { it.version }
                 }
 
-                // An anonymous API call cannot see drafts. Since CI recreates
-                // this release on every build, a 404 usually means the publish
-                // step left it as a draft; surface that instead of pretending
-                // no build has ever been released.
+                // An anonymous API call cannot see drafts. If the repository
+                // or release list vanished, say so instead of claiming there
+                // is simply nothing to install.
                 HttpURLConnection.HTTP_NOT_FOUND ->
                     throw UpdateException(UpdateError.UNPUBLISHED)
 
@@ -78,7 +83,7 @@ class UpdateChecker(
     companion object {
         const val USER_AGENT = "map-of-time/0.1 (https://github.com/Geno1024-AIGC/map-of-time)"
 
-        const val RELEASE_URL =
-            "https://api.github.com/repos/Geno1024-AIGC/map-of-time/releases/tags/canary"
+        const val RELEASES_URL =
+            "https://api.github.com/repos/Geno1024-AIGC/map-of-time/releases?per_page=30"
     }
 }

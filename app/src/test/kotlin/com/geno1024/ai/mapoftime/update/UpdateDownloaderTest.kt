@@ -80,6 +80,18 @@ class UpdateDownloaderTest {
         assertEquals(listOf(100), progress)
     }
 
+    @Test
+    fun onlySafeApkNamesBecomeFiles() {
+        assertEquals(
+            "map-of-time-0.1.1.1.abcdef12.apk",
+            downloader.safeAssetName("map-of-time-0.1.1.1.abcdef12.apk"),
+        )
+        assertEquals("map-of-time-update.apk", downloader.safeAssetName("../../escape.apk"))
+        assertEquals("map-of-time-update.apk", downloader.safeAssetName("bad name.apk"))
+        assertEquals("map-of-time-update.apk", downloader.safeAssetName("x".repeat(125) + ".apk"))
+        assertEquals("map-of-time-update.apk", downloader.safeAssetName("notes.txt"))
+    }
+
     private fun assertDownloadFails(target: java.io.File, bytes: ByteArray, expectedBytes: Long) {
         try {
             downloader.writeAtomically(ByteArrayInputStream(bytes), target, expectedBytes) {}
