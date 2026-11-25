@@ -198,3 +198,30 @@ fun groupByTrafficContext(
     calendar: HolidayCalendar = Holidays.builtIn,
 ): Map<TrafficContext, List<TraversalSample>> =
     samples.groupBy { TrafficContext.of(it.startedAt, zone, calendar) }
+
+/**
+ * A free-flow reference for one direction, from the app's own GPS history.
+ *
+ * Routine off-peak trips are the closest thing to "nothing unusual happened";
+ * holidays and Friday evening are already split out by [trafficDayOf]. When
+ * there are too few of those, the fastest quarter of all trips is a rougher
+ * stand-in. Fewer than [DurationStats.MIN_SAMPLES] trips produce no baseline:
+ * a congestion flag needs something to be slow *compared with*.
+ *
+ * The caller passes one direction only. Pooling both directions would compare
+ * an uphill trip with a downhill one and call the hill congestion.
+ */
+fun freeFlowBaselineMs(
+    samples: List<TraversalSample>,
+    zone: ZoneId = ZoneId.systemDefault(),
+    calendar: HolidayCalendar = Holidays.builtIn,
+): Long {
+    if (samples.size < DurationStats.MIN_SAMPLES) return 0
+    val offPeak = samples.filter {
+        trafficDayOf(it.startedAt, zone, calendar) == TrafficDay.ROUTINE &&
+            PeakHour.of(it.startedAt, zone) == PeakHour.OFF_PEAK
+    }
+    val reference = if (offPeak.size >= DurationStats.MIN_SAMPLES) offPeak else samples
+    val percentile = if (offPeak.size >= DurationStats.MIN_SAMPLES) 50.0 else 25.0
+    return DurationStats.percentile(reference.map { it.durationMs }.sorted(), percentile)
+}

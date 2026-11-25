@@ -24,6 +24,7 @@ import com.geno1024.ai.mapoftime.core.TrafficContext
 import com.geno1024.ai.mapoftime.core.TrafficDay
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.core.TripMode
+import com.geno1024.ai.mapoftime.core.freeFlowBaselineMs
 import com.geno1024.ai.mapoftime.core.groupByTrafficContext
 import com.geno1024.ai.mapoftime.core.trafficDayOf
 import com.geno1024.ai.mapoftime.data.DangerCounts
@@ -131,11 +132,13 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     val samples = byMode[edge.mode]?.get(edge.id).orEmpty()
                     val forward = samples.filter { it.direction > 0 }
                     val backward = samples.filter { it.direction < 0 }
+                    val forwardBaseline = freeFlowBaselineMs(forward, calendar = calendar)
+                    val backwardBaseline = freeFlowBaselineMs(backward, calendar = calendar)
                     EdgeSummary(
                         edge = edge,
                         combined = DurationStats.of(samples),
-                        forward = DurationStats.of(forward),
-                        backward = DurationStats.of(backward),
+                        forward = DurationStats.of(forward, forwardBaseline),
+                        backward = DurationStats.of(backward, backwardBaseline),
                         forwardTakes = takesByContext(forward, calendar),
                         backwardTakes = takesByContext(backward, calendar),
                         forwardFridayRush = takeOn(forward, calendar, TrafficDay.FRIDAY_RUSH),

@@ -49,6 +49,7 @@ import com.geno1024.ai.mapoftime.core.Polyline
 import com.geno1024.ai.mapoftime.core.TimeBucket
 import com.geno1024.ai.mapoftime.core.TrafficContext
 import com.geno1024.ai.mapoftime.core.TrafficDay
+import com.geno1024.ai.mapoftime.core.freeFlowBaselineMs
 import com.geno1024.ai.mapoftime.core.groupByTrafficContext
 import com.geno1024.ai.mapoftime.core.holidayPhaseOf
 import com.geno1024.ai.mapoftime.core.trafficDayOf
@@ -90,9 +91,25 @@ fun EdgeDetailScreen(
         legs = viewModel.legsForEdge(edgeId)
     }
 
+    val calendar = settings.holidayCalendar
     val stats = remember(samples) { DurationStats.of(samples) }
-    val forward = remember(samples) { DurationStats.of(samples.filter { it.direction > 0 }) }
-    val backward = remember(samples) { DurationStats.of(samples.filter { it.direction < 0 }) }
+    val forwardSamples = remember(samples) { samples.filter { it.direction > 0 } }
+    val backwardSamples = remember(samples) { samples.filter { it.direction < 0 } }
+    // Congestion is only a comparison: each direction has its own free-flow
+    // reference. A divided road's downhill side must not be judged by its
+    // uphill side.
+    val forwardBaseline = remember(forwardSamples, calendar) {
+        freeFlowBaselineMs(forwardSamples, calendar = calendar)
+    }
+    val backwardBaseline = remember(backwardSamples, calendar) {
+        freeFlowBaselineMs(backwardSamples, calendar = calendar)
+    }
+    val forward = remember(forwardSamples, forwardBaseline) {
+        DurationStats.of(forwardSamples, forwardBaseline)
+    }
+    val backward = remember(backwardSamples, backwardBaseline) {
+        DurationStats.of(backwardSamples, backwardBaseline)
+    }
     val byBucket = remember(samples) {
         TimeBucket.ordered.associateWith { DurationStats.of(it.samples(samples)) }
     }
@@ -100,7 +117,6 @@ fun EdgeDetailScreen(
     // kept out of the routine table and listed separately below it. A table
     // that quietly averaged 春节 into "weekday off-peak" would be worse than
     // no table at all.
-    val calendar = settings.holidayCalendar
     // Three kinds of day, counted once each: the routine week the table
     // measures, the Friday evening rush, and holidays.
     val routineSamples = remember(samples, calendar) {
@@ -545,6 +561,54 @@ fun EdgeDetailScreen(
                             stringResource(R.string.edge_last_seen),
                             formatDateTime(it.lastSeen),
                         )
+                    }
+                }
+            }
+
+            // Experimental GPS-only congestion indicator. Kept in its own
+            // card so it can be removed in one edit if the signal is noise.
+            if (forwardBaseline > 0 || backwardBaseline > 0) {
+                item {
+                    SectionCard(
+                        title = stringResource(R.string.edge_congestion_title),
+                        subtitle = stringResource(R.string.edge_congestion_hint),
+                    ) {
+                        if (forwardBaseline > 0) {
+                            KeyValueRow(
+                                forwardLabel + " · " + stringResource(R.string.edge_congested_in),
+                                stringResource(
+                                    R.string.edge_congested_value,
+                                    forward.congestedSamples,
+                                    forward.count,
+                                ),
+                            )
+                            KeyValueRow(
+                                forwardLabel + " · " + stringResource(R.string.edge_congested_extra),
+                                if (forward.congestedSamples > 0) {
+                                    formatSeconds(forward.medianCongestedExtraMs)
+                                } else {
+                                    "—"
+                                },
+                            )
+                        }
+                        if (backwardBaseline > 0) {
+                            KeyValueRow(
+                                backwardLabel + " · " + stringResource(R.string.edge_congested_in),
+                                stringResource(
+                                    R.string.edge_congested_value,
+                                    backward.congestedSamples,
+                                    backward.count,
+                                ),
+                            )
+                            KeyValueRow(
+                                backwardLabel + " · " + stringResource(R.string.edge_congested_extra),
+                                if (backward.congestedSamples > 0) {
+                                    formatSeconds(backward.medianCongestedExtraMs)
+                                } else {
+                                    "—"
+                                },
+                            )
+                        }
                     }
                 }
             }

@@ -202,6 +202,11 @@
     <string name="edge_signal_wait">Waiting at a light</string>
     <string name="edge_signal_waited_in">Stopped at a light</string>
     <string name="edge_signal_when_stopped">When at a light</string>
+    <string name="edge_congestion_title">Slow-trip indicator (experimental)</string>
+    <string name="edge_congestion_hint">GPS only. A trip is flagged when it takes at least 30%% longer than a same-direction off-peak baseline. Red lights and slow walking both count.</string>
+    <string name="edge_congested_in">Congested trips</string>
+    <string name="edge_congested_value">%1$d of %2$d</string>
+    <string name="edge_congested_extra">Extra time when slow</string>
     <string name="edge_distance">Length</string>
     <string name="edge_name">Road name</string>
     <string name="edge_name_add">Add road name</string>

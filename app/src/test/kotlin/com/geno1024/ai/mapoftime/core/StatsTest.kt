@@ -102,6 +102,29 @@ class StatsTest {
     }
 
     @Test
+    fun withoutABaselineNoSampleIsCalledCongested() {
+        val stats = DurationStats.of(samples(80, 120, 400))
+        assertEquals(0, stats.congestedSamples)
+        assertEquals(0L, stats.medianCongestedExtraMs)
+    }
+
+    @Test
+    fun congestionIsARatioAgainstTheBaseline() {
+        // 1.30x is flagged; 1.29x is not, so "slow" is a stated comparison.
+        val stats = DurationStats.of(samples(100, 129, 130), baselineMs = 100_000)
+        assertEquals(1, stats.congestedSamples)
+        assertEquals(30_000L, stats.medianCongestedExtraMs)
+    }
+
+    @Test
+    fun extraTimeIsTheMedianAmongCongestedTripsOnly() {
+        val stats = DurationStats.of(samples(100, 130, 160, 190), baselineMs = 100_000)
+        assertEquals(3, stats.congestedSamples)
+        // Extras are 30, 60 and 90 s; the fast trip does not drag it down.
+        assertEquals(60_000L, stats.medianCongestedExtraMs)
+    }
+
+    @Test
     fun signalWaitsAreASeparateSubsetOfTheWait() {
         val stats = DurationStats.of(
             listOf(

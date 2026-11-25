@@ -41,6 +41,10 @@ data class DurationStats(
     val medianSignalWaitedMs: Long,
     /** How many traversals stopped within reach of an OSM traffic light. */
     val signalWaitedSamples: Int,
+    /** Samples slower than [CONGESTION_RATIO] times the free-flow baseline. */
+    val congestedSamples: Int,
+    /** Typical extra time among congested samples, compared with the baseline. */
+    val medianCongestedExtraMs: Long,
     val meanMs: Long,
     val trimmedMeanMs: Long,
     val p25Ms: Long,
@@ -66,6 +70,11 @@ data class DurationStats(
     companion object {
         const val MIN_SAMPLES = 3
 
+        /** A sample this much slower than free flow is flagged as congestion. */
+        const val CONGESTION_RATIO = 1.3
+        private const val CONGESTION_NUMERATOR = 13
+        private const val CONGESTION_DENOMINATOR = 10
+
         val EMPTY = DurationStats(
             count = 0,
             medianMs = 0,
@@ -76,6 +85,8 @@ data class DurationStats(
             medianSignalWaitMs = 0,
             medianSignalWaitedMs = 0,
             signalWaitedSamples = 0,
+            congestedSamples = 0,
+            medianCongestedExtraMs = 0,
             meanMs = 0,
             trimmedMeanMs = 0,
             p25Ms = 0,
@@ -88,7 +99,13 @@ data class DurationStats(
             confidence = Confidence.NONE,
         )
 
-        fun of(samples: List<TraversalSample>): DurationStats {
+        /**
+         * Compute stats for [samples], optionally comparing them against a
+         * same-direction free-flow [baselineMs]. The baseline is the caller's
+         * responsibility: a pooled median across directions or contexts would
+         * turn every normal difference into "congestion".
+         */
+        fun of(samples: List<TraversalSample>, baselineMs: Long = 0): DurationStats {
             if (samples.isEmpty()) return EMPTY
             val durations = samples.map { it.durationMs }.sorted()
             val distances = samples.map { it.distanceM }.sorted()
@@ -105,6 +122,13 @@ data class DurationStats(
             val highFence = p75 + (iqr * 1.5).toLong()
             val outliers = durations.count { it < lowFence || it > highFence }
             val deviations = durations.map { kotlin.math.abs(it - median) }.sorted()
+            val congestedExtras = if (baselineMs > 0) {
+                durations.filter { it * CONGESTION_DENOMINATOR >= baselineMs * CONGESTION_NUMERATOR }
+                    .map { it - baselineMs }
+                    .sorted()
+            } else {
+                emptyList()
+            }
 
             return DurationStats(
                 count = durations.size,
@@ -116,6 +140,8 @@ data class DurationStats(
                 medianSignalWaitMs = percentile(signalWaits, 50.0),
                 medianSignalWaitedMs = percentile(waitedAtSignals, 50.0),
                 signalWaitedSamples = waitedAtSignals.size,
+                congestedSamples = congestedExtras.size,
+                medianCongestedExtraMs = percentile(congestedExtras, 50.0),
                 meanMs = durations.average().toLong(),
                 trimmedMeanMs = trimmedMean(durations),
                 p25Ms = p25,

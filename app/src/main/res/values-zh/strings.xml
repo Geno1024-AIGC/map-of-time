@@ -202,6 +202,11 @@
     <string name="edge_signal_wait">等红灯</string>
     <string name="edge_signal_waited_in">遇到红灯</string>
     <string name="edge_signal_when_stopped">等红灯时</string>
+    <string name="edge_congestion_title">慢行迹象（实验）</string>
+    <string name="edge_congestion_hint">仅看 GPS：同方向畅通时段为基准，慢 30%% 以上记一次。红灯和走得慢都算，分不清原因。</string>
+    <string name="edge_congested_in">拥堵样本</string>
+    <string name="edge_congested_value">%1$d / %2$d</string>
+    <string name="edge_congested_extra">慢行多耗时</string>
     <string name="edge_distance">长度</string>
     <string name="edge_name">路名</string>
     <string name="edge_name_add">填写路名</string>

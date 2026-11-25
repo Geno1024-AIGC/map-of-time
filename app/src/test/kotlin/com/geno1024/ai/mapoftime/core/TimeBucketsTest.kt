@@ -54,4 +54,27 @@ class TimeBucketsTest {
             TimeBucket.ordered.sumOf { it.samples(samples, zone).size },
         )
     }
+
+    private fun sample(seconds: Long, hour: Int) =
+        TraversalSample(seconds * 1000, 100.0, 1, at(hour))
+
+    @Test
+    fun freeFlowBaselineIgnoresRushHour() {
+        val samples = listOf(
+            sample(100, 12),
+            sample(110, 13),
+            sample(120, 14),
+            sample(500, 7),
+            sample(600, 18),
+        )
+        assertEquals(110_000L, freeFlowBaselineMs(samples, zone))
+    }
+
+    @Test
+    fun freeFlowBaselineFallsBackToTheFastestQuarter() {
+        val peak = listOf(sample(100, 7), sample(200, 8), sample(300, 17), sample(400, 18))
+        assertEquals(175_000L, freeFlowBaselineMs(peak, zone))
+        // Two trips cannot establish "free flow"; there is nothing to compare with.
+        assertEquals(0L, freeFlowBaselineMs(peak.take(2), zone))
+    }
 }
