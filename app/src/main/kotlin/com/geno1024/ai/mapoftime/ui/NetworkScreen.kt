@@ -181,12 +181,23 @@ fun NetworkScreen(
     }
 
     // One track per segment, in graph.edges order: onTrackTap uses this index.
-    // Straight lines share the junctions' exact coordinates; recorded shapes
-    // are snapped to the same endpoints, so either way the lines meet the dots.
+    // Straight lines share the junctions' exact coordinates; road shapes are
+    // snapped to the same endpoints, so either way the lines meet the dots.
     val tracks = remember(graph, useRoadShape) {
         graph.edges.map { summary ->
             val shape = summary.shape
             if (useRoadShape && shape.size >= 2) shape else listOf(summary.edge.from, summary.edge.to)
+        }
+    }
+    // A straight fallback is not a straight road: draw it dashed and say how
+    // many there are, so a gap in OSM coverage is not mistaken for geometry.
+    val dashedTracks = remember(graph, useRoadShape) {
+        if (!useRoadShape) {
+            emptySet()
+        } else {
+            graph.edges.mapIndexedNotNull { index, summary ->
+                index.takeIf { summary.shape.size < 2 }
+            }.toSet()
         }
     }
     // Highlight the chosen path along the same geometry the map draws. Node
@@ -430,6 +441,7 @@ fun NetworkScreen(
                 Box(Modifier.fillMaxWidth().height(250.dp)) {
                     TrackMap(
                         tracks = tracks,
+                        dashedTracks = dashedTracks,
                         modifier = Modifier.fillMaxSize(),
                         markers = markers,
                         tilesEnabled = settings.mapTiles,
@@ -498,6 +510,17 @@ fun NetworkScreen(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (dashedTracks.isNotEmpty()) {
+                        Text(
+                            text = pluralStringResource(
+                                R.plurals.network_shape_no_shape,
+                                dashedTracks.size,
+                                dashedTracks.size,
+                            ),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
             }

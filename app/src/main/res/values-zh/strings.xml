@@ -372,6 +372,9 @@
     <plurals name="trip_legs_count">
         <item quantity="other">%1$d 段</item>
     </plurals>
+    <plurals name="network_shape_no_shape">
+        <item quantity="other">%1$d 段画成虚线：没有 OSM 路径或可用轨迹，暂以直线代替。</item>
+    </plurals>
     <plurals name="settings_cache_days_value">
         <item quantity="other">%1$d 天</item>
     </plurals>

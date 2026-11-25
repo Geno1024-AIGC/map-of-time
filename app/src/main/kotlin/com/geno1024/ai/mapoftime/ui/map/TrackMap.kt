@@ -100,6 +100,11 @@ data class MapRing(
 @Composable
 fun TrackMap(
     tracks: List<List<LatLon>>,
+    /**
+     * Indices into [tracks] drawn dashed: a straight line standing in for an
+     * edge with no OSM path and no usable recorded shape.
+     */
+    dashedTracks: Set<Int> = emptySet(),
     modifier: Modifier = Modifier,
     markers: List<MapMarker> = emptyList(),
     tilesEnabled: Boolean = true,
@@ -416,8 +421,8 @@ fun TrackMap(
                 ((latToY(point.lat, worldPx) - centerWorldY) * scale + size.height / 2.0).toFloat(),
             )
 
-            for (track in displayTracks) {
-                if (track.size < 2) continue
+            displayTracks.forEachIndexed { index, track ->
+                if (track.size < 2) return@forEachIndexed
                 val path = Path()
                 val first = project(track.first())
                 path.moveTo(first.x, first.y)
@@ -428,15 +433,25 @@ fun TrackMap(
                 // A selected leg must stand out without hiding the rest of the
                 // trip: dim everything else instead of removing it.
                 val dimmed = displayHighlight != null
+                val dashed = index in dashedTracks
+                val dash = if (dashed) {
+                    PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx()))
+                } else {
+                    null
+                }
                 drawPath(
                     path,
-                    color = Color.Black.copy(alpha = if (dimmed) 0.2f else 0.45f),
-                    style = Stroke(width = 9.dp.toPx()),
+                    color = Color.Black.copy(alpha = if (dimmed) 0.2f else if (dashed) 0.25f else 0.45f),
+                    style = Stroke(width = 9.dp.toPx(), pathEffect = dash),
                 )
                 drawPath(
                     path,
-                    color = colors.primary.copy(alpha = if (dimmed) 0.35f else 1f),
-                    style = Stroke(width = 4.5.dp.toPx()),
+                    color = if (dashed) {
+                        colors.onSurfaceVariant.copy(alpha = if (dimmed) 0.3f else 0.8f)
+                    } else {
+                        colors.primary.copy(alpha = if (dimmed) 0.35f else 1f)
+                    },
+                    style = Stroke(width = 4.5.dp.toPx(), pathEffect = dash),
                 )
             }
 

@@ -374,6 +374,10 @@
         <item quantity="one">%1$d leg</item>
         <item quantity="other">%1$d legs</item>
     </plurals>
+    <plurals name="network_shape_no_shape">
+        <item quantity="one">%1$d edge is dashed: no OSM path or usable trace, so a straight line is shown.</item>
+        <item quantity="other">%1$d edges are dashed: no OSM path or usable trace, so straight lines are shown.</item>
+    </plurals>
     <plurals name="settings_cache_days_value">
         <item quantity="one">%1$d day</item>
         <item quantity="other">%1$d days</item>
