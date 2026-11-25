@@ -77,6 +77,7 @@
     <string name="network_shape_straight">Straight</string>
     <string name="network_shape_road">Along roads</string>
     <string name="network_shape_road_hint">Uses cached OSM road geometry when available, otherwise the typical recorded path.</string>
+    <string name="network_shape_loading">Loading road shapes…</string>
     <string name="network_view_graph">Graph</string>
     <string name="network_view_list">List</string>
     <string name="network_pick_node">Tap a dot on the map to see what leaves that junction.</string>

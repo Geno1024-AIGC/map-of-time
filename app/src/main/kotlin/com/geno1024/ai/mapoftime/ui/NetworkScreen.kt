@@ -128,6 +128,12 @@ fun NetworkScreen(
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 
+    // Scanning legs and cached ways is drawing-only work: do it when road
+    // shapes are actually asked for, then reuse the result until a refresh.
+    LaunchedEffect(useRoadShape, viewModel.summaries) {
+        if (useRoadShape) viewModel.loadRoadShapes()
+    }
+
     LaunchedEffect(requestedNode) {
         if (requestedNode == null) return@LaunchedEffect
         // A filter left over from an earlier visit could hide the very node we
@@ -145,9 +151,12 @@ fun NetworkScreen(
         onNodeRequestHandled()
     }
 
-    val graph = remember(viewModel.summaries, modeFilter) {
+    val shapedSummaries = remember(viewModel.summaries, viewModel.roadShapes, viewModel.roadShapesReady, useRoadShape) {
+        if (useRoadShape) viewModel.withRoadShapes(viewModel.summaries) else viewModel.summaries
+    }
+    val graph = remember(shapedSummaries, modeFilter) {
         NetworkGraphs.build(
-            viewModel.summaries.filter { modeFilter == null || it.edge.mode == modeFilter },
+            shapedSummaries.filter { modeFilter == null || it.edge.mode == modeFilter },
         )
     }
     val selected = graph.node(selectedKey)
@@ -163,9 +172,9 @@ fun NetworkScreen(
     val nowMs = System.currentTimeMillis()
     val now = TrafficContext.of(epochMs = nowMs, calendar = settings.holidayCalendar)
     val fridayRush = trafficDayOf(nowMs, calendar = settings.holidayCalendar) == TrafficDay.FRIDAY_RUSH
-    val edgeSummaries = remember(viewModel.summaries, modeFilter, edgeSort, edgeQuery) {
+    val edgeSummaries = remember(shapedSummaries, modeFilter, edgeSort, edgeQuery) {
         val text = edgeQuery.trim()
-        val filtered = viewModel.summaries
+        val filtered = shapedSummaries
             .filter { modeFilter == null || it.edge.mode == modeFilter }
             .filter {
                 text.isEmpty() ||
@@ -191,8 +200,8 @@ fun NetworkScreen(
     }
     // A straight fallback is not a straight road: draw it dashed and say how
     // many there are, so a gap in OSM coverage is not mistaken for geometry.
-    val dashedTracks = remember(graph, useRoadShape) {
-        if (!useRoadShape) {
+    val dashedTracks = remember(graph, useRoadShape, viewModel.roadShapesReady) {
+        if (!useRoadShape || !viewModel.roadShapesReady) {
             emptySet()
         } else {
             graph.edges.mapIndexedNotNull { index, summary ->
@@ -510,16 +519,23 @@ fun NetworkScreen(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (dashedTracks.isNotEmpty()) {
-                        Text(
-                            text = pluralStringResource(
-                                R.plurals.network_shape_no_shape,
-                                dashedTracks.size,
-                                dashedTracks.size,
-                            ),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                    when {
+                        viewModel.roadShapesLoading || !viewModel.roadShapesReady ->
+                            Text(
+                                text = stringResource(R.string.network_shape_loading),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        dashedTracks.isNotEmpty() ->
+                            Text(
+                                text = pluralStringResource(
+                                    R.plurals.network_shape_no_shape,
+                                    dashedTracks.size,
+                                    dashedTracks.size,
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                     }
                 }
                 Spacer(Modifier.height(8.dp))

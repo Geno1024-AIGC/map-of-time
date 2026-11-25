@@ -26,9 +26,10 @@ data class EdgeSummary(
     val forwardFridayRush: BucketTake = BucketTake.NONE,
     val backwardFridayRush: BucketTake = BucketTake.NONE,
     /**
-     * One recorded traversal's on-road shape, oriented from [Edge.from] to
-     * [Edge.to]. Empty when no leg reaches both ends; the map then draws a
-     * straight line. Drawing only: none of the time statistics use it.
+     * The on-road drawing shape, oriented from [Edge.from] to [Edge.to]. Empty
+     * until the network loads road shapes, and empty for an edge with neither
+     * OSM geometry nor a usable recording; the map then draws a straight line.
+     * Drawing only: none of the time statistics use it.
      */
     val shape: List<LatLon> = emptyList(),
 ) {

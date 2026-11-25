@@ -7,13 +7,12 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geno1024.ai.mapoftime.AppContainer
-import com.geno1024.ai.mapoftime.analysis.EdgeGeometry
-import com.geno1024.ai.mapoftime.analysis.OsmEdgeGeometry
 import com.geno1024.ai.mapoftime.analysis.OsmPathIndex
 import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
 import com.geno1024.ai.mapoftime.analysis.PointDetail
 import com.geno1024.ai.mapoftime.analysis.PointDetails
+import com.geno1024.ai.mapoftime.analysis.RoadShapes
 import com.geno1024.ai.mapoftime.analysis.EdgeSummary
 import com.geno1024.ai.mapoftime.analysis.TripAnalyzer
 import com.geno1024.ai.mapoftime.core.BucketTake
@@ -55,6 +54,7 @@ import com.geno1024.ai.mapoftime.update.UpdateException
 import com.geno1024.ai.mapoftime.update.UpdateInstaller
 import com.geno1024.ai.mapoftime.update.UpdateState
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -79,6 +79,21 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         private set
     var roads by mutableStateOf<List<Road>>(emptyList())
         private set
+
+    /**
+     * Drawing-only geometry, loaded the first time the network asks for road
+     * shapes. Refreshing the analysis throws it away so a new leg can change
+     * the typical shape, but an ordinary straight-line visit pays nothing.
+     */
+    var roadShapes by mutableStateOf<Map<Long, List<LatLon>>>(emptyMap())
+        private set
+    var roadShapesReady by mutableStateOf(false)
+        private set
+    var roadShapesLoading by mutableStateOf(false)
+        private set
+
+    private var roadShapeJob: Job? = null
+    private var roadShapeGeneration = 0
 
     /** Names the user gave a single point; these outrank a junction's name. */
     var pointNames by mutableStateOf<Map<String, String>>(emptyMap())
@@ -121,6 +136,14 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun refresh() {
+        // A new analysis means new edges or samples; the old drawing shapes
+        // may name the same edge but describe a different road.
+        roadShapeGeneration++
+        roadShapeJob?.cancel()
+        roadShapeJob = null
+        roadShapesLoading = false
+        roadShapesReady = false
+        roadShapes = emptyMap()
         viewModelScope.launch {
             loading = true
             val loaded = withContext(container.dbDispatcher) {
@@ -131,8 +154,6 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 val byMode = TripMode.entries.associateWith {
                     container.repository.samplesByMode(it, includePartial)
                 }
-                val shapes = container.repository.edgeShapes()
-                val osmPaths = OsmPathIndex(container.osm.cachedWays())
                 val summaries = edges.map { edge ->
                     val samples = byMode[edge.mode]?.get(edge.id).orEmpty()
                     val forward = samples.filter { it.direction > 0 }
@@ -148,11 +169,6 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         backwardTakes = takesByContext(backward, calendar),
                         forwardFridayRush = takeOn(forward, calendar, TrafficDay.FRIDAY_RUSH),
                         backwardFridayRush = takeOn(backward, calendar, TrafficDay.FRIDAY_RUSH),
-                        shape = OsmEdgeGeometry.shape(osmPaths, edge)
-                            ?.let(EdgeGeometry::clean)
-                            ?: shapes[edge.id]?.let { recorded ->
-                                EdgeGeometry.displayShape(edge, recorded)
-                            }.orEmpty(),
                     )
                 }.sortedWith(compareByDescending<EdgeSummary> { it.sampleCount }.thenBy { it.edge.displayName })
                 Loaded(
@@ -172,6 +188,39 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
             pointRoads = loaded.pointRoads
             loading = false
         }
+    }
+
+    /**
+     * Loads road geometry once per analysis, only after the network switches
+     * to road shapes. A refresh cancels and invalidates an in-flight load, so
+     * a late answer cannot repaint new edges with an old road network.
+     */
+    fun loadRoadShapes() {
+        if (roadShapesReady || roadShapeJob?.isActive == true || summaries.isEmpty()) return
+        val generation = roadShapeGeneration
+        val edges = summaries.map { it.edge }
+        roadShapesLoading = true
+        roadShapeJob = viewModelScope.launch {
+            try {
+                val loaded = withContext(container.dbDispatcher) {
+                    val recorded = container.repository.edgeShapes()
+                    val osmPaths = OsmPathIndex(container.osm.cachedWays())
+                    RoadShapes.build(edges, recorded, osmPaths)
+                }
+                if (generation == roadShapeGeneration) {
+                    roadShapes = loaded
+                    roadShapesReady = true
+                }
+            } finally {
+                if (generation == roadShapeGeneration) roadShapesLoading = false
+            }
+        }
+    }
+
+    /** Statistics are untouched; only the drawing copy gets a shape. */
+    fun withRoadShapes(source: List<EdgeSummary>): List<EdgeSummary> {
+        if (!roadShapesReady || roadShapes.isEmpty()) return source
+        return source.map { it.copy(shape = roadShapes[it.edge.id].orEmpty()) }
     }
 
     fun start(context: Context, mode: TripMode) = Recorder.start(context, mode)
