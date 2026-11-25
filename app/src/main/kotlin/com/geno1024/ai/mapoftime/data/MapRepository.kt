@@ -399,11 +399,12 @@ class MapRepository(private val helper: MapDb) {
         ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toLeg()) } }
 
     /**
-     * One candidate path per edge, for drawing the network along the roads the
-     * user actually travelled. Prefer a complete, long traversal; only its
-     * polyline is decoded, so a busy network does not decode every leg.
+     * A few candidate paths per edge, for drawing the network along the roads
+     * the user actually travelled. Prefer complete, long traversals; the shape
+     * picker compares them and rejects the ones that miss the endpoints. Only
+     * these candidates are decoded, never every leg in the database.
      */
-    fun edgeShapes(): Map<Long, EdgeShapeRow> =
+    fun edgeShapes(perEdge: Int = 4): Map<Long, List<EdgeShapeRow>> =
         db.rawQuery(
             """
             SELECT edge_id, partial, polyline
@@ -413,13 +414,13 @@ class MapRepository(private val helper: MapDb) {
             """.trimIndent(),
             null,
         ).use { cursor ->
-            buildMap {
+            buildMap<Long, MutableList<EdgeShapeRow>> {
                 while (cursor.moveToNext()) {
-                    val edgeId = cursor.getLong(0)
-                    if (containsKey(edgeId)) continue
                     val polyline = cursor.getString(2).orEmpty()
                     if (polyline.isBlank()) continue
-                    put(edgeId, EdgeShapeRow(polyline, cursor.getInt(1) != 0))
+                    val candidates = getOrPut(cursor.getLong(0)) { ArrayList(perEdge) }
+                    if (candidates.size >= perEdge) continue
+                    candidates.add(EdgeShapeRow(polyline, cursor.getInt(1) != 0))
                 }
             }
         }

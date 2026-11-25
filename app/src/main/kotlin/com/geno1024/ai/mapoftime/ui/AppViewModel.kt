@@ -146,7 +146,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         forwardFridayRush = takeOn(forward, calendar, TrafficDay.FRIDAY_RUSH),
                         backwardFridayRush = takeOn(backward, calendar, TrafficDay.FRIDAY_RUSH),
                         shape = shapes[edge.id]?.let { recorded ->
-                            EdgeGeometry.displayShape(edge, recorded.polyline, recorded.partial)
+                            EdgeGeometry.displayShape(edge, recorded)
                         }.orEmpty(),
                     )
                 }.sortedWith(compareByDescending<EdgeSummary> { it.sampleCount }.thenBy { it.edge.displayName })
