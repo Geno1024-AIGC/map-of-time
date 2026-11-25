@@ -8,6 +8,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geno1024.ai.mapoftime.AppContainer
 import com.geno1024.ai.mapoftime.analysis.EdgeGeometry
+import com.geno1024.ai.mapoftime.analysis.OsmEdgeGeometry
+import com.geno1024.ai.mapoftime.analysis.OsmPathIndex
 import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
 import com.geno1024.ai.mapoftime.analysis.PointDetail
@@ -130,6 +132,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                     container.repository.samplesByMode(it, includePartial)
                 }
                 val shapes = container.repository.edgeShapes()
+                val osmPaths = OsmPathIndex(container.osm.cachedWays())
                 val summaries = edges.map { edge ->
                     val samples = byMode[edge.mode]?.get(edge.id).orEmpty()
                     val forward = samples.filter { it.direction > 0 }
@@ -145,9 +148,11 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         backwardTakes = takesByContext(backward, calendar),
                         forwardFridayRush = takeOn(forward, calendar, TrafficDay.FRIDAY_RUSH),
                         backwardFridayRush = takeOn(backward, calendar, TrafficDay.FRIDAY_RUSH),
-                        shape = shapes[edge.id]?.let { recorded ->
-                            EdgeGeometry.displayShape(edge, recorded)
-                        }.orEmpty(),
+                        shape = OsmEdgeGeometry.shape(osmPaths, edge)
+                            ?.let(EdgeGeometry::clean)
+                            ?: shapes[edge.id]?.let { recorded ->
+                                EdgeGeometry.displayShape(edge, recorded)
+                            }.orEmpty(),
                     )
                 }.sortedWith(compareByDescending<EdgeSummary> { it.sampleCount }.thenBy { it.edge.displayName })
                 Loaded(

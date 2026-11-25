@@ -55,8 +55,11 @@ object EdgeGeometry {
             }
             normalised[best]
         }
-        return cap(simplify(chosen, RDP_TOLERANCE_M))
+        return clean(chosen)
     }
+
+    /** Cheap cleanup for geometry that already has trustworthy endpoints. */
+    fun clean(points: List<LatLon>): List<LatLon> = cap(simplify(points, RDP_TOLERANCE_M))
 
     /** Orients one leg from the edge's start and snaps both ends to the nodes. */
     private fun normalise(edge: Edge, candidate: EdgeShapeRow): List<LatLon>? {

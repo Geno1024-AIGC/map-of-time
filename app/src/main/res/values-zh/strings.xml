@@ -76,7 +76,7 @@
     <string name="network_show_node_labels">节点标签</string>
     <string name="network_shape_straight">直线</string>
     <string name="network_shape_road">沿路曲线</string>
-    <string name="network_shape_road_hint">曲线取该段最接近其它记录的走法；没有可用轨迹的段仍画直线。</string>
+    <string name="network_shape_road_hint">优先用缓存的 OSM 道路几何；没有时用最接近其它记录的走法。</string>
     <string name="network_view_graph">图</string>
     <string name="network_view_list">列表</string>
     <string name="network_pick_node">在地图上点一个点，查看从那里出发的边。</string>

@@ -1,6 +1,7 @@
 package com.geno1024.ai.mapoftime.data
 
 import android.content.ContentValues
+import android.database.Cursor
 import androidx.core.database.sqlite.transaction
 import com.geno1024.ai.mapoftime.core.Bounds
 import com.geno1024.ai.mapoftime.core.LatLon
@@ -76,6 +77,15 @@ class OsmRepository(
     fun cachedTileCount(): Int =
         db.readableDatabase.rawQuery("SELECT COUNT(*) FROM osm_tiles", null).use {
             if (it.moveToFirst()) it.getInt(0) else 0
+        }
+
+    /** Every cached way, for geometry work that spans the whole network. */
+    fun cachedWays(): List<OsmWay> =
+        db.readableDatabase.rawQuery(
+            "SELECT way_id, highway, name, ref, oneway, node_ids, coords FROM osm_ways",
+            null,
+        ).use { cursor ->
+            buildList { while (cursor.moveToNext()) parseWay(cursor)?.let(::add) }
         }
 
     /** Stores one tile; throws when Overpass did not give a usable answer. */
@@ -174,26 +184,29 @@ class OsmRepository(
             """.trimIndent(),
             tiles.toTypedArray(),
         ).use { cursor ->
-            while (cursor.moveToNext()) {
-                val nodeIds = cursor.getString(5).split(',').mapNotNull { it.toLongOrNull() }
-                val points = cursor.getString(6).split(';').mapNotNull { pair ->
-                    val comma = pair.indexOf(',')
-                    if (comma <= 0) return@mapNotNull null
-                    LatLon(pair.substring(0, comma).toDouble(), pair.substring(comma + 1).toDouble())
-                }
-                if (nodeIds.size != points.size || points.size < 2) continue
-                ways += OsmWay(
-                    id = cursor.getLong(0),
-                    highway = cursor.getString(1) ?: "road",
-                    name = cursor.getString(2),
-                    ref = cursor.getString(3),
-                    oneway = cursor.getInt(4) != 0,
-                    nodeIds = nodeIds,
-                    points = points,
-                )
-            }
+            while (cursor.moveToNext()) parseWay(cursor)?.let(ways::add)
         }
         return ways
+    }
+
+    /** Columns 0..6 are shared by [loadTiles] and [cachedWays]. */
+    private fun parseWay(cursor: Cursor): OsmWay? {
+        val nodeIds = cursor.getString(5).split(',').mapNotNull { it.toLongOrNull() }
+        val points = cursor.getString(6).split(';').mapNotNull { pair ->
+            val comma = pair.indexOf(',')
+            if (comma <= 0) return@mapNotNull null
+            LatLon(pair.substring(0, comma).toDouble(), pair.substring(comma + 1).toDouble())
+        }
+        if (nodeIds.size != points.size || points.size < 2) return null
+        return OsmWay(
+            id = cursor.getLong(0),
+            highway = cursor.getString(1) ?: "road",
+            name = cursor.getString(2),
+            ref = cursor.getString(3),
+            oneway = cursor.getInt(4) != 0,
+            nodeIds = nodeIds,
+            points = points,
+        )
     }
 
     private fun tilesFor(bounds: Bounds): List<String> {
