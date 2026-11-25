@@ -11,6 +11,9 @@ import com.geno1024.ai.mapoftime.core.TrackPoint
 import com.geno1024.ai.mapoftime.core.TraversalSample
 import com.geno1024.ai.mapoftime.core.TripMode
 
+/** One leg whose recorded path can serve as an edge's on-road shape. */
+data class EdgeShapeRow(val polyline: String, val partial: Boolean)
+
 /**
  * All reads and writes of trip data. Every method is synchronous; callers run
  * them on a background dispatcher so the recorder never blocks the UI thread.
@@ -394,6 +397,32 @@ class MapRepository(private val helper: MapDb) {
             "SELECT * FROM legs WHERE edge_id = ? ORDER BY start_ms",
             arrayOf(edgeId.toString()),
         ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.toLeg()) } }
+
+    /**
+     * One candidate path per edge, for drawing the network along the roads the
+     * user actually travelled. Prefer a complete, long traversal; only its
+     * polyline is decoded, so a busy network does not decode every leg.
+     */
+    fun edgeShapes(): Map<Long, EdgeShapeRow> =
+        db.rawQuery(
+            """
+            SELECT edge_id, partial, polyline
+              FROM legs
+             WHERE edge_id IS NOT NULL
+             ORDER BY edge_id, partial ASC, distance_m DESC
+            """.trimIndent(),
+            null,
+        ).use { cursor ->
+            buildMap {
+                while (cursor.moveToNext()) {
+                    val edgeId = cursor.getLong(0)
+                    if (containsKey(edgeId)) continue
+                    val polyline = cursor.getString(2).orEmpty()
+                    if (polyline.isBlank()) continue
+                    put(edgeId, EdgeShapeRow(polyline, cursor.getInt(1) != 0))
+                }
+            }
+        }
 
     /** Identity of many edges at once, for badging a trip's leg list. */
     fun edgeIdentities(ids: List<Long>): Map<Long, MatchKind> {

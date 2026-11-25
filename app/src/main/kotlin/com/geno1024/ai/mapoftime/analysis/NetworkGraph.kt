@@ -49,7 +49,22 @@ data class RouteHop(
     val typicalMs: Long,
     /** Some or all of this leg's samples were recorded the other way. */
     val estimated: Boolean,
-)
+) {
+    /**
+     * The on-road line to draw for this hop, oriented the way it is travelled.
+     * Falls back to the two endpoints when the edge has no usable recording.
+     */
+    val shape: List<LatLon>
+        get() = when {
+            link.summary.shape.isEmpty() -> if (link.fromHere) {
+                listOf(link.summary.edge.from, link.summary.edge.to)
+            } else {
+                listOf(link.summary.edge.to, link.summary.edge.from)
+            }
+            link.fromHere -> link.summary.shape
+            else -> link.summary.shape.asReversed()
+        }
+}
 
 /**
  * A path through the travelled network, with the time it typically takes.

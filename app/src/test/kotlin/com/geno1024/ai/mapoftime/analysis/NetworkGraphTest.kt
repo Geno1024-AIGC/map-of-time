@@ -24,6 +24,7 @@ class NetworkGraphTest {
         toName: String? = null,
         forwardMs: Long = 60_000,
         backwardMs: Long = 0,
+        shape: List<LatLon> = emptyList(),
     ): EdgeSummary {
         val samples = buildList {
             if (forwardMs > 0) add(TraversalSample(forwardMs, 100.0, 1, 0))
@@ -51,6 +52,7 @@ class NetworkGraphTest {
             combined = DurationStats.of(samples),
             forward = DurationStats.of(samples.filter { it.direction > 0 }),
             backward = DurationStats.of(samples.filter { it.direction < 0 }),
+            shape = shape,
         )
     }
 
@@ -175,5 +177,23 @@ class NetworkGraphTest {
 
         assertEquals("north gate", graph.node("osm:1")?.name)
         assertEquals("metro", graph.node("osm:3")?.name)
+    }
+
+    @Test
+    fun routeShapeFollowsTheDirectionOfTravel() {
+        val start = LatLon(0.0, 0.0)
+        val end = LatLon(0.0, 0.001)
+        val bend = LatLon(0.0002, 0.0005)
+        val graph = NetworkGraphs.build(
+            listOf(summary("osm:1", "osm:2", from = start, to = end, shape = listOf(start, bend, end))),
+        )
+
+        val there = graph.route("osm:1", "osm:2")!!.hops.single().shape
+        val back = graph.route("osm:2", "osm:1")!!.hops.single().shape
+
+        assertEquals(start, there.first())
+        assertEquals(end, there.last())
+        assertEquals(end, back.first())
+        assertEquals(start, back.last())
     }
 }

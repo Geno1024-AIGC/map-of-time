@@ -2,6 +2,7 @@ package com.geno1024.ai.mapoftime.analysis
 
 import com.geno1024.ai.mapoftime.core.BucketTake
 import com.geno1024.ai.mapoftime.core.DurationStats
+import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.TrafficContext
 import com.geno1024.ai.mapoftime.data.Edge
 
@@ -24,6 +25,12 @@ data class EdgeSummary(
      */
     val forwardFridayRush: BucketTake = BucketTake.NONE,
     val backwardFridayRush: BucketTake = BucketTake.NONE,
+    /**
+     * One recorded traversal's on-road shape, oriented from [Edge.from] to
+     * [Edge.to]. Empty when no leg reaches both ends; the map then draws a
+     * straight line. Drawing only: none of the time statistics use it.
+     */
+    val shape: List<LatLon> = emptyList(),
 ) {
     val sampleCount: Int get() = combined.count
 }

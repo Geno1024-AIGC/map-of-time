@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.geno1024.ai.mapoftime.AppContainer
+import com.geno1024.ai.mapoftime.analysis.EdgeGeometry
 import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
 import com.geno1024.ai.mapoftime.analysis.PointDetail
@@ -128,6 +129,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 val byMode = TripMode.entries.associateWith {
                     container.repository.samplesByMode(it, includePartial)
                 }
+                val shapes = container.repository.edgeShapes()
                 val summaries = edges.map { edge ->
                     val samples = byMode[edge.mode]?.get(edge.id).orEmpty()
                     val forward = samples.filter { it.direction > 0 }
@@ -143,6 +145,9 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                         backwardTakes = takesByContext(backward, calendar),
                         forwardFridayRush = takeOn(forward, calendar, TrafficDay.FRIDAY_RUSH),
                         backwardFridayRush = takeOn(backward, calendar, TrafficDay.FRIDAY_RUSH),
+                        shape = shapes[edge.id]?.let { recorded ->
+                            EdgeGeometry.displayShape(edge, recorded.polyline, recorded.partial)
+                        }.orEmpty(),
                     )
                 }.sortedWith(compareByDescending<EdgeSummary> { it.sampleCount }.thenBy { it.edge.displayName })
                 Loaded(

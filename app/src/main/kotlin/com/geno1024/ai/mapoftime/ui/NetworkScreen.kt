@@ -113,6 +113,10 @@ fun NetworkScreen(
     }
     var showNodes by rememberSaveable { mutableStateOf(true) }
     var showNodeLabels by rememberSaveable { mutableStateOf(true) }
+    // A drawing choice, not a statistics one: straight lines keep the graph
+    // readable, recorded curves show how the roads actually bend. Both draw
+    // one line per edge in the same order, so taps still open the right edge.
+    var useRoadShape by rememberSaveable { mutableStateOf(false) }
     var edgeSort by rememberSaveable(stateSaver = enumNameSaver(EdgeSort.entries.toTypedArray())) {
         mutableStateOf(EdgeSort.SAMPLES)
     }
@@ -176,13 +180,31 @@ fun NetworkScreen(
         }
     }
 
-    // One track per segment; shared junctions produce identical coordinates,
-    // so the lines meet exactly where the node dots are.
-    val tracks = remember(graph) {
-        graph.edges.map { listOf(it.edge.from, it.edge.to) }
+    // One track per segment, in graph.edges order: onTrackTap uses this index.
+    // Straight lines share the junctions' exact coordinates; recorded shapes
+    // are snapped to the same endpoints, so either way the lines meet the dots.
+    val tracks = remember(graph, useRoadShape) {
+        graph.edges.map { summary ->
+            val shape = summary.shape
+            if (useRoadShape && shape.size >= 2) shape else listOf(summary.edge.from, summary.edge.to)
+        }
     }
-    val routeHighlight = remember(graph, route) {
-        route?.nodeKeys?.mapNotNull { graph.node(it)?.at }?.takeIf { it.size >= 2 }
+    // Highlight the chosen path along the same geometry the map draws. Node
+    // keys are enough for straight lines, but a curved edge needs its bends.
+    val routeHighlight = remember(graph, route, useRoadShape) {
+        if (!useRoadShape) {
+            route?.nodeKeys?.mapNotNull { graph.node(it)?.at }?.takeIf { it.size >= 2 }
+        } else {
+            route?.let { chosen ->
+                buildList {
+                    chosen.hops.forEachIndexed { index, hop ->
+                        val shape = hop.shape
+                        if (shape.size < 2) return@forEachIndexed
+                        if (index == 0) addAll(shape) else addAll(shape.drop(1))
+                    }
+                }.takeIf { it.size >= 2 }
+            }
+        }
     }
     val previewKeys = remember(preview) {
         preview?.refs?.mapTo(HashSet()) { it.key } ?: emptySet<String>()
@@ -324,7 +346,7 @@ fun NetworkScreen(
         )
 
         Column(Modifier.padding(horizontal = 16.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = viewMode == NetworkView.GRAPH,
                     onClick = { viewMode = NetworkView.GRAPH },
@@ -343,6 +365,16 @@ fun NetworkScreen(
                         selected = routeMode,
                         onClick = { routeMode = !routeMode },
                         label = { Text(stringResource(R.string.network_route_mode)) },
+                    )
+                    FilterChip(
+                        selected = !useRoadShape,
+                        onClick = { useRoadShape = false },
+                        label = { Text(stringResource(R.string.network_shape_straight)) },
+                    )
+                    FilterChip(
+                        selected = useRoadShape,
+                        onClick = { useRoadShape = true },
+                        label = { Text(stringResource(R.string.network_shape_road)) },
                     )
                 }
             }
@@ -459,6 +491,14 @@ fun NetworkScreen(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (useRoadShape) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.network_shape_road_hint),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
             }
 
