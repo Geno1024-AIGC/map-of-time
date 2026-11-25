@@ -396,47 +396,73 @@ fun NetworkScreen(
         )
 
         Column(Modifier.padding(horizontal = 16.dp)) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = viewMode == NetworkView.GRAPH,
-                    onClick = { viewMode = NetworkView.GRAPH },
-                    label = { Text(stringResource(R.string.network_view_graph)) },
+            // View, map tools and the data filter are different decisions. One
+            // unlabelled row of chips made "Straight" look like a view, so keep
+            // each group under its own caption and wrap independently.
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = stringResource(R.string.network_group_view),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                FilterChip(
-                    selected = viewMode == NetworkView.LIST,
-                    onClick = {
-                        viewMode = NetworkView.LIST
-                        routeMode = false
-                    },
-                    label = { Text(stringResource(R.string.network_view_list)) },
-                )
-                FilterChip(
-                    selected = viewMode == NetworkView.UNNAMED,
-                    onClick = {
-                        viewMode = NetworkView.UNNAMED
-                        routeMode = false
-                    },
-                    label = { Text(stringResource(R.string.network_view_unnamed)) },
-                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = viewMode == NetworkView.GRAPH,
+                        onClick = { viewMode = NetworkView.GRAPH },
+                        label = { Text(stringResource(R.string.network_view_graph)) },
+                    )
+                    FilterChip(
+                        selected = viewMode == NetworkView.LIST,
+                        onClick = {
+                            viewMode = NetworkView.LIST
+                            routeMode = false
+                        },
+                        label = { Text(stringResource(R.string.network_view_list)) },
+                    )
+                    FilterChip(
+                        selected = viewMode == NetworkView.UNNAMED,
+                        onClick = {
+                            viewMode = NetworkView.UNNAMED
+                            routeMode = false
+                        },
+                        label = { Text(stringResource(R.string.network_view_unnamed)) },
+                    )
+                }
                 if (viewMode == NetworkView.GRAPH) {
-                    FilterChip(
-                        selected = routeMode,
-                        onClick = { routeMode = !routeMode },
-                        label = { Text(stringResource(R.string.network_route_mode)) },
+                    Text(
+                        text = stringResource(R.string.network_group_map),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    FilterChip(
-                        selected = !useRoadShape,
-                        onClick = { useRoadShape = false },
-                        label = { Text(stringResource(R.string.network_shape_straight)) },
-                    )
-                    FilterChip(
-                        selected = useRoadShape,
-                        onClick = { useRoadShape = true },
-                        label = { Text(stringResource(R.string.network_shape_road)) },
-                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = routeMode,
+                            onClick = { routeMode = !routeMode },
+                            label = { Text(stringResource(R.string.network_route_mode)) },
+                        )
+                        // One chip for two mutually exclusive ways to draw:
+                        // the label says what is currently on the map.
+                        FilterChip(
+                            selected = useRoadShape,
+                            onClick = { useRoadShape = !useRoadShape },
+                            label = {
+                                Text(
+                                    stringResource(
+                                        if (useRoadShape) R.string.network_shape_road
+                                        else R.string.network_shape_straight,
+                                    ),
+                                )
+                            },
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.network_group_mode),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             ModeFilter(
                 selected = modeFilter,
                 onSelect = {

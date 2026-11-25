@@ -81,6 +81,9 @@
     <string name="network_view_graph">图</string>
     <string name="network_view_list">列表</string>
     <string name="network_view_unnamed">未命名点</string>
+    <string name="network_group_view">视图</string>
+    <string name="network_group_map">地图工具</string>
+    <string name="network_group_mode">出行方式</string>
     <string name="network_unnamed_count">%1$d 个未命名点</string>
     <string name="network_unnamed_hint">点「在图上查看」可定位；点「命名」先确认路口范围再保存。</string>
     <string name="network_unnamed_empty_title">没有未命名点</string>
