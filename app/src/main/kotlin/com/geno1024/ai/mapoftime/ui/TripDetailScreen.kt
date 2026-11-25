@@ -60,6 +60,7 @@ import com.geno1024.ai.mapoftime.data.traversalEndNames
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
 import com.geno1024.ai.mapoftime.ui.map.TrackMap
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import java.util.Locale
 
 @Composable
@@ -105,6 +106,7 @@ fun TripDetailScreen(
     var splitting by remember(tripId) { mutableStateOf(false) }
     var splitIndex by remember(tripId) { mutableStateOf<Int?>(null) }
     var splittingBusy by remember { mutableStateOf(false) }
+    var adjustingMark by remember(tripId) { mutableStateOf<Long?>(null) }
     var markBusy by remember { mutableStateOf(false) }
 
     LaunchedEffect(tripId, reload) {
@@ -290,7 +292,7 @@ fun TripDetailScreen(
                 modifier = Modifier.fillMaxSize(),
                 markers = when {
                     trimming -> trimMarkers
-                    splitting -> splitMarkers
+                    splitting || adjustingMark != null -> splitMarkers
                     else -> markers
                 },
                 tilesEnabled = settings.mapTiles,
@@ -300,11 +302,11 @@ fun TripDetailScreen(
                 highlight = cutPath ?: selectedTrack,
                 onMarkerTap = when {
                     trimming -> { index -> cutIndex = index }
-                    splitting -> { index -> splitIndex = index }
+                    splitting || adjustingMark != null -> { index -> splitIndex = index }
                     else -> null
                 },
             )
-            if (!trimming && !splitting) {
+            if (!trimming && !splitting && adjustingMark == null) {
                 selectedLeg?.let { leg ->
                     LegOverlay(
                         leg = leg,
@@ -334,11 +336,11 @@ fun TripDetailScreen(
             // The picker sits right under the map: drag the arrow or tap a dot,
             // either moves the same selected fix. The mark uses its timestamp,
             // so the segmenter sees it exactly like one pressed while recording.
-            if (splitting && points.size >= 2) {
+            if ((splitting || adjustingMark != null) && points.size >= 2) {
                 item {
                     SectionCard(
-                        title = stringResource(R.string.trip_split),
-                        subtitle = stringResource(R.string.trip_split_hint),
+                        title = stringResource(if (splitting) R.string.trip_split else R.string.trip_mark_adjust_title),
+                        subtitle = stringResource(if (splitting) R.string.trip_split_hint else R.string.trip_mark_adjust_hint),
                     ) {
                         PointScrubber(points, splitIndex, onIndexChange = { splitIndex = it })
                         val selected = splitIndex
@@ -351,7 +353,7 @@ fun TripDetailScreen(
                         } else {
                             Text(
                                 text = stringResource(
-                                    R.string.trip_split_summary,
+                                    if (splitting) R.string.trip_split_summary else R.string.trip_mark_adjust_summary,
                                     formatDateTime(points[selected].t),
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
@@ -360,7 +362,11 @@ fun TripDetailScreen(
                         Spacer(Modifier.height(8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedButton(
-                                onClick = { splitting = false; splitIndex = null },
+                                onClick = {
+                                    splitting = false
+                                    adjustingMark = null
+                                    splitIndex = null
+                                },
                                 modifier = Modifier.weight(1f),
                             ) {
                                 Text(stringResource(R.string.action_cancel))
@@ -370,9 +376,12 @@ fun TripDetailScreen(
                                     splitIndex?.let { index ->
                                         splittingBusy = true
                                         scope.launch {
-                                            val result = viewModel.splitTripAt(tripId, points[index].t)
+                                            val result = adjustingMark?.let { old ->
+                                                viewModel.moveSplitAt(tripId, old, points[index].t)
+                                            } ?: viewModel.splitTripAt(tripId, points[index].t)
                                             splittingBusy = false
                                             splitting = false
+                                            adjustingMark = null
                                             splitIndex = null
                                             message = result?.let {
                                                 String.format(
@@ -524,6 +533,22 @@ fun TripDetailScreen(
                                         style = MaterialTheme.typography.bodySmall,
                                         modifier = Modifier.weight(1f),
                                     )
+                                    TextButton(
+                                        onClick = {
+                                            if (markBusy) return@TextButton
+                                            val nearest = points.indices.minByOrNull { abs(points[it].t - t) }
+                                                ?: return@TextButton
+                                            trimming = false
+                                            splitting = false
+                                            adjustingMark = t
+                                            splitIndex = nearest
+                                            scope.launch { listState.animateScrollToItem(0) }
+                                        },
+                                        enabled = !markBusy,
+                                        contentPadding = PaddingValues(horizontal = 8.dp),
+                                    ) {
+                                        Text(stringResource(R.string.trip_mark_adjust))
+                                    }
                                     TextButton(
                                         onClick = {
                                             if (markBusy) return@TextButton
@@ -689,6 +714,7 @@ fun TripDetailScreen(
                             onClick = {
                                 trimming = true
                                 splitting = false
+                                adjustingMark = null
                                 cutIndex = null
                                 selectedLegId = null
                                 // The picker is the first item; make sure it is
@@ -703,6 +729,7 @@ fun TripDetailScreen(
                             onClick = {
                                 splitting = true
                                 trimming = false
+                                adjustingMark = null
                                 splitIndex = null
                                 selectedLegId = null
                                 scope.launch { listState.animateScrollToItem(0) }

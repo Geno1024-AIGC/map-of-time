@@ -136,6 +136,10 @@
     <string name="trip_marks">Manual splits</string>
     <string name="trip_marks_hint">Remove one to re-split this trip without it.</string>
     <string name="trip_mark_remove">Remove</string>
+    <string name="trip_mark_adjust">Adjust</string>
+    <string name="trip_mark_adjust_title">Adjust cut point</string>
+    <string name="trip_mark_adjust_hint">Move this cut point to another fix on the track. Saving re-analyses this trip.</string>
+    <string name="trip_mark_adjust_summary">New cut at: %1$s</string>
     <string name="trip_mode">Mode</string>
     <string name="trip_note">Note</string>
     <string name="trip_note_add">Add</string>

@@ -504,6 +504,17 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
         return analyze(tripId)
     }
 
+    /** Moves one manual split to a new point, then re-analyses once. */
+    suspend fun moveSplitAt(tripId: Long, oldT: Long, newT: Long): TripAnalyzer.Result? {
+        withContext(container.dbDispatcher) {
+            container.repository.deleteMark(tripId, oldT)
+            if (container.repository.marks(tripId).none { abs(it - newT) < 1_000L }) {
+                container.repository.addMark(tripId, newT)
+            }
+        }
+        return analyze(tripId)
+    }
+
     /**
      * Removes the tail of a recording (fixes after the user's chosen cutoff)
      * and rebuilds legs, distance and end time from what remains.
