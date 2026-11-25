@@ -44,6 +44,8 @@ import com.geno1024.ai.mapoftime.analysis.NetworkGraph
 import com.geno1024.ai.mapoftime.analysis.NetworkGraphs
 import com.geno1024.ai.mapoftime.analysis.NetworkLink
 import com.geno1024.ai.mapoftime.analysis.NetworkNode
+import com.geno1024.ai.mapoftime.analysis.NetworkRoute
+import com.geno1024.ai.mapoftime.analysis.RouteHop
 import com.geno1024.ai.mapoftime.analysis.PlaceDraft
 import com.geno1024.ai.mapoftime.analysis.PlaceDrafts
 import com.geno1024.ai.mapoftime.core.DurationStats
@@ -86,6 +88,12 @@ fun NetworkScreen(
         mutableStateOf<TripMode?>(null)
     }
     var selectedKey by rememberSaveable { mutableStateOf<String?>(null) }
+    // Two-point query: the first map tap is the start, the second the end.
+    // Kept next to the single-node selection but never mixed into it: picking
+    // a route must not quietly change which junction the list is describing.
+    var routeMode by rememberSaveable { mutableStateOf(false) }
+    var routeFrom by rememberSaveable { mutableStateOf<String?>(null) }
+    var routeTo by rememberSaveable { mutableStateOf<String?>(null) }
     // The proposal being looked at: the map draws it before anything is saved,
     // because the mistake worth catching is a junction that ate its neighbour.
     var preview by remember { mutableStateOf<PlaceDraft?>(null) }
@@ -123,6 +131,9 @@ fun NetworkScreen(
         viewMode = NetworkView.GRAPH
         modeFilter = null
         selectedKey = requestedNode
+        routeMode = false
+        routeFrom = null
+        routeTo = null
         preview = null
         previewAt = null
         previewManual = emptyMap()
@@ -136,6 +147,14 @@ fun NetworkScreen(
         )
     }
     val selected = graph.node(selectedKey)
+    val route = remember(graph, routeFrom, routeTo, routeMode) {
+        if (routeMode && routeFrom != null && routeTo != null) {
+            graph.route(requireNotNull(routeFrom), requireNotNull(routeTo))
+        } else {
+            null
+        }
+    }
+    val routeKeys = remember(route) { route?.nodeKeys?.toSet().orEmpty() }
 
     val nowMs = System.currentTimeMillis()
     val now = TrafficContext.of(epochMs = nowMs, calendar = settings.holidayCalendar)
@@ -162,13 +181,18 @@ fun NetworkScreen(
     val tracks = remember(graph) {
         graph.edges.map { listOf(it.edge.from, it.edge.to) }
     }
+    val routeHighlight = remember(graph, route) {
+        route?.nodeKeys?.mapNotNull { graph.node(it)?.at }?.takeIf { it.size >= 2 }
+    }
     val previewKeys = remember(preview) {
         preview?.refs?.mapTo(HashSet()) { it.key } ?: emptySet<String>()
     }
     // While picking points for one junction, the dots need to be tellable
     // apart: a bare "X" on all twenty of them is useless. Their auto-derived
     // side + road caption goes on the map, without asking for a single name.
-    val markers = remember(graph, selectedKey, previewKeys, preview, viewModel.summaries, viewModel.places, showNodes, showNodeLabels) {
+    val routeFromPrefix = stringResource(R.string.network_route_from_prefix)
+    val routeToPrefix = stringResource(R.string.network_route_to_prefix)
+    val markers = remember(graph, selectedKey, previewKeys, preview, viewModel.summaries, viewModel.places, showNodes, showNodeLabels, routeMode, routeFrom, routeTo, routeKeys, routeFromPrefix, routeToPrefix) {
         if (!showNodes) emptyList()
         else graph.nodes.map { node ->
             // Only the draft's own points get a preview-relative caption; a
@@ -179,12 +203,19 @@ fun NetworkScreen(
             } else {
                 null
             }
+            val baseLabel = caption ?: if (node.key == selectedKey) node.name ?: node.key else node.name
+            val labelled = when {
+                !showNodeLabels -> null
+                routeMode && node.key == routeFrom -> routeFromPrefix + " · " + (baseLabel ?: node.key)
+                routeMode && node.key == routeTo -> routeToPrefix + " · " + (baseLabel ?: node.key)
+                else -> baseLabel
+            }
             MapMarker(
                 at = node.at,
-                emphasized = node.key == selectedKey || node.key in previewKeys,
+                emphasized = node.key == selectedKey || node.key in previewKeys || node.key in routeKeys,
                 // Only names: a wall of node ids would hide the map. The
                 // selected node still needs one even when it is unnamed.
-                label = if (!showNodeLabels) null else caption ?: if (node.key == selectedKey) node.name ?: node.key else node.name,
+                label = labelled,
             )
         }
     }
@@ -203,9 +234,11 @@ fun NetworkScreen(
     // Leave room around the circle: judging whether it swallowed the next
     // crossing needs to see that crossing too, not just the claim.
     // When arriving from a segment, look at that node instead of the whole city.
-    val focusBounds = remember(preview, focusNode, selected) {
+    val focusBounds = remember(preview, focusNode, selected, routeHighlight) {
         preview?.let { draft ->
             Geo.bounds(listOf(draft.center))?.expanded(draft.adoptRadius() + 60.0)
+        } ?: routeHighlight?.let {
+            Geo.bounds(it)?.expanded(60.0)
         } ?: if (focusNode) {
             selected?.at?.let { Geo.bounds(listOf(it))?.expanded(80.0) }
         } else {
@@ -220,7 +253,18 @@ fun NetworkScreen(
         val key = graph.nodes.getOrNull(index)?.key
         val draft = preview
         if (draft == null || key == null) {
-            selectedKey = key
+            if (routeMode && key != null) {
+                // First tap starts over; the second finishes. A third tap is a
+                // new query rather than a silent change to an old one.
+                if (routeFrom == null || routeTo != null) {
+                    routeFrom = key
+                    routeTo = null
+                } else {
+                    routeTo = key
+                }
+            } else {
+                selectedKey = key
+            }
             focusNode = false
             preview = null
         } else if (key != draft.seed.key) {
@@ -288,9 +332,19 @@ fun NetworkScreen(
                 )
                 FilterChip(
                     selected = viewMode == NetworkView.LIST,
-                    onClick = { viewMode = NetworkView.LIST },
+                    onClick = {
+                        viewMode = NetworkView.LIST
+                        routeMode = false
+                    },
                     label = { Text(stringResource(R.string.network_view_list)) },
                 )
+                if (viewMode == NetworkView.GRAPH) {
+                    FilterChip(
+                        selected = routeMode,
+                        onClick = { routeMode = !routeMode },
+                        label = { Text(stringResource(R.string.network_route_mode)) },
+                    )
+                }
             }
             Spacer(Modifier.height(8.dp))
             ModeFilter(
@@ -298,6 +352,8 @@ fun NetworkScreen(
                 onSelect = {
                     modeFilter = it
                     focusNode = false
+                    routeFrom = null
+                    routeTo = null
                 },
             )
             Spacer(Modifier.height(8.dp))
@@ -353,6 +409,7 @@ fun NetworkScreen(
                             if (preview == null) graph.edges.getOrNull(index)?.let { onOpenEdge(it.edge.id) }
                         },
                         emptyHint = stringResource(R.string.network_empty_title),
+                        highlight = routeHighlight,
                         rings = rings,
                         focusBounds = focusBounds,
                         here = here,
@@ -396,7 +453,9 @@ fun NetworkScreen(
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    text = stringResource(R.string.network_hint),
+                    text = stringResource(
+                        if (routeMode) R.string.network_route_hint else R.string.network_hint,
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -414,20 +473,36 @@ fun NetworkScreen(
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
                 ) {
                     item {
-                        if (selected == null) {
-                            SectionCard {
+                        when {
+                            routeMode -> RouteCard(
+                                graph = graph,
+                                from = graph.node(routeFrom),
+                                to = graph.node(routeTo),
+                                route = route,
+                                samePoint = routeFrom != null && routeFrom == routeTo,
+                                onReset = {
+                                    routeFrom = null
+                                    routeTo = null
+                                },
+                                onOpenEdge = onOpenEdge,
+                            )
+                            selected == null -> SectionCard {
                                 Text(
                                     text = stringResource(R.string.network_pick_node),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
-                        } else {
-                            NodeCard(
+                            else -> NodeCard(
                                 node = selected,
                                 graph = graph,
                                 detail = viewModel.pointDetail(selected.key, selected.at, mode = modeFilter)?.label,
                                 onOpenEdge = onOpenEdge,
+                                onStartRoute = { key ->
+                                    routeMode = true
+                                    routeFrom = key
+                                    routeTo = null
+                                },
                                 onNamePlace = {
                                     val ref = PointRef.parse(selected.key)
                                     focusNode = false
@@ -447,6 +522,128 @@ fun NetworkScreen(
     }
 }
 
+/** Two chosen nodes and the cheapest typical-time path between them. */
+@Composable
+private fun RouteCard(
+    graph: NetworkGraph,
+    from: NetworkNode?,
+    to: NetworkNode?,
+    route: NetworkRoute?,
+    samePoint: Boolean,
+    onReset: () -> Unit,
+    onOpenEdge: (Long) -> Unit,
+) {
+    SectionCard(
+        title = stringResource(R.string.network_route_title),
+        subtitle = stringResource(R.string.network_route_note),
+    ) {
+        val fromLabel = from?.name ?: from?.key ?: "—"
+        val toLabel = to?.name ?: to?.key ?: "—"
+        Text(
+            text = stringResource(R.string.network_route_endpoints, fromLabel, toLabel),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        when {
+            samePoint -> Text(
+                text = stringResource(R.string.network_route_same),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            from == null -> Text(
+                text = stringResource(R.string.network_route_pick_start),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            to == null -> Text(
+                text = stringResource(R.string.network_route_pick_end, fromLabel),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            route == null -> Text(
+                text = stringResource(R.string.network_route_no_path),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            else -> {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = formatSeconds(route.typicalMs),
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = formatDistance(route.distanceM) + " · " +
+                        stringResource(R.string.network_route_hops, route.hops.size),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (route.estimatedHops > 0) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.network_route_estimated, route.estimatedHops),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                ThinDivider()
+                route.hops.forEachIndexed { index, hop ->
+                    if (index > 0) Spacer(Modifier.height(8.dp))
+                    RouteHopRow(
+                        index = index + 1,
+                        hop = hop,
+                        graph = graph,
+                        onClick = { onOpenEdge(hop.link.summary.edge.id) },
+                    )
+                }
+            }
+        }
+        TextButton(onClick = onReset) {
+            Text(stringResource(R.string.network_route_reset))
+        }
+    }
+}
+
+@Composable
+private fun RouteHopRow(
+    index: Int,
+    hop: RouteHop,
+    graph: NetworkGraph,
+    onClick: () -> Unit,
+) {
+    val from = graph.node(hop.fromKey)
+    val to = graph.node(hop.toKey)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = "$index. " + hop.link.summary.edge.displayName,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = (from?.name ?: hop.fromKey) + " → " + (to?.name ?: hop.toKey),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = formatSeconds(hop.typicalMs),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
 @Composable
 private fun NodeCard(
     node: NetworkNode,
@@ -454,6 +651,7 @@ private fun NodeCard(
     /** Auto-derived "north side · People's Rd" caption, never a typed name. */
     detail: String?,
     onOpenEdge: (Long) -> Unit,
+    onStartRoute: (String) -> Unit,
     onNamePlace: () -> Unit,
 ) {
     SectionCard {
@@ -483,6 +681,9 @@ private fun NodeCard(
                 text = stringResource(R.string.network_degree, node.degree),
                 color = MaterialTheme.colorScheme.primary,
             )
+        }
+        TextButton(onClick = { onStartRoute(node.key) }) {
+            Text(stringResource(R.string.network_route_from_here))
         }
         // A node here is one point; the junction it belongs to may cover a
         // dozen. Naming it from the network is the natural place to do it.

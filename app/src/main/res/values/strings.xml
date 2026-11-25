@@ -82,6 +82,21 @@
     <string name="network_other_unnamed">unnamed end</string>
     <string name="network_out_time">Away %1$s</string>
     <string name="network_back_time">Back %1$s</string>
+    <string name="network_route_mode">Two-point time</string>
+    <string name="network_route_hint">Tap a starting junction, then a destination. Tap again to start over.</string>
+    <string name="network_route_from_here">Route from here</string>
+    <string name="network_route_from_prefix">A</string>
+    <string name="network_route_to_prefix">B</string>
+    <string name="network_route_title">Two-point typical time</string>
+    <string name="network_route_note">The total adds each segment\'s typical time. It is not a median of complete trips.</string>
+    <string name="network_route_endpoints">%1$s → %2$s</string>
+    <string name="network_route_pick_start">Tap the starting junction on the map.</string>
+    <string name="network_route_pick_end">Start: %1$s. Now tap the destination.</string>
+    <string name="network_route_same">Pick two different junctions.</string>
+    <string name="network_route_no_path">These two points are not connected in the segments you have travelled.</string>
+    <string name="network_route_hops">%1$d segments</string>
+    <string name="network_route_estimated">%1$d segment(s) only have samples in the other direction; those times are estimates.</string>
+    <string name="network_route_reset">Pick again</string>
     <string name="network_empty_title">No network yet</string>
     <string name="network_empty_body">Analyse a trip with OSM junctions and the roads you travelled appear here, connected at the crossings they share.</string>
 

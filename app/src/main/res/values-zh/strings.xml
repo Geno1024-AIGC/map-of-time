@@ -82,6 +82,21 @@
     <string name="network_other_unnamed">对端未命名</string>
     <string name="network_out_time">去 %1$s</string>
     <string name="network_back_time">回 %1$s</string>
+    <string name="network_route_mode">两点耗时</string>
+    <string name="network_route_hint">先点起点，再点终点；再点一次会重新选起点。</string>
+    <string name="network_route_from_here">从这里出发</string>
+    <string name="network_route_from_prefix">起</string>
+    <string name="network_route_to_prefix">终</string>
+    <string name="network_route_title">两点典型耗时</string>
+    <string name="network_route_note">总耗时是各段典型耗时相加，不是整趟行程的中位数。</string>
+    <string name="network_route_endpoints">%1$s → %2$s</string>
+    <string name="network_route_pick_start">在地图上点起点。</string>
+    <string name="network_route_pick_end">起点：%1$s。再点终点。</string>
+    <string name="network_route_same">请选择两个不同的点。</string>
+    <string name="network_route_no_path">走过的段里，这两个点不连通。</string>
+    <string name="network_route_hops">%1$d 段</string>
+    <string name="network_route_estimated">其中 %1$d 段只有反方向的样本，耗时是估算。</string>
+    <string name="network_route_reset">重新选点</string>
     <string name="network_empty_title">还没有路网</string>
     <string name="network_empty_body">分析一次带 OSM 路口的行程，走过的路就会在这里按共享的路口连起来。</string>
 

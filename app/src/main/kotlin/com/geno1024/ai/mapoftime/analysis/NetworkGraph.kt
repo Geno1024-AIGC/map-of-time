@@ -2,6 +2,7 @@ package com.geno1024.ai.mapoftime.analysis
 
 import com.geno1024.ai.mapoftime.core.DurationStats
 import com.geno1024.ai.mapoftime.core.LatLon
+import java.util.PriorityQueue
 import kotlin.math.roundToLong
 
 /**
@@ -39,6 +40,36 @@ data class NetworkLink(
     val inbound: DurationStats get() = if (fromHere) summary.backward else summary.forward
 }
 
+/** One segment of a route between two chosen nodes. */
+data class RouteHop(
+    val fromKey: String,
+    val toKey: String,
+    val link: NetworkLink,
+    /** Direction-specific typical time, or the best available fallback. */
+    val typicalMs: Long,
+    /** Some or all of this leg's samples were recorded the other way. */
+    val estimated: Boolean,
+)
+
+/**
+ * A path through the travelled network, with the time it typically takes.
+ *
+ * The total is the sum of per-segment medians, not the median of complete
+ * trips: the app has never seen this whole path as one traversal.
+ */
+data class NetworkRoute(
+    val fromKey: String,
+    val toKey: String,
+    val hops: List<RouteHop>,
+) {
+    val typicalMs: Long get() = hops.sumOf { it.typicalMs }
+    val distanceM: Double get() = hops.sumOf { it.link.summary.edge.lengthM }
+    val estimatedHops: Int get() = hops.count { it.estimated }
+
+    /** From the start node, then the far end of each hop: one key per corner. */
+    val nodeKeys: List<String> get() = listOf(fromKey).plus(hops.map { it.toKey })
+}
+
 /**
  * The edges the user has travelled, arranged by the junctions they share.
  * Pure data: no map, no database, so the shape can be unit-tested.
@@ -54,6 +85,65 @@ data class NetworkGraph(
 
     fun node(key: String?): NetworkNode? =
         if (key == null) null else nodes.firstOrNull { it.key == key }
+
+    /**
+     * The lowest-typical-time path between two nodes, or null when the chosen
+     * nodes are not connected by the segments we have actually walked.
+     *
+     * A hop with no samples in the needed direction falls back to the other
+     * direction, then to the pooled median. It is still a usable connection,
+     * but [RouteHop.estimated] tells the caller the direction was guessed.
+     */
+    fun route(fromKey: String, toKey: String): NetworkRoute? {
+        if (fromKey == toKey) return NetworkRoute(fromKey, toKey, emptyList())
+        if (node(fromKey) == null || node(toKey) == null) return null
+
+        val byKey = nodes.associateBy { it.key }
+        val best = HashMap<String, Long>().apply { put(fromKey, 0) }
+        val previous = HashMap<String, RouteHop>()
+        val settled = HashSet<String>()
+        val queue = PriorityQueue<Pair<String, Long>>(compareBy { it.second })
+        queue.add(fromKey to 0L)
+
+        while (queue.isNotEmpty()) {
+            val (key, cost) = queue.remove()
+            if (!settled.add(key) || cost != best[key] || key == toKey) continue
+            val node = byKey[key] ?: continue
+            for (link in node.links) {
+                val hop = hopFrom(key, link) ?: continue
+                val next = cost + hop.typicalMs
+                val old = best[link.otherKey]
+                if (old == null || next < old) {
+                    best[link.otherKey] = next
+                    previous[link.otherKey] = hop
+                    queue.add(link.otherKey to next)
+                }
+            }
+        }
+
+        if (toKey !in best) return null
+        val hops = ArrayList<RouteHop>()
+        var cursor = toKey
+        while (cursor != fromKey) {
+            val hop = previous[cursor] ?: return null
+            hops.add(hop)
+            cursor = hop.fromKey
+        }
+        return NetworkRoute(fromKey, toKey, hops.asReversed())
+    }
+
+    private fun hopFrom(fromKey: String, link: NetworkLink): RouteHop? {
+        val (ms, estimated) = when {
+            link.outbound.count > 0 -> link.outbound.typicalMs to false
+            link.inbound.count > 0 -> link.inbound.typicalMs to true
+            link.summary.combined.count > 0 -> link.summary.combined.typicalMs to true
+            else -> return null
+        }
+        // A zero-duration edge is an artefact, not a free connection: letting
+        // it into a route would produce a believable-looking zero total.
+        if (ms <= 0) return null
+        return RouteHop(fromKey, link.otherKey, link, ms, estimated)
+    }
 
     companion object {
         val EMPTY = NetworkGraph(emptyList(), emptyList(), 0)
