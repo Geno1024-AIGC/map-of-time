@@ -64,7 +64,7 @@ import com.geno1024.ai.mapoftime.ui.map.MapRing
 import com.geno1024.ai.mapoftime.ui.map.TrackMap
 import kotlinx.coroutines.launch
 
-private enum class NetworkView { GRAPH, LIST }
+private enum class NetworkView { GRAPH, LIST, UNNAMED }
 private enum class EdgeSort { RECENT, SAMPLES, SLOWEST, NAME }
 
 /**
@@ -158,6 +158,12 @@ fun NetworkScreen(
         NetworkGraphs.build(
             shapedSummaries.filter { modeFilter == null || it.edge.mode == modeFilter },
         )
+    }
+    // Only a parseable point can be named from this screen. A wide junction's
+    // member points show up separately: that is the point of listing them.
+    val unnamedNodes = remember(graph) {
+        graph.nodes.filter { it.name == null && PointRef.parse(it.key) != null }
+            .sortedWith(compareByDescending<NetworkNode> { it.degree }.thenBy { it.key })
     }
     val selected = graph.node(selectedKey)
     val route = remember(graph, routeFrom, routeTo, routeMode) {
@@ -354,6 +360,28 @@ fun NetworkScreen(
         )
     }
 
+    // From the unnamed list, both actions land on the graph: "locate" selects
+    // the dot, "name" also opens the same review ring the node card uses, so
+    // a wide junction cannot be collapsed into one point by accident.
+    fun revealNode(node: NetworkNode, forNaming: Boolean = false) {
+        viewMode = NetworkView.GRAPH
+        routeMode = false
+        routeFrom = null
+        routeTo = null
+        selectedKey = node.key
+        focusNode = true
+        preview = null
+        if (forNaming) {
+            val ref = PointRef.parse(node.key)
+            if (ref != null) {
+                previewAt = node.at
+                previewReach = PlaceDrafts.SPAN_M
+                previewManual = emptyMap()
+                preview = viewModel.placeDraft(ref, node.at, previewReach)
+            }
+        }
+    }
+
     Column(modifier.fillMaxSize()) {
         ScreenHeader(
             title = stringResource(R.string.network_title),
@@ -362,6 +390,8 @@ fun NetworkScreen(
                 else if (graph.parts > 1) stringResource(R.string.network_summary_parts, graph.nodes.size, graph.edges.size, graph.parts)
                 else stringResource(R.string.network_summary, graph.nodes.size, graph.edges.size)
                 NetworkView.LIST -> edgeSummaries.size.toString().takeIf { edgeSummaries.isNotEmpty() }
+                NetworkView.UNNAMED -> stringResource(R.string.network_unnamed_count, unnamedNodes.size)
+                    .takeIf { unnamedNodes.isNotEmpty() }
             },
         )
 
@@ -379,6 +409,14 @@ fun NetworkScreen(
                         routeMode = false
                     },
                     label = { Text(stringResource(R.string.network_view_list)) },
+                )
+                FilterChip(
+                    selected = viewMode == NetworkView.UNNAMED,
+                    onClick = {
+                        viewMode = NetworkView.UNNAMED
+                        routeMode = false
+                    },
+                    label = { Text(stringResource(R.string.network_view_unnamed)) },
                 )
                 if (viewMode == NetworkView.GRAPH) {
                     FilterChip(
@@ -442,6 +480,36 @@ fun NetworkScreen(
                 ) {
                     items(edgeSummaries, key = { it.edge.id }) { summary ->
                         EdgeCard(summary = summary, now = now, fridayRush = fridayRush, onClick = { onOpenEdge(summary.edge.id) })
+                    }
+                }
+            }
+        } else if (viewMode == NetworkView.UNNAMED) {
+            Column(Modifier.padding(horizontal = 16.dp)) {
+                Text(
+                    text = stringResource(R.string.network_unnamed_hint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+            if (unnamedNodes.isEmpty()) {
+                EmptyState(
+                    title = stringResource(R.string.network_unnamed_empty_title),
+                    body = stringResource(R.string.network_unnamed_empty_body),
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    items(unnamedNodes, key = { it.key }) { node ->
+                        UnnamedNodeCard(
+                            node = node,
+                            detail = viewModel.pointDetail(node.key, node.at, mode = modeFilter)?.label,
+                            onLocate = { revealNode(node) },
+                            onName = { revealNode(node, forNaming = true) },
+                        )
                     }
                 }
             }
@@ -720,6 +788,50 @@ private fun RouteHopRow(
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
+    }
+}
+
+@Composable
+private fun UnnamedNodeCard(
+    node: NetworkNode,
+    /** Derived road/bearing caption, or null when nothing is named nearby. */
+    detail: String?,
+    onLocate: () -> Unit,
+    onName: () -> Unit,
+) {
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = detail ?: stringResource(R.string.network_node_unnamed),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = node.key,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Pill(
+                text = stringResource(R.string.network_degree, node.degree),
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row {
+            TextButton(onClick = onLocate) {
+                Text(stringResource(R.string.network_unnamed_locate))
+            }
+            TextButton(onClick = onName) {
+                Text(stringResource(R.string.place_name_action))
+            }
+        }
     }
 }
 

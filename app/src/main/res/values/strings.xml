@@ -80,6 +80,12 @@
     <string name="network_shape_loading">Loading road shapes…</string>
     <string name="network_view_graph">Graph</string>
     <string name="network_view_list">List</string>
+    <string name="network_view_unnamed">Unnamed points</string>
+    <string name="network_unnamed_count">%1$d unnamed</string>
+    <string name="network_unnamed_hint">Tap a point to find it on the map; use Name to review its junction before saving.</string>
+    <string name="network_unnamed_empty_title">No unnamed points</string>
+    <string name="network_unnamed_empty_body">Every point that can be named already has a name.</string>
+    <string name="network_unnamed_locate">Locate</string>
     <string name="network_pick_node">Tap a dot on the map to see what leaves that junction.</string>
     <string name="network_node_unnamed">Unnamed junction</string>
     <string name="network_degree">%1$d edges</string>

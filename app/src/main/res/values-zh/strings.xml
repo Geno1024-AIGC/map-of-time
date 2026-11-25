@@ -80,6 +80,12 @@
     <string name="network_shape_loading">正在加载道路几何…</string>
     <string name="network_view_graph">图</string>
     <string name="network_view_list">列表</string>
+    <string name="network_view_unnamed">未命名点</string>
+    <string name="network_unnamed_count">%1$d 个未命名点</string>
+    <string name="network_unnamed_hint">点「在图上查看」可定位；点「命名」先确认路口范围再保存。</string>
+    <string name="network_unnamed_empty_title">没有未命名点</string>
+    <string name="network_unnamed_empty_body">所有可命名的点都已有名字。</string>
+    <string name="network_unnamed_locate">在图上查看</string>
     <string name="network_pick_node">在地图上点一个点，查看从那里出发的边。</string>
     <string name="network_node_unnamed">未命名节点</string>
     <string name="network_degree">%1$d 段</string>
