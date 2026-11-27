@@ -47,7 +47,7 @@ class AggNetworkTest {
         val passes = network.edges.single().passes
         assertEquals(2, passes.size)
         assertTrue(passes.any {
-            it.tripId == 1L && it.fromId == 1 && it.toId == 2 &&
+            it.tripId == 1L && it.mode == TripMode.WALK && it.fromId == 1 && it.toId == 2 &&
                 it.startedAt == 7_000L && it.endedAt == 100_000L &&
                 it.durationMs == 93_000L && it.path.size == 2
         })

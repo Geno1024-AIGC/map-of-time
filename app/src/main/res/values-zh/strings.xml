@@ -305,6 +305,10 @@
     <string name="agg_back_classic">返回经典</string>
     <string name="agg_edge_subtitle">%1$s · %2$d 次经过</string>
     <string name="agg_action_open">详情 ›</string>
+    <string name="agg_style_roads">走过的路</string>
+    <string name="agg_style_lines">点位连线</string>
+    <string name="agg_roads_hint">由最近 %1$d 次经过的实际 GPS 轨迹组成。</string>
+    <string name="agg_lines_hint">用直线汇总 %1$d 条连接。</string>
     <string name="agg_edge_title">P%1$d ↔ P%2$d</string>
     <string name="agg_edge_pass">第 %1$d 次经过</string>
     <string name="agg_edge_direction">P%1$d → P%2$d</string>

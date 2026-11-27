@@ -305,6 +305,10 @@
     <string name="agg_back_classic">Classic</string>
     <string name="agg_edge_subtitle">%1$s · %2$d crossings</string>
     <string name="agg_action_open">Details ›</string>
+    <string name="agg_style_roads">Travelled roads</string>
+    <string name="agg_style_lines">Point links</string>
+    <string name="agg_roads_hint">Actual GPS paths from %1$d recent crossings.</string>
+    <string name="agg_lines_hint">Straight links for %1$d connections.</string>
     <string name="agg_edge_title">P%1$d ↔ P%2$d</string>
     <string name="agg_edge_pass">Pass %1$d</string>
     <string name="agg_edge_direction">P%1$d → P%2$d</string>

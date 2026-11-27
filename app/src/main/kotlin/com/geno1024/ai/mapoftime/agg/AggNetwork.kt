@@ -29,6 +29,7 @@ data class AggPoint(
 /** One observed crossing, kept so the read-only UI can show its history. */
 data class AggPass(
     val tripId: Long,
+    val mode: TripMode,
     /** The direction this particular trip actually travelled. */
     val fromId: Int,
     val toId: Int,
@@ -243,6 +244,7 @@ object Aggregator {
                 val path = trace.fixes.subList(from.lastIndex, to.firstIndex + 1).map { it.at }
                 samples.getOrPut(key) { mutableListOf() } += AggPass(
                     tripId = trace.tripId,
+                    mode = trace.mode,
                     fromId = from.pointId,
                     toId = to.pointId,
                     startedAt = from.lastT,

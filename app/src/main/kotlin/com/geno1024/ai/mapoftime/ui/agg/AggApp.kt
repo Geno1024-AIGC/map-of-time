@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -54,6 +56,10 @@ private enum class AggTab(val labelRes: Int, val glyph: String) {
     TRIPS(R.string.agg_tab_trips, "≡"),
 }
 
+/** Undirected edge identity, including the mode that keeps timings separate. */
+private fun edgeRef(from: Int, to: Int, mode: TripMode) =
+    Triple(minOf(from, to), maxOf(from, to), mode)
+
 /**
  * A second, read-only shell over the same raw trips.
  *
@@ -68,6 +74,9 @@ fun AggApp(viewModel: AppViewModel) {
     var tab by rememberSaveable { mutableStateOf(AggTab.NETWORK.name) }
     var modeFilter by rememberSaveable { mutableStateOf<TripMode?>(null) }
     var selectedEdge by remember { mutableStateOf<Int?>(null) }
+    // The road network is the default view; straight links stay available as
+    // a quieter overview of the same crossings.
+    var showRoads by rememberSaveable { mutableStateOf(true) }
     // A string route keeps the detail stack across rotation without adding a
     // Parcelable type to a shell that is otherwise entirely derived.
     var detailRoute by rememberSaveable { mutableStateOf<String?>(null) }
@@ -210,12 +219,46 @@ fun AggApp(viewModel: AppViewModel) {
                                 },
                                 modifier = Modifier.padding(horizontal = 16.dp),
                             )
+                            FlowRow(
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                FilterChip(
+                                    selected = showRoads,
+                                    onClick = { showRoads = true },
+                                    label = { Text(stringResource(R.string.agg_style_roads)) },
+                                )
+                                FilterChip(
+                                    selected = !showRoads,
+                                    onClick = { showRoads = false },
+                                    label = { Text(stringResource(R.string.agg_style_lines)) },
+                                )
+                            }
                             Spacer(Modifier.height(8.dp))
-                            val networkTracks = remember(edges, byId) {
-                                edges.mapNotNull { edge ->
-                                    val from = byId[edge.fromId]?.at ?: return@mapNotNull null
-                                    val to = byId[edge.toId]?.at ?: return@mapNotNull null
-                                    listOf(from, to)
+                            val edgeIndexes = remember(edges) {
+                                edges.mapIndexed { index, edge ->
+                                    edgeRef(edge.fromId, edge.toId, edge.mode) to index
+                                }.toMap()
+                            }
+                            val roadEntries = remember(passes, edgeIndexes) {
+                                passes.sortedByDescending { it.startedAt }
+                                    .mapNotNull { pass ->
+                                        val index = edgeIndexes[
+                                            edgeRef(pass.fromId, pass.toId, pass.mode)
+                                        ] ?: return@mapNotNull null
+                                        pass.path to index
+                                    }
+                                    .take(600)
+                            }
+                            val networkTracks = remember(showRoads, edges, byId, roadEntries) {
+                                if (showRoads) {
+                                    roadEntries.map { it.first }
+                                } else {
+                                    edges.mapNotNull { edge ->
+                                        val from = byId[edge.fromId]?.at ?: return@mapNotNull null
+                                        val to = byId[edge.toId]?.at ?: return@mapNotNull null
+                                        listOf(from, to)
+                                    }
                                 }
                             }
                             val networkMarkers = remember(net.points) {
@@ -228,7 +271,15 @@ fun AggApp(viewModel: AppViewModel) {
                             }
                             val networkHighlight = selectedEdge?.let { index ->
                                 edges.getOrNull(index)?.let { edge ->
-                                    listOfNotNull(byId[edge.fromId]?.at, byId[edge.toId]?.at)
+                                    val straight = listOfNotNull(byId[edge.fromId]?.at, byId[edge.toId]?.at)
+                                    if (showRoads) {
+                                        passes.firstOrNull { pass ->
+                                            edgeRef(pass.fromId, pass.toId, pass.mode) ==
+                                                edgeRef(edge.fromId, edge.toId, edge.mode)
+                                        }?.path ?: straight
+                                    } else {
+                                        straight
+                                    }
                                 }
                             }
                             AggDetailMap(
@@ -239,9 +290,25 @@ fun AggApp(viewModel: AppViewModel) {
                                 highlight = networkHighlight,
                                 focusBounds = if (networkHighlight != null) null else networkBounds,
                                 onTrackTap = { index ->
-                                    selectedEdge = index
-                                    detailRoute = AggDetail.Edge(index).route()
+                                    val edgeIndex = if (showRoads) {
+                                        roadEntries.getOrNull(index)?.second
+                                    } else {
+                                        index
+                                    }
+                                    if (edgeIndex != null) {
+                                        selectedEdge = edgeIndex
+                                        detailRoute = AggDetail.Edge(edgeIndex).route()
+                                    }
                                 },
+                            )
+                            Text(
+                                text = stringResource(
+                                    if (showRoads) R.string.agg_roads_hint else R.string.agg_lines_hint,
+                                    networkTracks.size,
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                             )
                             selectedEdge?.let { index ->
                                 edges.getOrNull(index)?.let { edge ->
