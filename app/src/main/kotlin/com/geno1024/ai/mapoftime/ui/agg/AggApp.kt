@@ -1,15 +1,17 @@
 package com.geno1024.ai.mapoftime.ui.agg
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -23,6 +25,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -32,20 +35,18 @@ import com.geno1024.ai.mapoftime.R
 import com.geno1024.ai.mapoftime.agg.AggEdge
 import com.geno1024.ai.mapoftime.agg.AggNetwork
 import com.geno1024.ai.mapoftime.agg.AggPoint
-import com.geno1024.ai.mapoftime.core.Basemap
 import com.geno1024.ai.mapoftime.core.Geo
-import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.TripMode
 import com.geno1024.ai.mapoftime.data.AppMode
 import com.geno1024.ai.mapoftime.ui.AppViewModel
 import com.geno1024.ai.mapoftime.ui.ModeFilter
 import com.geno1024.ai.mapoftime.ui.SectionCard
 import com.geno1024.ai.mapoftime.ui.StatRow
+import com.geno1024.ai.mapoftime.ui.formatDateTime
 import com.geno1024.ai.mapoftime.ui.formatDistance
 import com.geno1024.ai.mapoftime.ui.formatDuration
 import com.geno1024.ai.mapoftime.ui.formatSeconds
 import com.geno1024.ai.mapoftime.ui.map.MapMarker
-import com.geno1024.ai.mapoftime.ui.map.TrackMap
 
 private enum class AggTab(val labelRes: Int, val glyph: String) {
     NETWORK(R.string.agg_tab_network, "⌁"),
@@ -56,10 +57,9 @@ private enum class AggTab(val labelRes: Int, val glyph: String) {
 /**
  * A second, read-only shell over the same raw trips.
  *
- * There is no detail stack, no editing and no classic edge/leg state here: the
- * layout is intentionally a different application. Points and crossings are
- * recomputed from GPS fixes in [AppViewModel], so the classic database is
- * never rewritten and both modes can coexist on one installation.
+ * There is no editing here: points and crossings are recomputed from GPS fixes
+ * in [AppViewModel], and the detail screens only read what that run observed.
+ * Tapping a line or card opens a dated history with the actual recorded path.
  */
 @Composable
 fun AggApp(viewModel: AppViewModel) {
@@ -68,16 +68,25 @@ fun AggApp(viewModel: AppViewModel) {
     var tab by rememberSaveable { mutableStateOf(AggTab.NETWORK.name) }
     var modeFilter by rememberSaveable { mutableStateOf<TripMode?>(null) }
     var selectedEdge by remember { mutableStateOf<Int?>(null) }
+    // A string route keeps the detail stack across rotation without adding a
+    // Parcelable type to a shell that is otherwise entirely derived.
+    var detailRoute by rememberSaveable { mutableStateOf<String?>(null) }
+    val detail = remember(detailRoute) { AggDetail.from(detailRoute) }
+    val back = { detailRoute = null }
+    BackHandler(enabled = detail != null, onBack = back)
 
     val edges = remember(net, modeFilter) {
         net.edges.filter { modeFilter == null || it.mode == modeFilter }
     }
     val byId = remember(net) { net.points.associateBy { it.id } }
+    val passes = remember(net) { net.edges.flatMap { it.passes } }
+    val tripsById = remember(viewModel.trips) { viewModel.trips.associateBy { it.id } }
 
     Surface(color = MaterialTheme.colorScheme.background) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
+                if (detail != null) return@Scaffold
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     for (item in AggTab.entries) {
                         NavigationBarItem(
@@ -95,122 +104,254 @@ fun AggApp(viewModel: AppViewModel) {
                     .fillMaxSize()
                     .padding(padding),
             ) {
-                // Header instead of the classic ScreenHeader: a status band
-                // that says where these points came from, not a page title.
-                Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text(
-                            text = stringResource(R.string.agg_title),
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.weight(1f),
-                        )
-                        // The settings tab lives in the classic shell; give
-                        // this shell its own way back without duplicating it.
-                        TextButton(onClick = {
-                            viewModel.settings.update { it.copy(appMode = AppMode.CLASSIC) }
-                        }) {
-                            Text(stringResource(R.string.agg_back_classic))
+                when (detail) {
+                    null -> Unit
+                    is AggDetail.Edge -> {
+                        val edge = edges.getOrNull(detail.index)
+                        if (edge != null) {
+                            AggEdgeDetail(
+                                edge = edge,
+                                byId = byId,
+                                settings = settings,
+                                tripsById = tripsById,
+                                onBack = back,
+                                onOpenTrip = { id -> detailRoute = AggDetail.Trip(id).route() },
+                            )
+                        } else {
+                            AggMissingDetail(back)
                         }
                     }
-                    Text(
-                        text = stringResource(R.string.agg_subtitle, net.trips, net.fixes),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    StatRow(
-                        stringResource(R.string.agg_stat_points) to net.points.size.toString(),
-                        stringResource(R.string.agg_stat_crossings) to net.edges.size.toString(),
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    StatRow(
-                        stringResource(R.string.agg_stat_trips) to net.trips.toString(),
-                        stringResource(R.string.agg_stat_fixes) to net.fixes.toString(),
-                    )
+                    is AggDetail.Point -> {
+                        val point = byId[detail.id]
+                        if (point != null) {
+                            AggPointDetail(
+                                point = point,
+                                edges = edges,
+                                passes = passes,
+                                byId = byId,
+                                settings = settings,
+                                tripsById = tripsById,
+                                onBack = back,
+                                onOpenEdge = { edge ->
+                                    val index = edges.indexOf(edge)
+                                    if (index >= 0) detailRoute = AggDetail.Edge(index).route()
+                                },
+                                onOpenTrip = { id -> detailRoute = AggDetail.Trip(id).route() },
+                            )
+                        } else {
+                            AggMissingDetail(back)
+                        }
+                    }
+                    is AggDetail.Trip -> {
+                        val trip = tripsById[detail.id]
+                        if (trip != null) {
+                            AggTripDetail(
+                                viewModel = viewModel,
+                                trip = trip,
+                                passes = passes.filter { it.tripId == detail.id },
+                                byId = byId,
+                                settings = settings,
+                                onBack = back,
+                                onOpenEdge = { edge ->
+                                    val index = edges.indexOf(edge)
+                                    if (index >= 0) detailRoute = AggDetail.Edge(index).route()
+                                },
+                            )
+                        } else {
+                            AggMissingDetail(back)
+                        }
+                    }
                 }
 
-                when (AggTab.valueOf(tab)) {
-                    AggTab.NETWORK -> {
-                        ModeFilter(
-                            selected = modeFilter,
-                            onSelect = {
-                                modeFilter = it
-                                selectedEdge = null
-                            },
-                            modifier = Modifier.padding(horizontal = 16.dp),
+                if (detail == null) {
+                    // Header instead of the classic ScreenHeader: a status band
+                    // that says where these points came from, not a page title.
+                    Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = stringResource(R.string.agg_title),
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f),
+                            )
+                            // The settings tab lives in the classic shell; give
+                            // this shell its own way back without duplicating it.
+                            TextButton(onClick = {
+                                viewModel.settings.update { it.copy(appMode = AppMode.CLASSIC) }
+                            }) {
+                                Text(stringResource(R.string.agg_back_classic))
+                            }
+                        }
+                        Text(
+                            text = stringResource(R.string.agg_subtitle, net.trips, net.fixes),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Spacer(Modifier.height(8.dp))
-                        AggMap(net, edges, byId, settings.mapTiles, settings.basemap,
-                            settings.customTileUrl, settings.customTilesGcj02,
-                            selectedEdge) { selectedEdge = it }
-                        selectedEdge?.let { index ->
-                            edges.getOrNull(index)?.let { edge ->
-                                AggEdgeCard(edge, byId, Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                            }
-                        }
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            items(edges.take(40), key = { "${it.fromId}-${it.toId}-${it.mode.id}" }) { edge ->
-                                AggEdgeCard(edge, byId)
-                            }
-                            item { Spacer(Modifier.height(16.dp)) }
-                        }
+                        Spacer(Modifier.height(12.dp))
+                        StatRow(
+                            stringResource(R.string.agg_stat_points) to net.points.size.toString(),
+                            stringResource(R.string.agg_stat_crossings) to net.edges.size.toString(),
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        StatRow(
+                            stringResource(R.string.agg_stat_trips) to net.trips.toString(),
+                            stringResource(R.string.agg_stat_fixes) to net.fixes.toString(),
+                        )
                     }
 
-                    AggTab.PLACES -> {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            item {
-                                Text(
-                                    text = stringResource(R.string.agg_places_hint),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                    when (AggTab.valueOf(tab)) {
+                        AggTab.NETWORK -> {
+                            ModeFilter(
+                                selected = modeFilter,
+                                onSelect = {
+                                    modeFilter = it
+                                    selectedEdge = null
+                                    detailRoute = null
+                                },
+                                modifier = Modifier.padding(horizontal = 16.dp),
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            val networkTracks = remember(edges, byId) {
+                                edges.mapNotNull { edge ->
+                                    val from = byId[edge.fromId]?.at ?: return@mapNotNull null
+                                    val to = byId[edge.toId]?.at ?: return@mapNotNull null
+                                    listOf(from, to)
+                                }
                             }
-                            items(net.points.sortedByDescending { it.visits }, key = { it.id }) { point ->
-                                SectionCard(
-                                    title = stringResource(R.string.agg_point_title, point.id),
-                                    subtitle = "%.5f, %.5f".format(point.at.lat, point.at.lon),
-                                ) {
-                                    StatRow(
-                                        stringResource(R.string.agg_stat_fixes) to point.visits.toString(),
-                                        stringResource(R.string.agg_stat_trips) to point.trips.toString(),
+                            val networkMarkers = remember(net.points) {
+                                net.points.sortedByDescending { it.visits }.take(60).mapIndexed { index, point ->
+                                    MapMarker(point.at, label = "P${point.id}", emphasized = index < 6)
+                                }
+                            }
+                            val networkBounds = remember(net.points) {
+                                Geo.bounds(net.points.map { it.at })?.expanded(60.0)
+                            }
+                            val networkHighlight = selectedEdge?.let { index ->
+                                edges.getOrNull(index)?.let { edge ->
+                                    listOfNotNull(byId[edge.fromId]?.at, byId[edge.toId]?.at)
+                                }
+                            }
+                            AggDetailMap(
+                                settings = settings,
+                                tracks = networkTracks,
+                                markers = networkMarkers,
+                                emptyHint = stringResource(R.string.agg_map_empty),
+                                highlight = networkHighlight,
+                                focusBounds = if (networkHighlight != null) null else networkBounds,
+                                onTrackTap = { index ->
+                                    selectedEdge = index
+                                    detailRoute = AggDetail.Edge(index).route()
+                                },
+                            )
+                            selectedEdge?.let { index ->
+                                edges.getOrNull(index)?.let { edge ->
+                                    AggEdgeCard(
+                                        edge,
+                                        byId,
+                                        Modifier
+                                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                                            .clickable { detailRoute = AggDetail.Edge(index).route() },
                                     )
+                                }
+                            }
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                itemsIndexed(edges.take(40)) { index, edge ->
+                                    AggEdgeCard(
+                                        edge,
+                                        byId,
+                                        Modifier.clickable {
+                                            selectedEdge = index
+                                            detailRoute = AggDetail.Edge(index).route()
+                                        },
+                                    )
+                                }
+                                item { Spacer(Modifier.height(16.dp)) }
+                            }
+                        }
+
+                        AggTab.PLACES -> {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                item {
                                     Text(
-                                        text = stringResource(R.string.agg_point_radius, formatDistance(point.radiusM)),
+                                        text = stringResource(R.string.agg_places_hint),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
+                                items(net.points.sortedByDescending { it.visits }, key = { it.id }) { point ->
+                                    val lastVisit = remember(point.id, passes) {
+                                        passes.filter { it.fromId == point.id || it.toId == point.id }
+                                            .maxOfOrNull { it.startedAt }
+                                    }
+                                    SectionCard(
+                                        modifier = Modifier.clickable {
+                                            detailRoute = AggDetail.Point(point.id).route()
+                                        },
+                                        title = stringResource(R.string.agg_point_title, point.id),
+                                        subtitle = "%.5f, %.5f".format(point.at.lat, point.at.lon),
+                                    ) {
+                                        StatRow(
+                                            stringResource(R.string.agg_stat_fixes) to point.visits.toString(),
+                                            stringResource(R.string.agg_stat_trips) to point.trips.toString(),
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.agg_point_radius, formatDistance(point.radiusM)),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        if (lastVisit != null) {
+                                            Text(
+                                                text = stringResource(R.string.agg_last_seen, formatDateTime(lastVisit)),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                        Text(
+                                            text = stringResource(R.string.agg_action_open),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
                             }
                         }
-                    }
 
-                    AggTab.TRIPS -> {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            items(viewModel.trips, key = { it.id }) { trip ->
-                                SectionCard(
-                                    title = stringResource(R.string.agg_trip_title, trip.mode.name),
-                                    subtitle = formatDuration(trip.durationMs),
-                                ) {
-                                    StatRow(
-                                        stringResource(R.string.agg_stat_fixes) to trip.pointCount.toString(),
-                                        stringResource(R.string.agg_trip_distance) to formatDistance(trip.distanceM),
-                                    )
+                        AggTab.TRIPS -> {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                items(viewModel.trips, key = { it.id }) { trip ->
+                                    SectionCard(
+                                        modifier = Modifier.clickable {
+                                            detailRoute = AggDetail.Trip(trip.id).route()
+                                        },
+                                        title = stringResource(R.string.agg_trip_title, trip.mode.name),
+                                        subtitle = formatDateTime(trip.startedAt),
+                                    ) {
+                                        StatRow(
+                                            stringResource(R.string.agg_stat_fixes) to trip.pointCount.toString(),
+                                            stringResource(R.string.agg_trip_distance) to formatDistance(trip.distanceM),
+                                            stringResource(R.string.agg_trip_duration) to formatDuration(trip.durationMs),
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.agg_action_open),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -222,66 +363,18 @@ fun AggApp(viewModel: AppViewModel) {
 }
 
 @Composable
-private fun AggMap(
-    net: AggNetwork,
-    edges: List<AggEdge>,
-    byId: Map<Int, AggPoint>,
-    tilesEnabled: Boolean,
-    basemap: Basemap,
-    customTileUrl: String,
-    customTilesGcj02: Boolean,
-    selectedEdge: Int?,
-    onSelectEdge: (Int) -> Unit,
-) {
-    val tracks = remember(edges, byId) {
-        edges.mapNotNull { edge ->
-            val from = byId[edge.fromId]?.at ?: return@mapNotNull null
-            val to = byId[edge.toId]?.at ?: return@mapNotNull null
-            listOf(from, to)
-        }
-    }
-    val markers = remember(net.points, byId) {
-        net.points.sortedByDescending { it.visits }.take(60).mapIndexed { index, point ->
-            MapMarker(point.at, label = "P${point.id}", emphasized = index < 6)
-        }
-    }
-    val bounds = remember(net.points) {
-        Geo.bounds(net.points.map { it.at })?.expanded(60.0)
-    }
-    val highlight: List<LatLon>? = selectedEdge?.let { index ->
-        edges.getOrNull(index)?.let { edge ->
-            listOfNotNull(byId[edge.fromId]?.at, byId[edge.toId]?.at)
-        }
-    }
-    TrackMap(
-        tracks = tracks,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(280.dp),
-        markers = markers,
-        tilesEnabled = tilesEnabled,
-        basemap = basemap,
-        customTileUrl = customTileUrl,
-        customTilesGcj02 = customTilesGcj02,
-        emptyHint = stringResource(R.string.agg_map_empty),
-        onTrackTap = onSelectEdge,
-        highlight = highlight,
-        focusBounds = if (highlight != null) null else bounds,
-    )
-}
-
-@Composable
 private fun AggEdgeCard(
     edge: AggEdge,
     byId: Map<Int, AggPoint>,
     modifier: Modifier = Modifier,
 ) {
+    val lastSeen = edge.passes.maxOfOrNull { it.startedAt }
     SectionCard(
         modifier = modifier,
-        title = "P${edge.fromId} → P${edge.toId}",
+        title = "P${edge.fromId} ↔ P${edge.toId}",
         subtitle = stringResource(R.string.agg_edge_subtitle, edge.mode.name, edge.samples),
     ) {
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = formatSeconds(edge.typicalMs),
                 style = MaterialTheme.typography.titleLarge,
@@ -294,5 +387,17 @@ private fun AggEdgeCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        if (lastSeen != null) {
+            Text(
+                text = stringResource(R.string.agg_last_seen, formatDateTime(lastSeen)),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = stringResource(R.string.agg_action_open),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }

@@ -36,6 +36,27 @@ class AggNetworkTest {
     }
 
     @Test
+    fun crossingsKeepTripDirectionTimeAndRecordedPath() {
+        val network = Aggregator.aggregate(
+            listOf(
+                AggTrace(1, TripMode.WALK, visit(a, 0) + visit(b, 100_000)),
+                AggTrace(2, TripMode.WALK, visit(b, 200_000) + visit(a, 300_000)),
+            ),
+        )
+
+        val passes = network.edges.single().passes
+        assertEquals(2, passes.size)
+        assertTrue(passes.any {
+            it.tripId == 1L && it.fromId == 1 && it.toId == 2 &&
+                it.startedAt == 7_000L && it.endedAt == 100_000L &&
+                it.durationMs == 93_000L && it.path.size == 2
+        })
+        assertTrue(passes.any { it.tripId == 2L && it.fromId == 2 && it.toId == 1 })
+        // Newest first, so the history view can take the first row as "last time".
+        assertEquals(2L, passes.first().tripId)
+    }
+
+    @Test
     fun oneVisitIsNotAPlace() {
         val network = Aggregator.aggregate(
             listOf(AggTrace(1, TripMode.WALK, visit(a, 0, count = 3))),

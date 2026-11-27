@@ -26,6 +26,21 @@ data class AggPoint(
     val radiusM: Double,
 )
 
+/** One observed crossing, kept so the read-only UI can show its history. */
+data class AggPass(
+    val tripId: Long,
+    /** The direction this particular trip actually travelled. */
+    val fromId: Int,
+    val toId: Int,
+    val startedAt: Long,
+    val endedAt: Long,
+    val durationMs: Long,
+    /** The raw fixes between the two places, including both ends. */
+    val path: List<LatLon>,
+) {
+    val fixes: Int get() = path.size
+}
+
 /** One undirected connection between two aggregated points, for one mode. */
 data class AggEdge(
     val fromId: Int,
@@ -35,6 +50,8 @@ data class AggEdge(
     val typicalMs: Long,
     val samples: Int,
     val distanceM: Double,
+    /** Every crossing, newest first. The summary above is derived from these. */
+    val passes: List<AggPass>,
 )
 
 data class AggTrace(
@@ -54,7 +71,14 @@ data class AggNetwork(
 )
 
 private data class SampleKey(val low: Int, val high: Int, val mode: TripMode)
-private data class Visit(val pointId: Int, val firstT: Long, val lastT: Long)
+private data class Visit(
+    val pointId: Int,
+    val firstT: Long,
+    val lastT: Long,
+    /** Indices into the cleaned trace; they bound the path of a crossing. */
+    val firstIndex: Int,
+    val lastIndex: Int,
+)
 private data class Cluster(val at: LatLon, val visits: Int, val trips: Int, val radiusM: Double)
 
 /**
@@ -186,17 +210,17 @@ object Aggregator {
             return best
         }
 
-        val samples = LinkedHashMap<SampleKey, MutableList<Long>>()
+        val samples = LinkedHashMap<SampleKey, MutableList<AggPass>>()
         var unmatchedTrips = 0
         for (trace in cleaned) {
             val visits = mutableListOf<Visit>()
-            for (fix in trace.fixes) {
+            for ((index, fix) in trace.fixes.withIndex()) {
                 val point = nearest(fix.at) ?: continue
                 val last = visits.lastOrNull()
                 if (last?.pointId == point.id) {
-                    visits[visits.lastIndex] = last.copy(lastT = fix.t)
+                    visits[visits.lastIndex] = last.copy(lastT = fix.t, lastIndex = index)
                 } else {
-                    visits += Visit(point.id, fix.t, fix.t)
+                    visits += Visit(point.id, fix.t, fix.t, index, index)
                 }
             }
             if (visits.size < 2) {
@@ -213,20 +237,33 @@ object Aggregator {
                     maxOf(from.pointId, to.pointId),
                     trace.mode,
                 )
-                samples.getOrPut(key) { mutableListOf() } += duration
+                // The straight P1–P2 line is only a summary. The fixes between
+                // the two visits are what the user actually walked or rode, so
+                // keep them for the read-only history view.
+                val path = trace.fixes.subList(from.lastIndex, to.firstIndex + 1).map { it.at }
+                samples.getOrPut(key) { mutableListOf() } += AggPass(
+                    tripId = trace.tripId,
+                    fromId = from.pointId,
+                    toId = to.pointId,
+                    startedAt = from.lastT,
+                    endedAt = to.firstT,
+                    durationMs = duration,
+                    path = path,
+                )
             }
         }
 
         val byId = points.associateBy { it.id }
-        val edges = samples.map { (key, times) ->
-            val sorted = times.sorted()
+        val edges = samples.map { (key, passes) ->
+            val sorted = passes.map { it.durationMs }.sorted()
             AggEdge(
                 fromId = key.low,
                 toId = key.high,
                 mode = key.mode,
                 typicalMs = sorted[sorted.size / 2],
-                samples = times.size,
+                samples = passes.size,
                 distanceM = Geo.distanceMeters(byId.getValue(key.low).at, byId.getValue(key.high).at),
+                passes = passes.sortedByDescending { it.startedAt },
             )
         }.sortedWith(compareByDescending<AggEdge> { it.samples }.thenBy { it.fromId }.thenBy { it.toId })
 
