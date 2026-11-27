@@ -4,30 +4,42 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- The time ring: open at the top-right, where the route leaves it. -->
+    <!-- Bone background: the paper this map is drawn on. -->
+    <path
+        android:fillColor="#F3EFE6"
+        android:pathData="M0,0h108v108h-108z" />
+    <!-- One junction, four travel modes: each mode leaves the same crossing
+         on its own curve, because walking, cycling, moped and driving never
+         share a clock. Drawn from the junction outward, coral on top. -->
     <path
         android:fillColor="#00000000"
-        android:pathData="M85.2,43.3 A33,33 0,1 1,64.7 22.8"
-        android:strokeColor="#3B628C"
+        android:pathData="M24,54 C52,54 58,80 90,80"
+        android:strokeColor="#E4562E"
         android:strokeLineCap="round"
-        android:strokeWidth="5" />
-    <!-- The travelled route, from the start node out through the ring. -->
+        android:strokeWidth="8" />
     <path
         android:fillColor="#00000000"
-        android:pathData="M20,76 L34,76 L46,66 L64,54 L78,42 L88,34"
-        android:strokeColor="#4FC3F7"
+        android:pathData="M24,54 C52,54 58,58 86,58"
+        android:strokeColor="#F4A261"
         android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:strokeWidth="7" />
+        android:strokeWidth="8" />
     <path
-        android:fillColor="#4FC3F7"
-        android:pathData="M13,76a7,7 0,1 0,14,0a7,7 0,1 0,-14,0z"
-        android:strokeColor="#16222E"
-        android:strokeWidth="3" />
-    <!-- Now: where the route exits the ring. -->
+        android:fillColor="#00000000"
+        android:pathData="M24,54 C52,54 58,40 78,40"
+        android:strokeColor="#E9C46A"
+        android:strokeLineCap="round"
+        android:strokeWidth="8" />
     <path
-        android:fillColor="#FFB74D"
-        android:pathData="M80,34a8,8 0,1 0,16,0a8,8 0,1 0,-16,0z"
-        android:strokeColor="#16222E"
-        android:strokeWidth="3" />
+        android:fillColor="#00000000"
+        android:pathData="M24,54 C52,54 58,26 66,26"
+        android:strokeColor="#2A9D8F"
+        android:strokeLineCap="round"
+        android:strokeWidth="8" />
+    <!-- The junction itself, punched through with the background. -->
+    <path
+        android:fillColor="#26333F"
+        android:pathData="M15,54a9,9 0,1 0,18 0a9,9 0,1 0,-18 0z" />
+    <path
+        android:fillColor="#F3EFE6"
+        android:pathData="M20.2,54a3.8,3.8 0,1 0,7.6 0a3.8,3.8 0,1 0,-7.6 0z" />
 </vector>
