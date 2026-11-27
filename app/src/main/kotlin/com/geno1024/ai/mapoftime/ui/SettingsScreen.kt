@@ -58,6 +58,7 @@ import com.geno1024.ai.mapoftime.core.HolidayBlock
 import com.geno1024.ai.mapoftime.core.Holidays
 import com.geno1024.ai.mapoftime.core.parseHolidayBlock
 import com.geno1024.ai.mapoftime.core.parseHolidayDates
+import com.geno1024.ai.mapoftime.data.AppMode
 import com.geno1024.ai.mapoftime.data.DangerCounts
 import com.geno1024.ai.mapoftime.update.Mirrors
 import com.geno1024.ai.mapoftime.update.UpdateError
@@ -181,6 +182,27 @@ fun SettingsScreen(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            // The two shells share trip data but not a point model. Switching
+            // only writes a preference: both App and the theme observe it, so
+            // the whole interface changes on the next composition.
+            SectionCard(
+                title = stringResource(R.string.settings_app_mode),
+                subtitle = stringResource(R.string.settings_app_mode_desc),
+            ) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = settings.appMode == AppMode.CLASSIC,
+                        onClick = { viewModel.settings.update { it.copy(appMode = AppMode.CLASSIC) } },
+                        label = { Text(stringResource(R.string.settings_app_mode_classic)) },
+                    )
+                    FilterChip(
+                        selected = settings.appMode == AppMode.GRAPH,
+                        onClick = { viewModel.settings.update { it.copy(appMode = AppMode.GRAPH) } },
+                        label = { Text(stringResource(R.string.settings_app_mode_graph)) },
+                    )
+                }
+            }
+
             SectionCard(title = stringResource(R.string.settings_matching)) {
                 SwitchRow(
                     title = stringResource(R.string.settings_matching),

@@ -282,6 +282,29 @@
     <string name="edge_first_seen">First seen</string>
 
     <string name="settings_title">Settings</string>
+    <string name="settings_app_mode">App mode</string>
+    <string name="settings_app_mode_desc">Classic keeps legs and typical times. Aggregated rebuilds points from all raw tracks and is read-only.</string>
+    <string name="settings_app_mode_classic">Classic</string>
+    <string name="settings_app_mode_graph">Aggregated</string>
+
+    <string name="agg_tab_network">Network</string>
+    <string name="agg_tab_places">Places</string>
+    <string name="agg_tab_trips">Trips</string>
+    <string name="agg_title">Aggregated network</string>
+    <string name="agg_subtitle">Points from %1$d trips · %2$d fixes</string>
+    <string name="agg_stat_points">Points</string>
+    <string name="agg_stat_crossings">Crossings</string>
+    <string name="agg_stat_trips">Trips</string>
+    <string name="agg_stat_fixes">Fixes</string>
+    <string name="agg_places_hint">Where tracks pile up, ranked by fixes. This view is read-only.</string>
+    <string name="agg_point_title">Place P%1$d</string>
+    <string name="agg_point_radius">Spread %1$s</string>
+    <string name="agg_trip_title">%1$s trip</string>
+    <string name="agg_trip_distance">Distance</string>
+    <string name="agg_map_empty">No points yet — visit the same places a few times.</string>
+    <string name="agg_back_classic">Classic</string>
+    <string name="agg_edge_subtitle">%1$s · %2$d crossings</string>
+
     <string name="settings_matching">Road matching</string>
     <string name="settings_matching_desc">Cut legs at OpenStreetMap intersections when road data is available.</string>
     <string name="settings_basemap">Basemap</string>

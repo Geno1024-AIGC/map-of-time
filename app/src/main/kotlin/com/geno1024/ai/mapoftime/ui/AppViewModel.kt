@@ -15,6 +15,9 @@ import com.geno1024.ai.mapoftime.analysis.PointDetails
 import com.geno1024.ai.mapoftime.analysis.RoadShapes
 import com.geno1024.ai.mapoftime.analysis.EdgeSummary
 import com.geno1024.ai.mapoftime.analysis.TripAnalyzer
+import com.geno1024.ai.mapoftime.agg.AggNetwork
+import com.geno1024.ai.mapoftime.agg.AggTrace
+import com.geno1024.ai.mapoftime.agg.Aggregator
 import com.geno1024.ai.mapoftime.core.BucketTake
 import com.geno1024.ai.mapoftime.core.DurationStats
 import com.geno1024.ai.mapoftime.core.Geo
@@ -41,6 +44,7 @@ import com.geno1024.ai.mapoftime.data.Road
 import com.geno1024.ai.mapoftime.data.Edge
 import com.geno1024.ai.mapoftime.data.Trip
 import com.geno1024.ai.mapoftime.data.TripImport
+import com.geno1024.ai.mapoftime.data.TripStatus
 import com.geno1024.ai.mapoftime.track.Recorder
 import com.geno1024.ai.mapoftime.update.AppVersion
 import com.geno1024.ai.mapoftime.update.InstallOutcome
@@ -72,6 +76,13 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
     val recording: StateFlow<com.geno1024.ai.mapoftime.track.RecordingState> = Recorder.state
 
     var trips by mutableStateOf<List<Trip>>(emptyList())
+        private set
+    /**
+     * Read-only second model: points aggregated from every raw track. It is
+     * rebuilt, never migrated, and stays entirely separate from classic
+     * edges/legs/names so neither app can damage the other's data.
+     */
+    var aggNetwork by mutableStateOf(AggNetwork(emptyList(), emptyList(), 0, 0, 0))
         private set
     var summaries by mutableStateOf<List<EdgeSummary>>(emptyList())
         private set
@@ -173,6 +184,12 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 }.sortedWith(compareByDescending<EdgeSummary> { it.sampleCount }.thenBy { it.edge.displayName })
                 Loaded(
                     trips = trips,
+                    // Only finished trips: a recording in progress would make
+                    // points appear and disappear as it grows.
+                    agg = Aggregator.aggregate(trips.filter { it.status != TripStatus.RECORDING }
+                        .map { trip ->
+                            AggTrace(trip.id, trip.mode, container.repository.points(trip.id))
+                        }),
                     summaries = summaries,
                     places = container.repository.places(),
                     roads = container.repository.roads(),
@@ -181,6 +198,7 @@ class AppViewModel(private val container: AppContainer) : ViewModel() {
                 )
             }
             trips = loaded.trips
+            aggNetwork = loaded.agg
             summaries = loaded.summaries
             places = loaded.places
             roads = loaded.roads
@@ -960,6 +978,7 @@ private fun takeOn(
 /** Everything one background refresh loads, handed over in one go. */
 private data class Loaded(
     val trips: List<Trip>,
+    val agg: AggNetwork,
     val summaries: List<EdgeSummary>,
     val places: List<Place>,
     val roads: List<Road>,

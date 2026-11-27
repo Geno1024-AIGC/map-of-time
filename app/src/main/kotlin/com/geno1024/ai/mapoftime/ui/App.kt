@@ -21,6 +21,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import com.geno1024.ai.mapoftime.R
+import com.geno1024.ai.mapoftime.data.AppMode
+import com.geno1024.ai.mapoftime.ui.agg.AggApp
 
 private enum class Tab(val labelRes: Int, val glyph: String) {
     RECORD(R.string.nav_record, "◉"),
@@ -41,7 +43,14 @@ private enum class Tab(val labelRes: Int, val glyph: String) {
  * restores the list exactly where it was instead of jumping to the top.
  */
 @Composable
-fun App(viewModel: AppViewModel) {
+fun App(viewModel: AppViewModel, appMode: AppMode = AppMode.CLASSIC) {
+    // The alternative shell is a different app over the same trips. Nothing
+    // here is shared with the classic navigation: one preference decides which
+    // tree composes, so switching feels like opening another application.
+    if (appMode == AppMode.GRAPH) {
+        AggApp(viewModel)
+        return
+    }
     var tab by rememberSaveable { mutableStateOf(Tab.RECORD.name) }
     var detail by rememberSaveable { mutableStateOf<String?>(null) }
     var detailStack by rememberSaveable { mutableStateOf<ArrayList<String>>(arrayListOf()) }

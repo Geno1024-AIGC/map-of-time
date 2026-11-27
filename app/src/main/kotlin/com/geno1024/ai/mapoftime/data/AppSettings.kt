@@ -16,7 +16,20 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.time.LocalDate
 
+/** Two apps over the same trips: classic legs, or points aggregated from raw fixes. */
+enum class AppMode(val id: String) {
+    CLASSIC("classic"),
+    GRAPH("graph"),
+    ;
+
+    companion object {
+        fun of(id: String?): AppMode = entries.firstOrNull { it.id == id } ?: CLASSIC
+    }
+}
+
 data class SettingsSnapshot(
+    /** Whole-shell switch; the alternative mode is read-only. */
+    val appMode: AppMode = AppMode.CLASSIC,
     /** Cut legs at OSM intersections when road data is available. */
     val osmMatching: Boolean = true,
     /** Draw raster tiles behind the track. */
@@ -65,6 +78,7 @@ class AppSettings(context: Context) {
     fun update(transform: (SettingsSnapshot) -> SettingsSnapshot) {
         val next = transform(_state.value)
         prefs.edit {
+            putString(KEY_APP_MODE, next.appMode.id)
             putBoolean(KEY_OSM_MATCHING, next.osmMatching)
             putBoolean(KEY_MAP_TILES, next.mapTiles)
             putString(KEY_BASEMAP, next.basemap.id)
@@ -90,6 +104,7 @@ class AppSettings(context: Context) {
         val basemap = prefs.getString(KEY_BASEMAP, null)?.let { Basemap.of(it) }
             ?: if (customUrl != null && customUrl != Basemap.OSM.tileTemplate) Basemap.CUSTOM else Basemap.OSM
         return SettingsSnapshot(
+            appMode = AppMode.of(prefs.getString(KEY_APP_MODE, null)),
             osmMatching = prefs.getBoolean(KEY_OSM_MATCHING, true),
             mapTiles = prefs.getBoolean(KEY_MAP_TILES, true),
             basemap = basemap,
@@ -116,6 +131,7 @@ class AppSettings(context: Context) {
     }
 
     private companion object {
+        const val KEY_APP_MODE = "app_mode"
         const val KEY_OSM_MATCHING = "osm_matching"
         const val KEY_MAP_TILES = "map_tiles"
         const val KEY_BASEMAP = "basemap"

@@ -282,6 +282,29 @@
     <string name="edge_first_seen">首次记录</string>
 
     <string name="settings_title">设置</string>
+    <string name="settings_app_mode">应用模式</string>
+    <string name="settings_app_mode_desc">经典模式保留切段与典型耗时；聚合模式从全部原始轨迹重建点位，只读。</string>
+    <string name="settings_app_mode_classic">经典</string>
+    <string name="settings_app_mode_graph">聚合</string>
+
+    <string name="agg_tab_network">路网</string>
+    <string name="agg_tab_places">地点</string>
+    <string name="agg_tab_trips">行程</string>
+    <string name="agg_title">聚合路网</string>
+    <string name="agg_subtitle">由 %1$d 次行程、%2$d 个定位点聚出</string>
+    <string name="agg_stat_points">点位</string>
+    <string name="agg_stat_crossings">连接</string>
+    <string name="agg_stat_trips">行程</string>
+    <string name="agg_stat_fixes">定位点</string>
+    <string name="agg_places_hint">轨迹反复经过的地方，按定位点数排序。此模式只读。</string>
+    <string name="agg_point_title">地点 P%1$d</string>
+    <string name="agg_point_radius">范围 %1$s</string>
+    <string name="agg_trip_title">%1$s 行程</string>
+    <string name="agg_trip_distance">距离</string>
+    <string name="agg_map_empty">还没有点位——多走几次同样的地方。</string>
+    <string name="agg_back_classic">返回经典</string>
+    <string name="agg_edge_subtitle">%1$s · %2$d 次经过</string>
+
     <string name="settings_matching">路网匹配</string>
     <string name="settings_matching_desc">有路网数据时，在 OpenStreetMap 的交叉口处切段。</string>
     <string name="settings_basemap">底图来源</string>
