@@ -80,6 +80,7 @@ private data class Visit(
     val firstIndex: Int,
     val lastIndex: Int,
 )
+private data class FixRef(val at: LatLon, val tripId: Long)
 private data class Cluster(val at: LatLon, val visits: Int, val trips: Int, val radiusM: Double)
 
 /**
@@ -90,8 +91,13 @@ private data class Cluster(val at: LatLon, val visits: Int, val trips: Int, val 
 object Aggregator {
     /** Cell size of the first pass, in metres. */
     private const val CELL_M = 30.0
-    /** Neighbouring cells whose centres are this close are the same place. */
+    /** A cell joins a place whose centre is this close to the cell's centre. */
     private const val MERGE_M = 45.0
+    /**
+     * Hard cap on one place. Unioning every close neighbour would chain a
+     * continuous 10 km track into a single "point"; a place has to stay local.
+     */
+    private const val MAX_RADIUS_M = 60.0
     /** How far a fix can be from a point and still count as visiting it. */
     private const val MATCH_M = 70.0
     /** A single visit is noise; a place is somewhere fixes pile up. */
@@ -115,66 +121,82 @@ object Aggregator {
         }
 
         // Bucket fixes by cell, keeping trip ids for "visited on N trips".
-        val buckets = LinkedHashMap<Pair<Int, Int>, MutableList<Pair<LatLon, Long>>>()
+        val buckets = LinkedHashMap<Pair<Int, Int>, MutableList<FixRef>>()
         for (trace in cleaned) {
             for (fix in trace.fixes) {
-                buckets.getOrPut(cell(fix.at)) { mutableListOf() } += fix.at to trace.tripId
+                buckets.getOrPut(cell(fix.at)) { mutableListOf() } += FixRef(fix.at, trace.tripId)
             }
         }
 
-        // Union adjacent cells whose centres are close: a place straddles the
-        // grid line far too often to trust the grid itself as identity.
-        val parent = HashMap<Pair<Int, Int>, Pair<Int, Int>>().apply { buckets.keys.forEach { put(it, it) } }
-        fun find(key: Pair<Int, Int>): Pair<Int, Int> {
-            var root = key
-            while (parent.getValue(root) != root) root = parent.getValue(root)
-            var cursor = key
-            while (parent.getValue(cursor) != cursor) {
-                val next = parent.getValue(cursor)
-                parent[cursor] = root
-                cursor = next
+        // Grow places greedily around a centre instead of unioning neighbours.
+        // Each candidate must fit inside MAX_RADIUS_M, so two busy intersections
+        // fifty metres apart stay separate and a road cannot become one point.
+        class PlaceBuilder(seed: List<FixRef>) {
+            val fixes = seed.toMutableList()
+            private var latSum = seed.sumOf { it.at.lat }
+            private var lonSum = seed.sumOf { it.at.lon }
+            val key: Pair<Int, Int> get() = cell(centre)
+
+            val centre: LatLon get() = LatLon(latSum / fixes.size, lonSum / fixes.size)
+
+            fun canAbsorb(incoming: List<FixRef>): Boolean {
+                val next = LatLon(
+                    (latSum + incoming.sumOf { it.at.lat }) / (fixes.size + incoming.size),
+                    (lonSum + incoming.sumOf { it.at.lon }) / (fixes.size + incoming.size),
+                )
+                if (Geo.distanceMeters(centre, next) > MERGE_M) return false
+                return fixes.all { Geo.distanceMeters(next, it.at) <= MAX_RADIUS_M } &&
+                    incoming.all { Geo.distanceMeters(next, it.at) <= MAX_RADIUS_M }
             }
-            return root
+
+            fun absorb(incoming: List<FixRef>) {
+                fixes.addAll(incoming)
+                latSum += incoming.sumOf { it.at.lat }
+                lonSum += incoming.sumOf { it.at.lon }
+            }
         }
-        fun union(a: Pair<Int, Int>, b: Pair<Int, Int>) {
-            val ra = find(a)
-            val rb = find(b)
-            if (ra != rb) parent[ra] = rb
-        }
-        for ((key, fixes) in buckets) {
-            val lat = fixes.sumOf { it.first.lat } / fixes.size
-            val lon = fixes.sumOf { it.first.lon } / fixes.size
-            val (kx, ky) = key
-            for (dx in -1..1) for (dy in -1..1) {
-                val neighbour = (kx + dx) to (ky + dy)
-                val other = buckets[neighbour] ?: continue
-                val otherLat = other.sumOf { it.first.lat } / other.size
-                val otherLon = other.sumOf { it.first.lon } / other.size
-                if (Geo.distanceMeters(LatLon(lat, lon), LatLon(otherLat, otherLon)) <= MERGE_M) {
-                    union(key, neighbour)
+
+        val places = mutableListOf<PlaceBuilder>()
+        val placeIndex = HashMap<Pair<Int, Int>, MutableList<PlaceBuilder>>()
+        val orderedCells = buckets.entries.sortedByDescending { it.value.size }
+        for ((key, incoming) in orderedCells) {
+            val cellCentre = LatLon(
+                incoming.sumOf { it.at.lat } / incoming.size,
+                incoming.sumOf { it.at.lon } / incoming.size,
+            )
+            var target: PlaceBuilder? = null
+            // A place's centre can sit one or two cells away from the cell
+            // being considered; the hard radius cap keeps this window finite.
+            outer@ for (dx in -2..2) for (dy in -2..2) {
+                for (place in placeIndex[(key.first + dx) to (key.second + dy)].orEmpty()) {
+                    if (Geo.distanceMeters(place.centre, cellCentre) <= MERGE_M &&
+                        place.canAbsorb(incoming)
+                    ) {
+                        target = place
+                        break@outer
+                    }
                 }
             }
-        }
-        // find() returns a cell key, but the union tree's root may change as
-        // more unions arrive; re-canonicalise every cell before grouping.
-        val roots = buckets.keys.associateWith { find(it) }
-        val groups = LinkedHashMap<Pair<Int, Int>, MutableList<Pair<LatLon, Long>>>()
-        for ((key, fixes) in buckets) {
-            groups.getOrPut(roots.getValue(key)) { mutableListOf() }.addAll(fixes)
+            if (target == null) {
+                target = PlaceBuilder(incoming)
+                places += target
+            } else {
+                target.absorb(incoming)
+            }
+            // Index every centre a place has occupied; stale entries only cost
+            // an extra distance check when a later cell looks for a home.
+            placeIndex.getOrPut(target.key) { mutableListOf() } += target
         }
 
         // Stable ids: most-travelled places first, then coordinates as a
         // tie-breaker. Recomputing the same data gives the same ids.
-        val points = groups.values.map { fixes ->
-            val centre = LatLon(
-                fixes.sumOf { it.first.lat } / fixes.size,
-                fixes.sumOf { it.first.lon } / fixes.size,
-            )
+        val points = places.map { place ->
+            val centre = place.centre
             Cluster(
                 at = centre,
-                visits = fixes.size,
-                trips = fixes.map { it.second }.toSet().size,
-                radiusM = fixes.maxOf { Geo.distanceMeters(centre, it.first) },
+                visits = place.fixes.size,
+                trips = place.fixes.map { it.tripId }.toSet().size,
+                radiusM = place.fixes.maxOf { Geo.distanceMeters(centre, it.at) },
             )
         }.filter { it.visits >= MIN_FIXES }
             .sortedWith(compareByDescending<Cluster> { it.trips }

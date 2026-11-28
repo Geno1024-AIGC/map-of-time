@@ -94,4 +94,21 @@ class AggNetworkTest {
         assertEquals(2, network.edges.size)
         assertEquals(setOf(TripMode.WALK, TripMode.DRIVE), network.edges.map { it.mode }.toSet())
     }
+
+    @Test
+    fun continuousTenKmTrackDoesNotBecomeOnePoint() {
+        // Ten metres per fix for ten kilometres: adjacent cells touch all the
+        // way along the road, which is exactly what used to union into one
+        // city-wide "place" with a 10 km radius.
+        val fixes = (0..1_000).map { i ->
+            TrackPoint(i * 1_000L, LatLon(22.0 + i * 0.00009, 114.0))
+        }
+        val network = Aggregator.aggregate(listOf(AggTrace(1, TripMode.DRIVE, fixes)))
+
+        assertTrue("expected several places, got ${network.points.size}", network.points.size > 5)
+        assertTrue(
+            "largest radius ${network.points.maxOf { it.radiusM }}",
+            network.points.all { it.radiusM <= 60.001 },
+        )
+    }
 }
