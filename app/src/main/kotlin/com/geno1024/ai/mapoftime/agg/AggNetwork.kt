@@ -83,6 +83,18 @@ private data class Visit(
 private data class FixRef(val at: LatLon, val tripId: Long)
 private data class Cluster(val at: LatLon, val visits: Int, val trips: Int, val radiusM: Double)
 
+/** Keep the endpoints, drop vertices that only add GPS jitter at this scale. */
+internal fun thinPath(path: List<LatLon>): List<LatLon> {
+    if (path.size <= 2) return path
+    val kept = ArrayList<LatLon>(path.size)
+    kept += path.first()
+    for (i in 1 until path.lastIndex) {
+        if (Geo.distanceMeters(kept.last(), path[i]) >= Aggregator.PATH_STEP_M) kept += path[i]
+    }
+    kept += path.last()
+    return kept
+}
+
 /**
  * Spatial aggregation of raw tracks. Deliberately a pure function: the whole
  * network is recomputed from the same trip data whenever that data changes,
@@ -100,6 +112,15 @@ object Aggregator {
     private const val MAX_RADIUS_M = 60.0
     /** How far a fix can be from a point and still count as visiting it. */
     private const val MATCH_M = 70.0
+    /**
+     * A rival point must be this much closer before a moving fix switches to
+     * it. At a big junction two places can both be within [MATCH_M]; without
+     * this margin, jitter makes the trace flip A→B→A and every flip draws a
+     * little zigzag back and forth.
+     */
+    private const val SWITCH_M = 15.0
+    /** Draw one vertex every so many metres instead of every raw GPS fix. */
+    internal const val PATH_STEP_M = 8.0
     /** A single visit is noise; a place is somewhere fixes pile up. */
     private const val MIN_FIXES = 6
     private const val MAX_ACCURACY_M = 120.0
@@ -217,7 +238,7 @@ object Aggregator {
         for (point in points) {
             matchCell.getOrPut(cell(point.at)) { mutableListOf() } += point
         }
-        fun nearest(at: LatLon): AggPoint? {
+        fun nearest(at: LatLon, current: AggPoint?): AggPoint? {
             val (kx, ky) = cell(at)
             var best: AggPoint? = null
             var bestM = MATCH_M
@@ -230,6 +251,13 @@ object Aggregator {
                     }
                 }
             }
+            // Keep the place we are already visiting until another one wins
+            // clearly. Fixes in the overlap between two junction places then
+            // stay with one side instead of alternating on every jitter.
+            if (current != null && best != null && best.id != current.id) {
+                val currentM = Geo.distanceMeters(at, current.at)
+                if (currentM <= MATCH_M && currentM <= bestM + SWITCH_M) return current
+            }
             return best
         }
 
@@ -237,8 +265,14 @@ object Aggregator {
         var unmatchedTrips = 0
         for (trace in cleaned) {
             val visits = mutableListOf<Visit>()
+            var current: AggPoint? = null
             for ((index, fix) in trace.fixes.withIndex()) {
-                val point = nearest(fix.at) ?: continue
+                val point = nearest(fix.at, current)
+                if (point == null) {
+                    current = null
+                    continue
+                }
+                current = point
                 val last = visits.lastOrNull()
                 if (last?.pointId == point.id) {
                     visits[visits.lastIndex] = last.copy(lastT = fix.t, lastIndex = index)
@@ -263,7 +297,7 @@ object Aggregator {
                 // The straight P1–P2 line is only a summary. The fixes between
                 // the two visits are what the user actually walked or rode, so
                 // keep them for the read-only history view.
-                val path = trace.fixes.subList(from.lastIndex, to.firstIndex + 1).map { it.at }
+                val path = thinPath(trace.fixes.subList(from.lastIndex, to.firstIndex + 1).map { it.at })
                 samples.getOrPut(key) { mutableListOf() } += AggPass(
                     tripId = trace.tripId,
                     mode = trace.mode,

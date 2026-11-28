@@ -1,5 +1,6 @@
 package com.geno1024.ai.mapoftime.agg
 
+import com.geno1024.ai.mapoftime.core.Geo
 import com.geno1024.ai.mapoftime.core.LatLon
 import com.geno1024.ai.mapoftime.core.TrackPoint
 import com.geno1024.ai.mapoftime.core.TripMode
@@ -93,6 +94,55 @@ class AggNetworkTest {
         )
         assertEquals(2, network.edges.size)
         assertEquals(setOf(TripMode.WALK, TripMode.DRIVE), network.edges.map { it.mode }.toSet())
+    }
+
+    @Test
+    fun junctionOverlapDoesNotFlipFlopBetweenPoints() {
+        val west = LatLon(22.0, 114.0)
+        val east = LatLon(22.0, 114.001)
+        fun stop(at: LatLon, firstT: Long, count: Int = 8) =
+            (0 until count).map { TrackPoint(firstT + it * 1_000L, at) }
+
+        // Establish two places roughly 100 m apart, as a big junction often is.
+        val establish = AggTrace(1, TripMode.WALK, stop(west, 0) + stop(east, 100_000))
+        // The second trip waits at west, drifts through the ~50 m overlap with
+        // tiny GPS jitter, then settles at east. Each jitter step is within
+        // MATCH_M of both places, so nearest-only matching would flip-flop and
+        // create a pass on every step — drawn as a zigzag across the junction.
+        val overlap = (0 until 4).map { i ->
+            val lon = 114.0005 + if (i % 2 == 0) 0.00001 else -0.00001
+            TrackPoint(300_000L + i * 1_000L, LatLon(22.0, lon))
+        }
+        val crossing = AggTrace(
+            2,
+            TripMode.WALK,
+            stop(west, 200_000) + overlap + stop(east, 400_000),
+        )
+        val net = Aggregator.aggregate(listOf(establish, crossing))
+
+        assertEquals(2, net.points.size)
+        val passes = net.edges.flatMap { it.passes }.filter { it.tripId == 2L }
+        assertEquals("jitter must not become crossings: $passes", 1, passes.size)
+    }
+
+    @Test
+    fun noisyVertexesAreThinnedButEndpointsSurvive() {
+        val start = LatLon(22.0, 114.0)
+        val end = LatLon(22.0 + 0.00009, 114.0)
+        val jittered = buildList {
+            add(start)
+            // Dozens of fixes dancing within a metre; none deserves a vertex.
+            for (i in 1 until 40) {
+                add(LatLon(22.0 + (i % 3) * 0.000005, 114.0 + (i % 2) * 0.000004))
+            }
+            add(end)
+        }
+        val thinned = thinPath(jittered)
+
+        assertEquals(start, thinned.first())
+        assertEquals(end, thinned.last())
+        assertTrue("kept ${thinned.size} of ${jittered.size}", thinned.size < jittered.size / 3)
+        assertTrue(thinned.all { Geo.distanceMeters(start, it) <= 11.0 })
     }
 
     @Test
